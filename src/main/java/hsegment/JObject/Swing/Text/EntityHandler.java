@@ -9,5 +9,5 @@ package hsegment.JObject.Swing.Text;
  * @author Ndzana christophe
  */
 public interface EntityHandler {
-    
+    void handleEntity(String name, String value);
 }

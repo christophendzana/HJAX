@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.Reader;
 import java.io.StringReader;
+import java.util.Arrays;
 import java.util.Vector;
 import javax.swing.text.ChangedCharSetException;
 import javax.swing.text.SimpleAttributeSet;
@@ -210,13 +211,7 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
         try {
             tagHandler.handleEndTag(tag);
         } catch (HJAXException e) {
-            
-        }
-        
-        if(tagStack.pullOut(tag)){
-            return;
-        } else {
-            error("XML.error","Misplaced element "+tag.getElement().getName());
+
         }
     }
     
@@ -265,7 +260,6 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
             switch(ch){
                 case '<' :
                     mark();
-                    
                     parseTag();
                     
                     char[] buff = new char[getCurrentPos() - marker];
@@ -273,7 +267,12 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
                     char[] newText = new char[strPos + buff.length + 1];
                     System.arraycopy(str, 0, newText, 0, strPos + 1);
                     System.arraycopy(buff, 0, newText, strPos + 1, buff.length);
-                    str = newText; handleText(str); 
+                    str = newText;
+                    StringBuffer text = new StringBuffer();
+                    for(char ch : str){
+                        System.out.println("Char :"+ch);
+                    }
+                    handleText(str);
                     break;
                 default : 
                     //if(tagStack.count() > 0){
@@ -339,16 +338,15 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
     
     
     private void parseTag() throws Exception{
-        TagElement tag;
+        TagElement tag = null;
         Element element = null;
         AttributeList attList = null;
         boolean isClosableTag = false;
+        boolean isEmptyTag = false;
         int isInstructionTag = 0;
         StringBuffer buffer = new StringBuffer();
         try {
-            
             while((ch = readCh()) != - 1){
-                
                 switch(ch){
                     case '!': //this is the comment or Doctype charater starter
                         
@@ -387,15 +385,16 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
                             error("XML.Error", "Bad instruction tag syntax");
                         break;
                     case ' ':
+                        // space is inside tag and separate tag name with attribute list
                         if(!buffer.isEmpty() && element == null){
                             element = getElement(buffer.toString());
                             buffer = new StringBuffer();
+                            // space is inside tag and separates attributes pair
                         } else if(element != null && !buffer.isEmpty() 
                                     && attList != null && attList.value == null){
                             growAttributesValues(attList, buffer.toString());
                             buffer = new StringBuffer();
                         }
-                        
                         break;
                     case '=': 
                         if(!getString(0).isEmpty() && element != null){
@@ -407,48 +406,62 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
                         break;
                     
                     case '"' : 
-                        if(!getString(0).isEmpty() && attList != null){
-                            attList.value = getString(0);
-                            resetBuffer(); attList = null;
-                        } else if(attList == null){
-                            error("Error.XML", "value without attribute");
-                        }
+                        parseAttributes(attList);
                     case '>' :
+                        System.out.println("Element :"+element);
+                        System.out.println("Buffer :"+buffer);
                         if(!buffer.isEmpty() && element == null){
                             element = getElement(buffer.toString());
                             buffer = new StringBuffer();
                         }
                         if(element == null){
                             error("Error.XML", "Missed element name");
-                        } else if(!buffer.isEmpty()){
-                            error("Error.XML", "Attribute of tag = "+element, "Initialise attribute", "w");
                         }
+//                        else if(!buffer.isEmpty()){
+//                            error("Error.XML", "Attribute of tag = "+element, "Initialise attribute", "w");
+//                        }
                         
                         tag = makeTag(element);
                         marker = getCurrentPos();
-                        handleText(str); resetBuffer();
+                        //handleText(str);
+                        resetBuffer();
                         if(isInstructionTag == 2){
                             handleInstructionTag(tag);
-                            return;
+                            //return;
                         }else if(isInstructionTag == 1){
                             error("XML.Error", "Bad Instruction Tag");
                             handleInstructionTag(tag);
-                            return;
+                            //break;
                         }
-                        
-                        if(!isClosableTag)
+                        if(isEmptyTag){
+                            handleEmptyTag(tag);
+                            break;
+                        }
+                        if(!isClosableTag){
                             handleStartTag(tag);
-                        else
+                        } else {
                             handleEndTag(tag);
-                        return;
-                    case '<' :
+                        }
+                        tag = null;
+                        buffer = new StringBuffer();
+                        break;
+                    case '<':
+                        if(!buffer.isEmpty() && tag == null){
+                            System.out.println("Buffer text:"+buffer);
+                            handleText(buffer.toString().toCharArray());
+                        }
                         char[] text = new char[getCurrentPos() - (marker + 1)];
                         resetStreamCursor(); read(text);
                         addString(text); mark();
                         parseTag();
                         break;
-                    case '/' : 
-                        isClosableTag = true;
+                    case '/' :
+                        System.out.println("Slash buffer :"+buffer);
+                        if(!buffer.isEmpty()){
+                            isEmptyTag = true;
+                        }else{
+                            isClosableTag = true;
+                        }
                         break;
                     case '\r' : //carrier return case
                         break;
@@ -735,7 +748,7 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
     
     @Override
     protected void error(String src, String errorMessage){
-        error(src, errorMessage);
+        //error(src, errorMessage);
     }
     
     @Override
@@ -868,5 +881,15 @@ public class Parser extends javax.swing.text.html.parser.Parser implements DTDCo
     protected int getCurrentPos(){
         return currentPosition;
     }
-    
+
+    private AttributeList parseAttributes(AttributeList attList){
+        if(!getString(0).isEmpty() && attList != null){
+            attList.value = getString(0);
+            System.out.println("Attribute value :"+attList.value);
+            resetBuffer(); attList = null;
+        } else if(attList == null){
+            error("Error.XML", "value without attribute");
+        }
+        return attList;
+    }
 }

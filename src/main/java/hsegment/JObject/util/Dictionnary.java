@@ -624,13 +624,7 @@ public class Dictionnary<E>
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
-    
-    
 
-    @Override
-    public List<E> reversed() {
-        return List.super.reversed();
-    }
 
     @Override
     public void forEach(Consumer<? super E> action) {
@@ -666,37 +660,7 @@ public class Dictionnary<E>
     public void sort(Comparator<? super E> c) {
         
     }
-    
 
-    @Override
-    public void addFirst(E e) {
-        
-    }
-
-    @Override
-    public void addLast(E e) {
-        
-    }
-
-    @Override
-    public E getFirst() {
-        return null;
-    }
-
-    @Override
-    public E getLast() {
-        return null;
-    }
-
-    @Override
-    public E removeFirst() {
-        return null;
-    }
-
-    @Override
-    public E removeLast() {
-        return null;
-    }
 
     @Override
     public boolean addAll(int index, Collection<? extends E> c) {
