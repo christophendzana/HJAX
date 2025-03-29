@@ -9,15 +9,13 @@ package hsegment.JObject.Swing.Text.html.parser;
  * @author Ndzana christophe
  */
 public class DefaultDoctypeHandler extends HandleDoctype{
-
-    
     private String dtdName;
-    private String loctionType;
+    private String locationType;
     private String dtdFilePath;
     
     @Override
     protected void handleDoctype(String dtdName, String locationType, String dtdFilePath) {
-         this.dtdName = dtdName; this.dtdFilePath = dtdFilePath; this.loctionType = locationType;
+         this.dtdName = dtdName; this.dtdFilePath = dtdFilePath; this.locationType = locationType;
     }
 
     @Override
@@ -27,7 +25,7 @@ public class DefaultDoctypeHandler extends HandleDoctype{
 
     @Override
     public String getLocationType() {
-        return this.loctionType;
+        return this.locationType;
     }
 
     @Override

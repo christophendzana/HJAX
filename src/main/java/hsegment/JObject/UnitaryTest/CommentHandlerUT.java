@@ -4,17 +4,18 @@
  */
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.CommentHandler;
+
+import hsegment.JObject.Swing.Text.xml.handler.CommentHandler;
 
 /**
  *
  * @author Ndzana Christophe
  */
-public class CommentHandlerUT implements CommentHandler{
+public class CommentHandlerUT implements CommentHandler {
 
     @Override
-    public void handleComment(char[] text) {
-        System.out.println("Appel de la methode HandleComment: \n ==> "+new String(text));
+    public void handleComment(String text) {
+        System.out.println("Appel de la methode HandleComment:  ==> "+ text);
     }
     
 }

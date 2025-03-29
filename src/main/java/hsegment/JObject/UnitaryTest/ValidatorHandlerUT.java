@@ -4,7 +4,7 @@
  */
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.ValidatorHandler;
+import hsegment.JObject.Swing.Text.handler.ValidatorHandler;
 
 /**
  *

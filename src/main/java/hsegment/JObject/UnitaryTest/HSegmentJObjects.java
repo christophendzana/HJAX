@@ -4,13 +4,11 @@
 
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.CommentHandler;
-import hsegment.JObject.Swing.Text.ValidatorHandler;
-import hsegment.JObject.Swing.Text.html.parser.Parser;
+import hsegment.JObject.Swing.Text.xml.Parser;
+import hsegment.JObject.Swing.Text.xml.handler.InstructionTagHandler;
 
-import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.StringReader;
+import java.io.IOException;
 
 /**
  *
@@ -18,7 +16,7 @@ import java.io.StringReader;
  */
 public class HSegmentJObjects {
 
-    public static void main(String[] args) throws FileNotFoundException {
+    public static void main(String[] args) throws IOException {
         boolean id = false , di = false; 
         
         /**JTextField text = new JTextField();
@@ -36,18 +34,22 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(label, SwingConstants.RIGHT);
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
-        TextHandlerUT textHandler = new TextHandlerUT();
-        TagHandlerUT tagHandler = new TagHandlerUT();
-        ErrorHandlerUT erreorHandler = new ErrorHandlerUT();
-        CommentHandler commentHandler = new CommentHandlerUT();
-        ValidatorHandler validator = new ValidatorHandlerUT();
-        Parser parser = new Parser();
-        parser.setTextHandler(textHandler);
-        parser.setTagHandler(tagHandler);
-        parser.setErrorHandler(erreorHandler);
-        parser.setComHandler(commentHandler);
-        parser.setValidatorHandler(validator);
-        parser.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
+        CommentHandlerUT commentHandlerUT = new CommentHandlerUT();
+        TextHandlerUT textHandlerUT = new TextHandlerUT();
+        TagHandlerUT tagHandlerUT = new TagHandlerUT();
+        ErrorHandlerUT errorHandlerUT = new ErrorHandlerUT();
+        ValidatorHandlerUT validatorHandlerUT = new ValidatorHandlerUT();
+//        Parser parser = new Parser();
+//        parser.setTextHandler(textHandler);
+//        parser.setTagHandler(tagHandler);
+//        parser.setErrorHandler(erreorHandler);
+//        parser.setComHandler(commentHandler);
+//        parser.setValidatorHandler(validator);
+        Parser p = new Parser();
+        p.setCommentHandler(commentHandlerUT);
+        p.setTextHandler(textHandlerUT);
+        p.setTagHandler(tagHandlerUT);
+        p.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
        //parser.parse(new StringReader("<user id=\"20\">lorem </user>"));
                //+"<!doctype test [<!ELEMENT Cours (intervenant, plan)>]>"
                //+ "bonjour je suis <em>"));

@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
-<author>Gambardella, Matthew</author>
 <catalog>
-
-    <book id="bk101">
+    <author>Gambardella,  Matthew</author>
+    <!-- here is commeq<<<<<<""""?!>>>nt -->
+    <book id="bk101" sro="user">
         <user/>
         <title>XML Developer's Guide</title>
         <genre>Computer</genre>
@@ -12,7 +12,7 @@
             with XML.</description>
     </book>
     <book id="bk102">
-        <author>Ralls, Kim</author>
+        <author> Ralls, Kim</author>
         <title>Midnight Rain</title>
         <genre>Fantasy</genre>
         <price>5.95</price>
@@ -115,7 +115,7 @@
         <price>49.95</price>
         <or/>
         <publish_date>2001-04-16</publish_date>
-        <description>Microsoft Visual Studio 7 is explored in depth,
+        <description>Microsoft &lt; Visual Studio 7 is explored in depth,
             looking at how Visual Basic, Visual C++, C#, and ASP+ are
             integrated into a comprehensive development
             environment.</description>

@@ -4,9 +4,8 @@
  */
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.ErrorHandler;
+import hsegment.JObject.Swing.Text.handler.ErrorHandler;
 import hsegment.JObject.Swing.Text.ErrorType;
-import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 
 /**
  *

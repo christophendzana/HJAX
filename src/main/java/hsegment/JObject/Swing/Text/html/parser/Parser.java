@@ -5,21 +5,20 @@
 package hsegment.JObject.Swing.Text.html.parser;
 
 
-import hsegment.JObject.Swing.Text.CommentHandler;
-import hsegment.JObject.Swing.Text.EntityHandler;
-import hsegment.JObject.Swing.Text.ErrorHandler;
+import hsegment.JObject.Swing.Text.handler.CommentHandler;
+import hsegment.JObject.Swing.Text.handler.EntityHandler;
+import hsegment.JObject.Swing.Text.handler.ErrorHandler;
 import hsegment.JObject.Swing.Text.ErrorType;
-import hsegment.JObject.Swing.Text.InstructionTagHandler;
+import hsegment.JObject.Swing.Text.handler.InstructionTagHandler;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
-import hsegment.JObject.Swing.Text.PrologHandler;
-import hsegment.JObject.Swing.Text.TagHandler;
-import hsegment.JObject.Swing.Text.TextHandler;
-import hsegment.JObject.Swing.Text.ValidatorHandler;
+import hsegment.JObject.Swing.Text.handler.PrologHandler;
+import hsegment.JObject.Swing.Text.handler.TagHandler;
+import hsegment.JObject.Swing.Text.handler.TextHandler;
+import hsegment.JObject.Swing.Text.handler.ValidatorHandler;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.Reader;
 import java.io.StringReader;
-import java.util.Arrays;
 import java.util.Vector;
 import javax.swing.text.ChangedCharSetException;
 import javax.swing.text.SimpleAttributeSet;

@@ -4,9 +4,12 @@
  */
 package hsegment.JObject.Swing.Text.html.parser;
 
+
 import hsegment.JObject.util.Dictionnary;
+
 import javax.swing.text.html.parser.Element;
 import javax.swing.text.html.parser.TagElement;
+
 
 /**
  *A stack of tag.Used while parsing XML document.

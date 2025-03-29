@@ -4,7 +4,7 @@
  */
 package hsegment.JObject.Swing.Text.html.parser;
 
-import hsegment.JObject.Swing.Text.PrologHandler;
+import hsegment.JObject.Swing.Text.handler.PrologHandler;
 
 /**
  *

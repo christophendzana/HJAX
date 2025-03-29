@@ -4,7 +4,7 @@
  */
 package hsegment.JObject.Swing.Text.html.parser;
 
-import hsegment.JObject.Swing.Text.DoctypeHandler;
+import hsegment.JObject.Swing.Text.handler.DoctypeHandler;
 
 /**
  *Abstract class which is implementation of {@link DoctypeHandler} to store doctype value;

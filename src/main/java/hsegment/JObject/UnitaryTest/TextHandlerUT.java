@@ -4,17 +4,18 @@
  */
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.TextHandler;
+
+import hsegment.JObject.Swing.Text.xml.handler.TextHandler;
 
 /**
  *
  * @author Ndzana christophe
  */
-public class TextHandlerUT implements TextHandler{
+public class TextHandlerUT implements TextHandler {
 
     @Override
-    public void handleText(char[] text) {
-        System.out.println("Appelle de la méthode handleText :\n ==> "+new String(text));
+    public void handleText(String text) {
+        System.out.println("Appelle de la méthode handleText : ==> "+text);
+
     }
-    
 }
