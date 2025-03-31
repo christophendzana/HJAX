@@ -15,11 +15,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-/**This class read the xml file character by character, detect the doctype and prolog on file, detect the root tag,
- * and construct the dom of nodes that we use to execute xpath requests
- * @author Hyacinthe TSAGUE
- *
- */
 public class Parser {
     private Reader reader;
     private boolean isStartTag;
@@ -80,7 +75,7 @@ public class Parser {
         this.commentHandler = commentHandler;
     }
 
-    public hsegment.JObject.Swing.Text.xml.handler.TextHandler getTextHandler() {
+    public TextHandler getTextHandler() {
         return textHandler;
     }
 
@@ -88,11 +83,11 @@ public class Parser {
         this.textHandler = textHandler;
     }
 
-    public hsegment.JObject.Swing.Text.xml.handler.TagHandler getTagHandler() {
+    public TagHandler getTagHandler() {
         return tagHandler;
     }
 
-    public void setTagHandler(hsegment.JObject.Swing.Text.xml.handler.TagHandler tagHandler) {
+    public void setTagHandler(TagHandler tagHandler) {
         this.tagHandler = tagHandler;
     }
 
@@ -120,12 +115,6 @@ public class Parser {
         return doctypeHandler;
     }
 
-    /**
-     * Read the xml file, construct the dom
-     * @param in
-     * @return
-     * @throws IOException
-     */
     public void parse(Reader in) throws IOException {
         this.reader = new BufferedReader(in);
         tagStack = new TagStack();
@@ -138,7 +127,6 @@ public class Parser {
         StringBuilder textValue = new StringBuilder();
         StringBuilder attributeName = new StringBuilder();
         StringBuilder attributeValue = new StringBuilder();
-        StringBuilder textContent = new StringBuilder();
         int countSingleQuotes = 0;
         int countDoubleQuotes = 0;
         int countSlash = 0;
@@ -146,7 +134,6 @@ public class Parser {
         while (reader.ready()) {
             columnIndex++;
             c = (char) reader.read();
-            textContent.append(c);
             switch (c) {
                 // we found open blanket
                 case '<' -> {
@@ -410,7 +397,6 @@ public class Parser {
                         reset();
                         //clear attributes key/value list
                         attributeKVList.clear();
-                        textContent.setLength(0);
                         processingInstructionMark = 0;
                         countSlash = 0;
                         textValue.setLength(0);
@@ -557,7 +543,7 @@ public class Parser {
                 }
                 // set doctype file path
                 if(doctypeFilePath.startsWith("\"") && doctypeFilePath.endsWith("\"")
-                        && doctypeFilePath.contains(".dtd") && doctypeFilePath.length() > 5){
+                        && doctypeFilePath.endsWith(".dtd\"") && doctypeFilePath.length() > 6){
                     doctypeHandler.setDtdFilePath(doctypeFilePath.substring(1, doctypeFilePath.length()-1));
                     doctypeHandler.setExternal(true);
                     //todo get the doctype from path and call parse dtd
