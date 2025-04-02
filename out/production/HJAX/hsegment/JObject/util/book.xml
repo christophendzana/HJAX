@@ -1,37 +1,37 @@
 <?xml version="1.0"?>
-<!DOCTYPE catalog SYSTEM "catalog.dtd" >
+<!DOCTYPE catalog SYSTEM "book.dtd" >
 <catalog>
     <author>Gambardella,  Matthew</author>
-    <!-- here is commeq<<<<<<""""?!>>>nt -->
-    <book id="bk101" sro="user">
-        <user/>
+    <!-- here is commeq<<<<<<""""?! sds -->
+    <book id5="" sro="user">
+        <s/>
         <title>XML Developer's Guide</title>
         <genre>Computer</genre>
         <price>44.95</price>
         <publish_date>2000-10-01</publish_date>
         <description>An in-depth look at creating applications
             with XML.</description>
-    </book>
-    <book id="bk102">
+    </ book>
+    <book id='bk101' iu="jjk">
         <author> Ralls, Kim</author>
         <title>Midnight Rain</title>
-        <genre>Fantasy</genre>
+        <genre >Fantasy</genre>
         <price>5.95</price>
         <publish_date>2000-12-16</publish_date>
         <description>A former architect battles corporate zombies,
             an evil sorceress, and her own childhood to become queen
             of the world.</description>
     </book>
-    <book id="bk103">
+    <béook id="bk\t103">
         <author>Corets, Eva</author>
-        <title>Maeve Ascendant</title>
+        <title>Maevwe Ascendant</title>
         <genre>Fantasy</genre>
         <price>5.95</price>
         <publish_date>2000-11-17</publish_date>
         <description>After the collapse of a nanotechnology
             society in England, the young survivors lay the
             foundation for a new society.</description>
-    </book>
+    </béook>
     <book id="bk104">
         <author>Corets, Eva</author>
         <title>Oberon's Legacy</title>

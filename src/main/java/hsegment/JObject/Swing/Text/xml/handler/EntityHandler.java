@@ -10,4 +10,5 @@ package hsegment.JObject.Swing.Text.xml.handler;
  */
 public interface EntityHandler {
     void handleEntity(String name, String value);
+    String handleEntity(String name);
 }

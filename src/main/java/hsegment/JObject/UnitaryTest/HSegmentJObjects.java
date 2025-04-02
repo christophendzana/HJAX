@@ -4,11 +4,15 @@
 
 package hsegment.JObject.UnitaryTest;
 
+import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
+import hsegment.JObject.Swing.Text.html.parser.DTDParser;
 import hsegment.JObject.Swing.Text.xml.Parser;
+import hsegment.JObject.Swing.Text.xml.ParserDTD;
 import hsegment.JObject.Swing.Text.xml.handler.InstructionTagHandler;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 
 /**
  *
@@ -34,10 +38,10 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(label, SwingConstants.RIGHT);
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
-        CommentHandlerUT commentHandlerUT = new CommentHandlerUT();
+        ErrorHandler errorHandlerUT = new ErrorHandlerUT();
+        CommentHandlerUT commentHandlerUT = new CommentHandlerUT(errorHandlerUT);
         TextHandlerUT textHandlerUT = new TextHandlerUT();
-        TagHandlerUT tagHandlerUT = new TagHandlerUT();
-        ErrorHandlerUT errorHandlerUT = new ErrorHandlerUT();
+        TagHandlerUT tagHandlerUT = new TagHandlerUT(errorHandlerUT);
         ValidatorHandlerUT validatorHandlerUT = new ValidatorHandlerUT();
 //        Parser parser = new Parser();
 //        parser.setTextHandler(textHandler);
@@ -45,10 +49,13 @@ public class HSegmentJObjects {
 //        parser.setErrorHandler(erreorHandler);
 //        parser.setComHandler(commentHandler);
 //        parser.setValidatorHandler(validator);
+        //DTDParser parserDTD = new DTDParser();
+        //parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
         Parser p = new Parser();
         p.setCommentHandler(commentHandlerUT);
         p.setTextHandler(textHandlerUT);
         p.setTagHandler(tagHandlerUT);
+        p.setErrorHandler(errorHandlerUT);
         p.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
        //parser.parse(new StringReader("<user id=\"20\">lorem </user>"));
                //+"<!doctype test [<!ELEMENT Cours (intervenant, plan)>]>"

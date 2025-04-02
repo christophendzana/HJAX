@@ -4,8 +4,11 @@
  */
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.handler.ErrorHandler;
+import hsegment.JObject.Swing.Text.ParserException.HJAXException;
+import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 import hsegment.JObject.Swing.Text.ErrorType;
+
+import java.util.logging.Logger;
 
 /**
  *
@@ -13,12 +16,16 @@ import hsegment.JObject.Swing.Text.ErrorType;
  */
 public class ErrorHandlerUT implements ErrorHandler{
 
+    private final Logger logger = Logger.getLogger(ErrorHandlerUT.class.getName());
     @Override
-    public void errorHandler(String src, String msg, String debug, ErrorType type) {
-        
-        System.out.println("Appelle de la méthode errorHandler : \n ==> Origine erreur = "+src+"\n"+
-                                       "==> Message d'erreur = "+msg+"\n solution possible = "+debug+"\n"+
-                                            "Type d'erreur = "+type.toString());
+    public void errorHandler(String src, String msg, String debug, ErrorType type) throws HJAXException {
+        switch (type){
+            case Warning -> logger.warning(msg + "\n source : " + src + "\n debug : " + debug);
+            case FatalError -> {
+                logger.severe( msg + "\n source : " + src + "\n debug : " + debug);
+                throw new HJAXException(HJAXException.class.getName());
+            }
+        }
     }
     
 }

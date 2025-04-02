@@ -24,6 +24,7 @@ public class DTDParser extends Parser{
     
     public DTDParser(DTD dtd) {
     }
+    public DTDParser() {}
     
     
     public synchronized void parse(Reader in){

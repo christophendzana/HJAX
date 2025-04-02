@@ -16,6 +16,5 @@ public class TextHandlerUT implements TextHandler {
     @Override
     public void handleText(String text) {
         System.out.println("Appelle de la méthode handleText : ==> "+text);
-
     }
 }

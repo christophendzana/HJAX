@@ -34,7 +34,7 @@ public class AttributeList implements  HDTDConstants {
     }
 
     public AttributeList getNext() {
-        return next;
+        return this.next;
     }
 
     public void checkNext(AttributeList next) {
@@ -56,10 +56,6 @@ public class AttributeList implements  HDTDConstants {
     }
     public void setValues(List<?> values) {
         this.values = values;
-    }
-
-    public AttributeList next() {
-        return this.next;
     }
 
     public void setAttributeList(AttributeList attributeList) {
