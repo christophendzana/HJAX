@@ -10,18 +10,18 @@ package hsegment.JObject.Swing.Text.html.parser;
  */
 public class DefaultPrologueHandler extends HandlePrologue{
 
-    private long version;
+    private String version;
     private String encoding;
     private boolean isStandAlone;
     @Override
-    protected void handlePrologue(long version, String encoding, boolean isStandAlone) {
+    protected void handlePrologue(String version, String encoding, boolean isStandAlone) {
         this.version = version; 
         this.encoding = encoding; 
         this.isStandAlone = isStandAlone;
     }
 
     @Override
-    public long getVersion() {
+    public String getVersion() {
         return this.version;
     }
 

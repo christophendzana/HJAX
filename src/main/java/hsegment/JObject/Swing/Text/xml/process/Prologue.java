@@ -6,31 +6,24 @@ package hsegment.JObject.Swing.Text.xml.process;
 
 /**
  *
- * @author Ndzana christophe
+ * @author Ndzana christophe, Hyacinthe Tsague
  */
-public class DefaultPrologueHandler extends HandlePrologue {
+public class Prologue {
 
-    private long version;
+    private String version;
     private String encoding;
     private boolean isStandAlone;
-    @Override
-    protected void handlePrologue(long version, String encoding, boolean isStandAlone) {
-        this.version = version; 
-        this.encoding = encoding; 
+    public Prologue(String version, String encoding, boolean isStandAlone) {
+        this.version = version;
+        this.encoding = encoding;
         this.isStandAlone = isStandAlone;
     }
-
-    @Override
-    public long getVersion() {
+    public String getVersion() {
         return this.version;
     }
-
-    @Override
     public String getEncoding() {
         return this.encoding;
     }
-
-    @Override
     public boolean isStandalone() {
         return this.isStandAlone;
     }

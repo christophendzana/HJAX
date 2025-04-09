@@ -1,5 +1,7 @@
 package hsegment.JObject.Swing.Text.xml;
 
+import hsegment.JObject.Swing.Text.ParserException.HJAXException;
+
 import java.util.List;
 
 public class AttributeList implements  HDTDConstants {
@@ -39,12 +41,15 @@ public class AttributeList implements  HDTDConstants {
 
     public void checkNext(AttributeList next) {
         AttributeList temp = this.next;
+        AttributeList current = this;
         while (temp != null) {
+            current = temp;
             temp = temp.getNext();
         }
         temp = new AttributeList();
         temp.setName(next.getName());
         temp.setValue(next.getValue());
+        current.setNext(temp);
     }
 
     public void setNext(AttributeList next) {

@@ -1,5 +1,6 @@
 package hsegment.JObject.util;
 
+import hsegment.JObject.Swing.Text.xml.SyntaxRule;
 import hsegment.JObject.Swing.Text.xml.TagElement;
 
 public  class FunctionUtils {
@@ -13,33 +14,16 @@ public  class FunctionUtils {
         // Get the letters array of tag name or attribute name
         char[] letters = name.toCharArray();
         char c;
+        boolean flag;
         for(int i = 1; i < letters.length; i++){
             c = letters[i];
+            flag = SyntaxRule.charRuleOnName(c);
             // from ascii utf-8 table, invalid characters are between those intervals
-            if((c < 45 || c == 47) || (c > 58 && c < 65) || (c > 90 && c < 95 || c == 96) || (c > 122)){
+            if(!flag){
                 return false;
             }
         }
         return true;
-    }
-
-    /**
-     * Verify if tag name or attribute name is empty
-     * @param name
-     * @return boolean true if the tag name is not blank
-     */
-    public static boolean verifyEmptyName(String name){
-        if(name.isEmpty()){
-            return true;
-        }
-        char[] letters = name.toCharArray();
-        int count = 0;
-        for(char c : letters){
-            if(c == ' '){
-                count++;
-            }
-        }
-        return count == letters.length;
     }
 
     /**
@@ -50,7 +34,7 @@ public  class FunctionUtils {
      */
     public static boolean verifyStartName(String name){
         char c = name.charAt(0);
-        return c == '_' || c == ':' || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
+        return SyntaxRule.firstCharacterRule(c);
     }
 
     public static String getSourceError(TagElement tag){

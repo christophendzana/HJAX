@@ -6,32 +6,25 @@ package hsegment.JObject.Swing.Text.xml.process;
 
 /**
  *Default class which store Doctype value
- * @author Ndzana christophe
+ * @author Hyacinthe Tsague
  */
-public class DefaultDoctypeHandler extends HandleDoctype {
+public class Doctype {
     private String dtdName;
     private String locationType;
     private String dtdFilePath;
     private boolean isInternal;
     private boolean isExternal;
     private String dtdContent;
-    
-    @Override
-    protected void handleDoctype(String dtdName, String locationType, String dtdFilePath) {
-         this.dtdName = dtdName; this.dtdFilePath = dtdFilePath; this.locationType = locationType;
-    }
 
-    @Override
+
     public String getDTDName() {
         return this.dtdName;
     }
 
-    @Override
     public String getLocationType() {
         return this.locationType;
     }
 
-    @Override
     public String dtdFilePath() {
         return this.dtdFilePath;
     }

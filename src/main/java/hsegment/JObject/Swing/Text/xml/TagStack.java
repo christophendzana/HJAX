@@ -6,6 +6,7 @@ package hsegment.JObject.Swing.Text.xml;
 
 import hsegment.JObject.util.Dictionnary;
 
+import java.util.List;
 
 
 /**
@@ -27,7 +28,7 @@ public class TagStack {
     }
     /**
      * Pull tag out of stack if this tag is the latest added one 
-     * or if this tag was never been added it considered as a Empty 
+     * or if this tag was never been added it considered as an Empty
      * tag by a stack. If this tag is contained into this tag and is not 
      * the latest added tag it cannot be pull out and false is return.
      * 
@@ -47,6 +48,13 @@ public class TagStack {
         if(index >= 0)
             stack.remove(index);
        return true;     
+    }
+
+    public List<TagElement> getStack(){
+        for(Object tagElement : stack.toArray()){
+            System.out.println(((TagElement)tagElement).getElement().getName());
+        }
+        return List.of();
     }
     
     /**

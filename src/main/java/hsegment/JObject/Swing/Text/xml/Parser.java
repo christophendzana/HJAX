@@ -2,11 +2,11 @@ package hsegment.JObject.Swing.Text.xml;
 
 
 import hsegment.JObject.Swing.Text.ErrorType;
-import  hsegment.JObject.Swing.Text.ErrorType.*;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 
 import hsegment.JObject.Swing.Text.xml.handler.*;
-import hsegment.JObject.Swing.Text.xml.process.DefaultDoctypeHandler;
+import hsegment.JObject.Swing.Text.xml.process.Doctype;
+import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
 import hsegment.JObject.Swing.Text.xml.process.HandlePrologue;
 
 import javax.swing.text.ChangedCharSetException;
@@ -14,9 +14,9 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.logging.Logger;
+
 
 public class Parser {
     private Reader reader;
@@ -28,12 +28,13 @@ public class Parser {
     private boolean isCommentTag;
     private boolean isHandleText;
     private boolean isHandleAttributeValue;
+    private boolean isHandleEntity;
     private int rowIndex = 1;
     private int columnIndex;
     private boolean isProcessInstruction;
     private boolean isCloseTag;
     private boolean isSingleTag;
-    private DefaultDoctypeHandler doctypeHandler;
+    private Doctype doctype;
     private TagStack tagStack;
 
     private EntityHandler entityHandler;
@@ -42,9 +43,10 @@ public class Parser {
     private TextHandler textHandler;
     private CommentHandler commentHandler;
     private HandlePrologue prologueHandler;
+    private HandleDoctype doctypeHandler;
     private ValidatorHandler validatorHandler;
     private InstructionTagHandler instructionTagHandler;
-    private Logger logger = Logger.getLogger(this.getClass().getName());
+    private Logger logger;
 
     public InstructionTagHandler getInstructionTagHandler() {
         return instructionTagHandler;
@@ -106,6 +108,14 @@ public class Parser {
         return entityHandler;
     }
 
+    public HandleDoctype getDoctypeHandler() {
+        return doctypeHandler;
+    }
+
+    public void setDoctypeHandler(HandleDoctype doctypeHandler) {
+        this.doctypeHandler = doctypeHandler;
+    }
+
     public void setEntityHandler(EntityHandler entityHandler) {
         this.entityHandler = entityHandler;
     }
@@ -114,18 +124,20 @@ public class Parser {
         return tagStack;
     }
 
-    public DefaultDoctypeHandler getDoctypeHandler() {
-        return doctypeHandler;
+    public Doctype getDoctype() {
+        return doctype;
     }
+
+
 
     public void parse(Reader in) throws IOException {
         this.reader = new BufferedReader(in);
         tagStack = new TagStack();
+        logger = Logger.getLogger(this.getClass().getName());
         char c;
         StringBuilder tagName = new StringBuilder();
         Element element;
         TagElement tagElement;
-        AttributeKV attributeKV;
         List<AttributeKV> attributeKVList = new ArrayList<>();
         StringBuilder textValue = new StringBuilder();
         StringBuilder attributeName = new StringBuilder();
@@ -194,11 +206,6 @@ public class Parser {
                 }
                 // we found space
                 case ' ' -> {
-                    //if it is attribute value
-                    if(isStartTagAttributeValue){
-                        textValue.append(c);
-                        break;
-                    }
                     // add the text content found after a tag name of close tag
                     // like </tagname another content>, we add 'another content' for show  it on error handling
                     if(isCloseTag && !isStartTagName){
@@ -209,7 +216,6 @@ public class Parser {
                     // we add this space to the attribute name for error handler
                     if(isStartTag && !isStartTagName && !textValue.isEmpty()){
                         textValue.append(c);
-                        System.out.println("ATT Name :"+textValue);
                     }
                     // add tagName
                     if(isStartTag && isStartTagName && !isHandleAttributeValue
@@ -218,13 +224,10 @@ public class Parser {
                         textValue.setLength(0);
                         isStartTagName = false;
                     }
-                    // add attributes
-                    if(isStartTag && isStartTagAttributeValue && !isDoctypeTag && isHandleAttributeValue
-                            && !isCommentTag && !tagName.isEmpty()){
-                        attributeKV = new AttributeKV(attributeName.toString(), attributeValue.toString());
-                        attributeKVList.add(attributeKV);
-                        attributeName.setLength(0);
-                        attributeValue.setLength(0);
+                    //if we found empty tag name
+                    if(isStartTag && isStartTagName && textValue.isEmpty()){
+                        handleError("Empty tag name : "+tagName, "Add a tag name !"+". ",
+                                ErrorType.FatalError);
                     }
                     // if the previous tag name text is doctype
                     if(isStartTag && isDoctypeTag && textValue.toString().equals("DOCTYPE")){
@@ -269,7 +272,6 @@ public class Parser {
                         while (reader.ready()) {
                             ch = (char) reader.read();
                             textValue.append(ch);
-                            System.out.println("TEXT VALUE :"+textValue);
                             if(ch == ']'){
                                 break;
                             }
@@ -297,21 +299,36 @@ public class Parser {
                         textValue.append(c);
                         break;
                     }
+                    // empty attribute name
+                    if(isStartTag && !isCloseTag && textValue.isEmpty()){
+                        handleError("Empty attribute name", "Add attribute name !",
+                                ErrorType.FatalError);
+                    }
                     // get attribute name
-                    if(isStartTag && !isCloseTag){
+                    if(isStartTag && !isCloseTag && !textValue.isEmpty()){
                         // change state to attribute name state handling
-                        isStartTagAttributeName = true;
+                        isStartTagAttributeName = false;
                         attributeName.append(textValue);
                         textValue.setLength(0);
                     }
+
                 }
                 // we found quote
-                case '"' -> {
+                case '"', '\'' -> {
                     //if it is attribute value, and it inside single quote
                     //like <tagname att='value"""'>
-                    if(isStartTagAttributeValue && countSingleQuotes == 1){
+                    if(c == '"' && isStartTagAttributeValue && countSingleQuotes == 1){
                         textValue.append(c);
                         break;
+                    }
+                    //if it is attribute value, and it inside single quote
+                    //like <tagname att="value'''">
+                    if( c == '\'' && isStartTagAttributeValue && countDoubleQuotes == 1){
+                        textValue.append(c);
+                        break;
+                    }
+                    if(isStartTag && !isStartTagAttributeValue && !textValue.isEmpty() && !isDoctypeTag && !isCommentTag){
+                        System.out.println("Error :"+textValue);
                     }
                     if(isCloseTag && !isStartTagName){
                         textAfterTagName.append(c);
@@ -324,51 +341,23 @@ public class Parser {
                     }
                     // change state to attribute value state handling
                     if(isStartTag && !isStartTagAttributeValue && !isDoctypeTag){
-                        countDoubleQuotes++;
+                        if(c == '"'){countDoubleQuotes++;}
+                        if(c == '\''){countSingleQuotes++;}
                         isStartTagAttributeValue = true;
                         break;
                     }
                     // end of value
                    if(isStartTag && isStartTagAttributeValue && !isDoctypeTag){
                        isStartTagAttributeValue = false;
-                       countDoubleQuotes++;
+                       if(c == '"'){countDoubleQuotes++;}
+                       if(c == '\''){countSingleQuotes++;}
                        attributeValue.append(textValue);
                        isHandleAttributeValue = true;
                    }
                    // count dtd quote of file path
-                   if(isStartTag && isDoctypeTag){
+                   if(c == '"' && isStartTag && isDoctypeTag){
                        textValue.append(c);
                    }
-                }
-                case '\'' -> {
-                    //if it is attribute value, and it inside single quote
-                    //like <tagname att="value'''">
-                    if(isStartTagAttributeValue && countDoubleQuotes == 1){
-                        textValue.append(c);
-                        break;
-                    }
-                    if(isCloseTag && !isStartTagName){
-                        textAfterTagName.append(c);
-                        break;
-                    }
-                    // if the quote is in comment
-                    if(isCommentTag){
-                        textValue.append(c);
-                        break;
-                    }
-                    // change state to attribute value state handling
-                    if(isStartTag && !isStartTagAttributeValue && !isDoctypeTag){
-                        countSingleQuotes++;
-                        isStartTagAttributeValue = true;
-                        break;
-                    }
-                    // end of value
-                    if(isStartTag && isStartTagAttributeValue && !isDoctypeTag){
-                        isStartTagAttributeValue = false;
-                        countSingleQuotes++;
-                        attributeValue.append(textValue);
-                        isHandleAttributeValue = true;
-                    }
                 }
                 // we found slash
                 case '/' -> {
@@ -421,6 +410,22 @@ public class Parser {
                         isCommentTag = true;
                     }
                 }
+                //start handle entity
+                case '&' -> {
+                    textValue.append(c);
+                    if((isStartTagAttributeValue && !isDoctypeTag && !isCommentTag) || isHandleText){
+                        isHandleEntity = true;
+                    }
+                }
+                // end handle entity
+                case ';' -> {
+                    textValue.append(c);
+                    if(isHandleEntity){
+                        String entityName = textValue.substring(textValue.indexOf("&"));
+                        isHandleEntity = false;
+                        handleEntity(entityName);
+                    }
+                }
                 // we found close blanket
                 case '>' -> {
                     if(isStartTag){
@@ -428,6 +433,10 @@ public class Parser {
                         if(isStartTagAttributeValue){
                             textValue.append(c);
                             break;
+                        }
+                        if(!isStartTagAttributeValue && !isDoctypeTag &&
+                                !isCommentTag && !isStartTagName && !textValue.isEmpty()){
+                            handleError("Invalid content :"+textValue+" in tag", "Remove the content !", ErrorType.FatalError);
                         }
                         // add the character when it is inside a comment text
                         if(isCommentTag && !textValue.toString().contains("--")){
@@ -439,12 +448,9 @@ public class Parser {
                             handleError("Invalid instruction !", "Instruction must have only two question marks", ErrorType.Warning);
                         }
                         if(isProcessInstruction && processingInstructionMark == 2){
-                            //@todo handle instruction here
-                            System.out.println("Handle instruction");
-                        }
-                        if(isProcessInstruction){
-                            //clear attributes key/value list
-                            attributeKVList.clear();
+                            element = parseElement(tagName.toString(), attributeKVList);
+                            tagElement = new TagElement(element, Constants.INSTRUCTION_TAG);
+                            handleInstructionTag(tagElement);
                         }
                         // close and single tag validation
                         if(countSlash > 1){
@@ -460,20 +466,21 @@ public class Parser {
                             parseDoctype(textValue.toString());
                         }
                         //comment validation
-                        if(isCommentTag && textValue.toString().endsWith("--")){
-                            parseComment(textValue.toString());
-                        }
                         if(isCommentTag && !textValue.toString().contains("--")){
                             handleError("Invalid comment syntax", "Comment must have -- before the close blanket",
                                     ErrorType.FatalError);
                         }
+                        if(isCommentTag && textValue.toString().endsWith("--")){
+                            parseComment(textValue.toString());
+                        }
+                        // if we found text after a tag name of close tag, we handle error
+                        if(isCloseTag && !textAfterTagName.isEmpty()){
+                            handleError("Invalid text content in close tag !",
+                                    "Check the text "+textAfterTagName+" after tag name and remove it.",
+                                    ErrorType.Warning);
+                        }
                         // parse and save new element, element is not prolog, doctype or comment
-                        if(!isProcessInstruction && !isDoctypeTag && !isCommentTag){
-                            if(isCloseTag && !textAfterTagName.isEmpty()){
-                                handleError("Invalid text content in close tag !",
-                                        "Check the text "+textAfterTagName+" after tag name and remove it.",
-                                        ErrorType.Warning);
-                            }
+                        if(!isDoctypeTag && !isCommentTag && !isProcessInstruction){
                             element = parseElement(tagName.toString(), attributeKVList);
                             // save tag element
                             tagElement = new TagElement(element, element.getType());
@@ -487,7 +494,6 @@ public class Parser {
                             if(tagElement.getType() == Constants.SINGLE_TAG){
                                 handleEmptyTag(tagElement);
                             }
-
                             // add tag element to the stack
                             tagStack.stack(tagElement);
                         }
@@ -525,7 +531,6 @@ public class Parser {
                 case '\r' -> {
                     columnIndex = 0;
                 }
-
                 default -> {
                     if(isCloseTag && !isStartTagName){
                         textAfterTagName.append(c);
@@ -540,9 +545,9 @@ public class Parser {
                     attributeValue.setLength(0);
                     attributeValue.append(textValue);
                     // save attribute name/value
-                    attributeKV = new AttributeKV(attributeName.toString(), attributeValue.toString());
-                    attributeKVList.add(attributeKV);
+                    addAttribute(attributeKVList, attributeName.toString(), attributeValue.toString());
                     attributeName.setLength(0);
+                    attributeValue.setLength(0);
                     textValue.setLength(0);
                     // reset quotes counters to count another quote of attributes value
                     countSingleQuotes = 0;
@@ -556,9 +561,23 @@ public class Parser {
                     handleError("Invalid quote number of attribute value", "Attribute value must have only two quotes",
                             ErrorType.FatalError);
                 }
-
             }
         }
+    }
+
+    private void addAttribute(final List<AttributeKV> attributeKVList, String attributeName, String attributeValue){
+        if(attributeKVList.isEmpty()){
+            attributeKVList.add(new AttributeKV(attributeName, attributeValue));
+            return;
+        }
+        for(AttributeKV attributeKV : attributeKVList){
+            if(attributeKV.getName().equals(attributeName)){
+                handleError("Duplicate attribute name : "+attributeName, "Remove duplicate attribute",
+                        ErrorType.FatalError);
+                break;
+            }
+        }
+        attributeKVList.add(new AttributeKV(attributeName, attributeValue));
     }
 
     private void reset(){
@@ -569,6 +588,7 @@ public class Parser {
         isCommentTag = false;
         isDoctypeTag = false;
         isHandleAttributeValue = false;
+        isHandleEntity = false;
         isCloseTag = false;
         isSingleTag = false;
     }
@@ -599,20 +619,20 @@ public class Parser {
         if(doctypeName.isBlank()){
             handleError("Empty doctype name directive ", "Add the 'DOCTYPE' directive name", ErrorType.Warning);
         }else{
-            doctypeHandler.setDtdName(doctypeName);
+            doctype.setDtdName(doctypeName);
         }
     }
     private void parseDoctype(String doctypeContent) {
         String doctypeName;
-        doctypeHandler = new DefaultDoctypeHandler();
+        doctype = new Doctype();
         // if doctype has internal dtd
         if(doctypeContent.contains("[") && doctypeContent.contains("]")){
             doctypeName = doctypeContent.substring(0, doctypeContent.indexOf("["));
             parseDoctypeName(doctypeName);
             String dtdContent = doctypeContent.substring(doctypeContent.indexOf("[") + 1, doctypeContent.indexOf("]"));
-            doctypeHandler.setInternal(true);
-            doctypeHandler.setDtdContent(dtdContent);
-            //todo call dtd parser method to parse dtd
+            doctype.setInternal(true);
+            doctype.setDtdContent(dtdContent);
+            handleDoctype(doctypeName, dtdContent);
         }
         // if doctype has external dtd
         if(!doctypeContent.contains("[") && !doctypeContent.contains("]")){
@@ -623,17 +643,15 @@ public class Parser {
                     contents.add(values[i]);
                 }
             }
-            System.out.println(Arrays.toString(contents.toArray()));
             // doctype with external dtd
             if(contents.size() == 3){
                 doctypeName = contents.get(0);
                 String doctypeLocationType = contents.get(1);
                 String doctypeFilePath = contents.get(2);
                 parseDoctypeName(doctypeName);
-
                 // set doctype location
                 if(doctypeLocationType.equals("SYSTEM") || doctypeLocationType.equals("PUBLIC")){
-                    doctypeHandler.setLocationType(doctypeLocationType);
+                    doctype.setLocationType(doctypeLocationType);
                 }else{
                     handleError("Invalid doctype location type !",
                             "Add the valid doctype location type PUBLIC or SYSTEM", ErrorType.Warning);
@@ -641,9 +659,9 @@ public class Parser {
                 // set doctype file path
                 if(doctypeFilePath.startsWith("\"") && doctypeFilePath.endsWith("\"")
                         && doctypeFilePath.endsWith(".dtd\"") && doctypeFilePath.length() > 6){
-                    doctypeHandler.setDtdFilePath(doctypeFilePath.substring(1, doctypeFilePath.length()-1));
-                    doctypeHandler.setExternal(true);
-                    //todo get the doctype from path and call parse dtd
+                    doctype.setDtdFilePath(doctypeFilePath.substring(1, doctypeFilePath.length()-1));
+                    doctype.setExternal(true);
+                    handleDoctype(doctypeName, doctypeLocationType, doctypeFilePath);
                 }else{
                     handleError("Invalid doctype file path !", "Add the doctype file path", ErrorType.Warning);
                 }
@@ -662,13 +680,8 @@ public class Parser {
         if((element.getType() == Constants.OPEN_TAG || element.getType() == Constants.SINGLE_TAG)
                 && !attributeKVList.isEmpty()){
             // create attributes for open tag only
-            AttributeList attributeList = getAttributeList(attributeKVList);
             // save attributeList on element
-            element.setAttributeList(attributeList);
-        }
-        if(element.getType() == Constants.CLOSE_TAG && !attributeKVList.isEmpty()){
-            handleError("Close tag must not have attributes !", "Remove attributes from close tag !",
-                    ErrorType.FatalError);
+            element.setAttributeList(getAttributeList(attributeKVList));
         }
         return element;
     }
@@ -678,13 +691,11 @@ public class Parser {
         // add the first attribute
         attributeList.setName(attributeKVList.get(0).getName());
         attributeList.setValue(attributeKVList.get(0).getValue());
-        System.out.println("Attribute value :"+attributeList.getValue());
         AttributeList newAttributeList;
         // add the rest of attributes on the attributeList chain 'next'
         for(int i = 1; i < attributeKVList.size(); i++){
             newAttributeList = new AttributeList();
             newAttributeList.setName(attributeKVList.get(i).getName());
-            System.out.println("Attribute value : " + attributeKVList.get(i).getValue());
             newAttributeList.setValue(attributeKVList.get(i).getValue());
             attributeList.checkNext(newAttributeList);
         }
@@ -694,19 +705,16 @@ public class Parser {
     protected synchronized void handleText(String text) {
         if(text.trim().isEmpty())
             return;
-        this.textHandler.handleText(text);
+        if(textHandler != null){
+            this.textHandler.handleText(text);
+        }
     }
-
-    protected void handleTitle(String text) {
-        // default behavior is to call handleText. Subclasses
-        // can override if necessary.
-        handleText(text);
-    }
-
 
     protected void handleComment(String comment, int rowIndex) {
         try {
-            commentHandler.handleComment(comment, rowIndex);
+            if(commentHandler != null){
+                commentHandler.handleComment(comment, rowIndex);
+            }
         } catch (HJAXException e) {
             handleError(e.getMessage());
         }
@@ -715,7 +723,9 @@ public class Parser {
 
     protected void handleEmptyTag(TagElement tag) throws ChangedCharSetException {
         try {
-            tagHandler.handleEmptyTag(tag);
+            if(tagHandler != null){
+                tagHandler.handleEmptyTag(tag);
+            }
         } catch (HJAXException e) {
             handleError(e.getMessage());
         }
@@ -723,9 +733,10 @@ public class Parser {
     }
 
     protected void handleStartTag(TagElement tag) {
-        tagStack.stack(tag);
         try {
-            tagHandler.handleStartTag(tag);
+            if(tagHandler != null){
+                tagHandler.handleStartTag(tag);
+            }
         } catch (HJAXException e) {
             handleError(e.getMessage());
         }
@@ -734,14 +745,37 @@ public class Parser {
 
     protected void handleInstructionTag(TagElement tag){
         try {
-            instructionTagHandler.handleInstruction(tag);
+            // prologue handling
+            if(prologueHandler != null && tag.getElement().getName().equals("xml")){
+                String version = null;
+                String encoding = null;
+                boolean standAlone = false;
+                AttributeList att = tag.getElement().getAttributeList();
+                while(att != null){
+                    switch(att.getName()){
+                        case "version" -> version = att.getValue();
+                        case "encoding" -> encoding = att.getValue();
+                        case "standalone" -> standAlone = Boolean.parseBoolean(att.getValue());
+                        default -> {}
+                    }
+                    att = att.getNext();
+                }
+                handlePrologue(version, encoding, standAlone);
+                return;
+            }
+            if(instructionTagHandler != null){
+                instructionTagHandler.handleInstruction(tag);
+            }
         } catch (Exception e) {
+            handleError(e.getMessage());
         }
     }
 
     protected void handleEndTag(TagElement tag) {
         try {
-            tagHandler.handleEndTag(tag);
+            if(tagHandler != null){
+                tagHandler.handleEndTag(tag);
+            }
         } catch (HJAXException e) {
             handleError(e.getMessage());
         }
@@ -761,14 +795,16 @@ public class Parser {
      */
     protected void handleError(String msg, String debug, ErrorType type) throws HJAXException{
         try {
-            errorHandler.errorHandler("Row :"+rowIndex+", Column : "+columnIndex, msg, debug, type);
+           if(errorHandler != null){
+               errorHandler.errorHandler("Row :"+rowIndex+", Column : "+columnIndex, msg, debug, type);
+           }
         } catch (NullPointerException e) {
             logger.severe("NullPointerException :"+e.getMessage());
         } catch(HJAXException e){
             logger.severe(e.getMessage());
         }finally{
             try {
-                if(type == ErrorType.FatalError){
+                if(errorHandler != null && type == ErrorType.FatalError){
                     reader.close();
                 }
             } catch (Exception e) {
@@ -778,12 +814,53 @@ public class Parser {
     }
 
     private void handleError(String msg){
-        logger.severe(msg);
         try {
-            reader.close();
+            if(errorHandler != null){
+                logger.severe(msg);
+                reader.close();
+            }
         }catch (Exception e){
             logger.severe(e.getMessage());
         }
     }
 
+    private void handleDoctype(String dtdName, String locationType, String dtdFilePath) throws HJAXException{
+        try{
+            if(doctypeHandler != null){
+                doctypeHandler.handleDoctype(dtdName, locationType, dtdFilePath);
+            }
+        }catch (HJAXException e){
+            handleError(e.getMessage());
+        }
+    }
+
+    private void handleDoctype(String dtdName, String content) throws HJAXException{
+        try{
+            if(doctypeHandler != null){
+                doctypeHandler.handleDoctype(dtdName, content);
+            }
+        }catch (HJAXException e){
+            handleError(e.getMessage());
+        }
+    }
+
+    private void handlePrologue(String version, String encoding, boolean isStandalone) throws HJAXException{
+        try{
+            if(prologueHandler != null){
+                prologueHandler.handlePrologue(version, encoding, isStandalone);
+            }
+        }catch (HJAXException e){
+            handleError(e.getMessage());
+        }
+    }
+
+    private void handleEntity(String name){
+        try {
+            if(entityHandler != null){
+                entityHandler.handleEntity(name);
+            }
+        }catch (HJAXException e){
+            handleError(e.getMessage());
+        }
+    }
 }

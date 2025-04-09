@@ -9,8 +9,7 @@ package hsegment.JObject.Swing.Text.handler;
  * @author Ndzana christophe
  */
 public interface PrologHandler {
-    public long getVersion();
-    
+    public String getVersion();
     public String getEncoding();
     public boolean isStandalone();
     

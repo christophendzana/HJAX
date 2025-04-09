@@ -51,10 +51,6 @@ public class TagHandlerUT implements TagHandler {
 
     private void validateTagName(TagElement tag) throws HJAXException{
         String tagName = tag.getElement().getName();
-        if(FunctionUtils.verifyEmptyName(tagName)){
-            errorHandler.errorHandler(getSourceError(tag), "Empty tag name : "+tagName, "Add a tag name !"+". ",
-                    ErrorType.FatalError);
-        }
         if(!FunctionUtils.verifyStartName(tagName)){
             errorHandler.errorHandler(getSourceError(tag), "Invalid first character of tag name : "+tagName+". ",
                     "Add a valid first character of tag name, " +
@@ -85,11 +81,6 @@ public class TagHandlerUT implements TagHandler {
 
     private void validateAttributeName(TagElement tag, String attributeName) throws HJAXException{
         //empty attribute name validation
-        System.out.println("Attribute name :"+attributeName);
-        if(FunctionUtils.verifyEmptyName(attributeName)){
-            errorHandler.errorHandler(getSourceError(tag), "Empty attribute name", "Add attribute name !",
-                    ErrorType.FatalError);
-        }
         //start attribute name validation
         if(!FunctionUtils.verifyStartName(attributeName)){
             errorHandler.errorHandler(getSourceError(tag), "Invalid first character of attribute name : "+attributeName,

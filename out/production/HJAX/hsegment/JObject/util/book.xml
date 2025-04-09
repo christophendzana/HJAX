@@ -1,18 +1,18 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE catalog SYSTEM "book.dtd" >
 <catalog>
     <author>Gambardella,  Matthew</author>
     <!-- here is commeq<<<<<<""""?! sds -->
-    <book id5="" sro="user">
+    <book sros="us&lt;er" lok="use" data="cook">
         <s/>
-        <title>XML Developer's Guide</title>
+        <title>XML &lt; Developer's Guide</title>
         <genre>Computer</genre>
         <price>44.95</price>
         <publish_date>2000-10-01</publish_date>
         <description>An in-depth look at creating applications
             with XML.</description>
-    </ book>
-    <book id='bk101' iu="jjk">
+    </book>
+    <book id='bk101' iu='jjk'>
         <author> Ralls, Kim</author>
         <title>Midnight Rain</title>
         <genre >Fantasy</genre>
@@ -32,7 +32,7 @@
             society in England, the young survivors lay the
             foundation for a new society.</description>
     </béook>
-    <book id="bk104">
+    <book isd="bk104" id="lucas">
         <author>Corets, Eva</author>
         <title>Oberon's Legacy</title>
         <genre>Fantasy</genre>

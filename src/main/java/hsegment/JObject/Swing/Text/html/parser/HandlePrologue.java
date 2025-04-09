@@ -13,5 +13,5 @@ import hsegment.JObject.Swing.Text.handler.PrologHandler;
 public abstract class HandlePrologue implements PrologHandler{
     
     
-    protected abstract void handlePrologue(long version, final String encoding, boolean isStandAlone);
+    protected abstract void handlePrologue(String version, final String encoding, boolean isStandAlone);
 }
