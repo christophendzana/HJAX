@@ -1,5 +1,8 @@
 package hsegment.JObject.Swing.Text.xml;
 
+/**
+ * @author Hyacinthe Tsague
+ */
 public interface Constants extends XMLConstants, HDTDConstants, SchemaConstants, HTMLConstants{
     int ANY_TYPE = -1;
     int HTML_TYPE = 0;

@@ -15,7 +15,7 @@ import java.util.logging.Logger;
  * @author Ndzana christophe, Hyacinthe Tsague
  */
 public class ErrorHandlerImpl implements ErrorHandler{
-
+    //Logger implementation
     private final Logger logger = Logger.getLogger(ErrorHandlerImpl.class.getName());
     @Override
     public void errorHandler(String src, String msg, String debug, ErrorType type) throws HJAXException {

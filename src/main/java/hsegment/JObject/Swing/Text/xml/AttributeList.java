@@ -1,14 +1,22 @@
 package hsegment.JObject.Swing.Text.xml;
 
-import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 
+import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A class use to implement attributes of open and empty tags of xml file.
+ * @author Hyacinthe Tsague
+ */
 public class AttributeList implements  HDTDConstants {
+    // the first attribute name
     private String name;
+    // the first attribute value
     private String value;
-    private List<?> values;
+    // the values of attribute with many values
+    private List<String> values;
     private int type = ANY;
+    // the rest of attributes
     private AttributeList next;
 
     public String getName() {
@@ -23,8 +31,22 @@ public class AttributeList implements  HDTDConstants {
         return value;
     }
 
-    public void setValue(String value) {
-        this.value = value;
+    public void setValue(String attributeValue) {
+        //if attribute has many values
+        if(attributeValue.contains(" ")){
+            // list value initialisation
+            this.values = new ArrayList<>();
+            // Get the values separate by space
+            String[] values = attributeValue.split(" ");
+            // save the default value
+            this.value = values[0];
+            // save the rest of values to the list
+            for(int i = 1; i < values.length; i++){
+                this.values.add(values[i]);
+            }
+            return;
+        }
+        this.value = attributeValue;
     }
 
     public int getType() {
@@ -39,6 +61,11 @@ public class AttributeList implements  HDTDConstants {
         return this.next;
     }
 
+    /**
+     * Check if attribute has store in linked list another attribute.
+     * Used to save another attribute in the linked list.
+     * @param next
+     */
     public void checkNext(AttributeList next) {
         AttributeList temp = this.next;
         AttributeList current = this;
@@ -48,7 +75,7 @@ public class AttributeList implements  HDTDConstants {
         }
         temp = new AttributeList();
         temp.setName(next.getName());
-        temp.setValue(next.getValue());
+        temp.setValue(next.getValue().trim());
         current.setNext(temp);
     }
 
@@ -56,21 +83,8 @@ public class AttributeList implements  HDTDConstants {
         this.next = next;
     }
 
-    public List<?> getValues() {
+    public List<String> getValues() {
         return values;
     }
-    public void setValues(List<?> values) {
-        this.values = values;
-    }
-
-    public void setAttributeList(AttributeList attributeList) {
-        this.next = attributeList;
-    }
-
     public AttributeList(){}
-
-    public AttributeList(String name, String value) {
-        this.name = name;
-        this.value = value;
-    }
 }

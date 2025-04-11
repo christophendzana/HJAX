@@ -8,6 +8,7 @@ import hsegment.JObject.Swing.Text.xml.handler.*;
 import hsegment.JObject.Swing.Text.xml.process.Doctype;
 import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
 import hsegment.JObject.Swing.Text.xml.process.HandlePrologue;
+import hsegment.JObject.util.FunctionUtils;
 
 import javax.swing.text.ChangedCharSetException;
 import java.io.BufferedReader;
@@ -17,7 +18,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
-
+/**
+ * A parser use to read a xml file character by character, detect and handle a prolog, a doctype, an entity,
+ * a processing instruction, a comment and a text data between tag.
+ * Tag element is created after reading a close tag, and it is added in a LIFO queue, retrieve only when the close
+ * tag with the same name is found.
+ * @author Hyacinthe Tsague, Ndzana Christophe
+ */
 public class Parser {
     private Reader reader;
     private boolean isStartTag;
@@ -46,6 +53,8 @@ public class Parser {
     private HandleDoctype doctypeHandler;
     private ValidatorHandler validatorHandler;
     private InstructionTagHandler instructionTagHandler;
+    private DequeueHandler<TagElement> dequeueHandler;
+    private TagStackHandler tagStackHandler;
     private Logger logger;
 
     public InstructionTagHandler getInstructionTagHandler() {
@@ -128,8 +137,19 @@ public class Parser {
         return doctype;
     }
 
+    public void setDequeueHandler(DequeueHandler<TagElement> dequeueHandler) {
+        this.dequeueHandler = dequeueHandler;
+    }
 
+    public void setTagStackHandler(TagStackHandler tagStackHandler) {
+        this.tagStackHandler = tagStackHandler;
+    }
 
+    /**
+     * Process to parse xml content, by detect and handling errors.
+     * @param in the file or string data
+     * @throws IOException
+     */
     public void parse(Reader in) throws IOException {
         this.reader = new BufferedReader(in);
         tagStack = new TagStack();
@@ -167,6 +187,7 @@ public class Parser {
                     // check if the previous blanket has not closed
                     if(isStartTag){
                         handleError("Tag without close blanket", "Add a close blanket", ErrorType.FatalError);
+                        break;
                     }
                     // handle text content between open and close tag
                     if(!isStartTag && isHandleText){
@@ -188,7 +209,7 @@ public class Parser {
                         textValue.append(c);
                         break;
                     }
-
+                    // get the inappropriate text after close tag name
                     if(isCloseTag && !isStartTagName){
                         textAfterTagName.append(c);
                         break;
@@ -198,6 +219,7 @@ public class Parser {
                         textValue.append(c);
                         break;
                     }
+                    // found instruction tag
                     if(isStartTag){
                         processingInstructionMark++;
                         isProcessInstruction = true;
@@ -223,11 +245,14 @@ public class Parser {
                         tagName.append(textValue);
                         textValue.setLength(0);
                         isStartTagName = false;
+                        isStartTagAttributeName = true;
+                        break;
                     }
                     //if we found empty tag name
                     if(isStartTag && isStartTagName && textValue.isEmpty()){
                         handleError("Empty tag name : "+tagName, "Add a tag name !"+". ",
                                 ErrorType.FatalError);
+                        break;
                     }
                     // if the previous tag name text is doctype
                     if(isStartTag && isDoctypeTag && textValue.toString().equals("DOCTYPE")){
@@ -303,6 +328,7 @@ public class Parser {
                     if(isStartTag && !isCloseTag && textValue.isEmpty()){
                         handleError("Empty attribute name", "Add attribute name !",
                                 ErrorType.FatalError);
+                        break;
                     }
                     // get attribute name
                     if(isStartTag && !isCloseTag && !textValue.isEmpty()){
@@ -327,9 +353,7 @@ public class Parser {
                         textValue.append(c);
                         break;
                     }
-                    if(isStartTag && !isStartTagAttributeValue && !textValue.isEmpty() && !isDoctypeTag && !isCommentTag){
-                        System.out.println("Error :"+textValue);
-                    }
+
                     if(isCloseTag && !isStartTagName){
                         textAfterTagName.append(c);
                         break;
@@ -340,19 +364,23 @@ public class Parser {
                         break;
                     }
                     // change state to attribute value state handling
-                    if(isStartTag && !isStartTagAttributeValue && !isDoctypeTag){
+                    if(isStartTag && !isStartTagAttributeName && !isStartTagAttributeValue && !isDoctypeTag){
                         if(c == '"'){countDoubleQuotes++;}
                         if(c == '\''){countSingleQuotes++;}
                         isStartTagAttributeValue = true;
                         break;
                     }
                     // end of value
-                   if(isStartTag && isStartTagAttributeValue && !isDoctypeTag){
+                   if(isStartTag && !isStartTagAttributeName && isStartTagAttributeValue && !isDoctypeTag){
                        isStartTagAttributeValue = false;
                        if(c == '"'){countDoubleQuotes++;}
                        if(c == '\''){countSingleQuotes++;}
                        attributeValue.append(textValue);
                        isHandleAttributeValue = true;
+                   }
+                   if(isStartTag && !isStartTagName && isStartTagAttributeName){
+                       textValue.append(c);
+                       break;
                    }
                    // count dtd quote of file path
                    if(c == '"' && isStartTag && isDoctypeTag){
@@ -437,6 +465,7 @@ public class Parser {
                         if(!isStartTagAttributeValue && !isDoctypeTag &&
                                 !isCommentTag && !isStartTagName && !textValue.isEmpty()){
                             handleError("Invalid content :"+textValue+" in tag", "Remove the content !", ErrorType.FatalError);
+                            break;
                         }
                         // add the character when it is inside a comment text
                         if(isCommentTag && !textValue.toString().contains("--")){
@@ -456,6 +485,7 @@ public class Parser {
                         if(countSlash > 1){
                             handleError("Invalid tag, more than two slash !",
                                     "Close or Single tag must have only two slash", ErrorType.FatalError);
+                            break;
                         }
                         // for tags without attributes
                         if(attributeKVList.isEmpty()){
@@ -469,6 +499,7 @@ public class Parser {
                         if(isCommentTag && !textValue.toString().contains("--")){
                             handleError("Invalid comment syntax", "Comment must have -- before the close blanket",
                                     ErrorType.FatalError);
+                            break;
                         }
                         if(isCommentTag && textValue.toString().endsWith("--")){
                             parseComment(textValue.toString());
@@ -494,8 +525,7 @@ public class Parser {
                             if(tagElement.getType() == Constants.SINGLE_TAG){
                                 handleEmptyTag(tagElement);
                             }
-                            // add tag element to the stack
-                            tagStack.stack(tagElement);
+                            handleTagDequeue(tagElement);
                         }
                         reset();
                         //clear attributes key/value list
@@ -563,8 +593,18 @@ public class Parser {
                 }
             }
         }
+        // check the empty state
+        if(dequeueHandler.getEmptyState() != 1){
+            handleError("XML file don't have a single root tag", "Add single root tag !", ErrorType.Warning);
+        }
     }
 
+    /**
+     * Save temporary attributes to the list
+     * @param attributeKVList
+     * @param attributeName
+     * @param attributeValue
+     */
     private void addAttribute(final List<AttributeKV> attributeKVList, String attributeName, String attributeValue){
         if(attributeKVList.isEmpty()){
             attributeKVList.add(new AttributeKV(attributeName, attributeValue));
@@ -580,10 +620,14 @@ public class Parser {
         attributeKVList.add(new AttributeKV(attributeName, attributeValue));
     }
 
+    /**
+     * Reset for reading next character
+     */
     private void reset(){
         // change state to handle next content of tag
         isStartTag = false;
         isHandleText = true;
+        isStartTagAttributeName = false;
         isProcessInstruction = false;
         isCommentTag = false;
         isDoctypeTag = false;
@@ -593,12 +637,20 @@ public class Parser {
         isSingleTag = false;
     }
 
+    /**
+     * Parse comment content
+     * @param textComment inside comment tag
+     */
     private void parseComment(String textComment){
         // get and handle comment content
         String commentContent = textComment.substring(0,textComment.length()-2);
         handleComment(commentContent, rowIndex);
     }
 
+    /**
+     * Set the type of tag element
+     * @param element
+     */
     private void setElementType(Element element) {
         element.setType(Constants.OPEN_TAG);
         if(isCloseTag){
@@ -609,19 +661,39 @@ public class Parser {
         }
     }
 
+    /**
+     * check and add space character in text data when we found large space,
+     * line return or tabulation on a text data.
+     * @param content
+     */
     private void addSpace(StringBuilder content){
         if(!content.isEmpty() && content.charAt(content.length()-1) != ' '){
             content.append(' ');
         }
     }
 
+    /**
+     * Parse doctype name, the doctype name is the first tag of xml content, so it is the root tag.
+     * As a tag name, it must be validated like tag name.
+     * @param doctypeName
+     */
     private void parseDoctypeName(String doctypeName){
         if(doctypeName.isBlank()){
-            handleError("Empty doctype name directive ", "Add the 'DOCTYPE' directive name", ErrorType.Warning);
-        }else{
-            doctype.setDtdName(doctypeName);
+            handleError("Empty DOCTYPE name directive ", "Add the 'DOCTYPE' directive name", ErrorType.Warning);
         }
+        if(!FunctionUtils.verifyStartName(doctypeName)){
+            handleError("Invalid DOCTYPE first character !", "Add a valid first character", ErrorType.FatalError);
+        }
+        if(!FunctionUtils.verifyName(doctypeName)){
+            handleError("Invalid DOCTYPE name !", "Add a valid name ", ErrorType.FatalError);
+        }
+        doctype.setDtdName(doctypeName);
     }
+
+    /**
+     * Parse doctype tag
+     * @param doctypeContent
+     */
     private void parseDoctype(String doctypeContent) {
         String doctypeName;
         doctype = new Doctype();
@@ -629,6 +701,7 @@ public class Parser {
         if(doctypeContent.contains("[") && doctypeContent.contains("]")){
             doctypeName = doctypeContent.substring(0, doctypeContent.indexOf("["));
             parseDoctypeName(doctypeName);
+            // retrieving content between [ and ] of internal dtd
             String dtdContent = doctypeContent.substring(doctypeContent.indexOf("[") + 1, doctypeContent.indexOf("]"));
             doctype.setInternal(true);
             doctype.setDtdContent(dtdContent);
@@ -636,8 +709,10 @@ public class Parser {
         }
         // if doctype has external dtd
         if(!doctypeContent.contains("[") && !doctypeContent.contains("]")){
+            // get the content of doctype tag separate by space
             String[] values = doctypeContent.split(" ");
             List<String> contents = new ArrayList<>();
+            // remove extra space
             for(int i = 0; i < values.length; i++){
                 if(!values[i].isBlank()){
                     contents.add(values[i]);
@@ -671,11 +746,16 @@ public class Parser {
         }
     }
 
+    /**
+     * Create a tag element
+     * @param tagName a tag name of element
+     * @param attributeKVList a list of attributes of element
+     * @return
+     */
     private Element parseElement(String tagName, final List<AttributeKV> attributeKVList) {
         // create new Element
         Element element = new Element(rowIndex, columnIndex, tagName);
         setElementType(element);
-        System.out.println("----------------------------");
         // save attributes values for single and open tag
         if((element.getType() == Constants.OPEN_TAG || element.getType() == Constants.SINGLE_TAG)
                 && !attributeKVList.isEmpty()){
@@ -686,6 +766,11 @@ public class Parser {
         return element;
     }
 
+    /**
+     * Get attributes list of elements from a list parameter
+     * @param attributeKVList
+     * @return a attributeList of element
+     */
     private AttributeList getAttributeList(List<AttributeKV> attributeKVList) {
         AttributeList attributeList = new AttributeList();
         // add the first attribute
@@ -702,6 +787,10 @@ public class Parser {
         return attributeList;
     }
 
+    /**
+     * Handle the text data
+     * @param text
+     */
     protected synchronized void handleText(String text) {
         if(text.trim().isEmpty())
             return;
@@ -710,6 +799,11 @@ public class Parser {
         }
     }
 
+    /**
+     * Handle the comment content
+     * @param comment
+     * @param rowIndex
+     */
     protected void handleComment(String comment, int rowIndex) {
         try {
             if(commentHandler != null){
@@ -720,7 +814,11 @@ public class Parser {
         }
     }
 
-
+    /**
+     * Handle an empty tag
+     * @param tag
+     * @throws ChangedCharSetException
+     */
     protected void handleEmptyTag(TagElement tag) throws ChangedCharSetException {
         try {
             if(tagHandler != null){
@@ -732,6 +830,10 @@ public class Parser {
 
     }
 
+    /**
+     * Handle an open tag
+     * @param tag
+     */
     protected void handleStartTag(TagElement tag) {
         try {
             if(tagHandler != null){
@@ -743,26 +845,36 @@ public class Parser {
 
     }
 
+    /**
+     * Handle an instruction tag
+     * @param tag
+     */
     protected void handleInstructionTag(TagElement tag){
         try {
             // prologue handling
             if(prologueHandler != null && tag.getElement().getName().equals("xml")){
                 String version = null;
                 String encoding = null;
-                boolean standAlone = false;
+                Boolean standAlone = null;
                 AttributeList att = tag.getElement().getAttributeList();
                 while(att != null){
                     switch(att.getName()){
                         case "version" -> version = att.getValue();
                         case "encoding" -> encoding = att.getValue();
-                        case "standalone" -> standAlone = Boolean.parseBoolean(att.getValue());
-                        default -> {}
+                        case "standalone" -> standAlone = switch (att.getValue().trim()){
+                            case "yes" -> true;
+                            case "no" -> false;
+                            default -> throw new HJAXException("Unknown attribute value '" + att.getValue() + "' " +
+                                    "of attribute name : "+att.getName());
+                        };
+                        default -> throw new HJAXException("Unknown attribute name : "+att.getName()+" in prologue tag");
                     }
                     att = att.getNext();
                 }
                 handlePrologue(version, encoding, standAlone);
                 return;
             }
+            // instruction handling
             if(instructionTagHandler != null){
                 instructionTagHandler.handleInstruction(tag);
             }
@@ -771,6 +883,10 @@ public class Parser {
         }
     }
 
+    /**
+     * Handle close tag
+     * @param tag
+     */
     protected void handleEndTag(TagElement tag) {
         try {
             if(tagHandler != null){
@@ -782,10 +898,10 @@ public class Parser {
     }
 
     /**
-     * Called when an error occured into code. <code>type</code> can have two value either it
-     * is egal to Fatal error in this case parser stop parse document or it is egal to Warning
+     * Called when an error occurred into code. <code>type</code> can have two values either it
+     * is equal to Fatal error in this case parser stop parse document, or it is equal to Warning
      * in this case parser continue to parse document after error declaration but event if
-     * parser declare that error is a warning it's possible to stop parser immidiatly by
+     * parser declare that error is a warning it's possible to stop parser immediately by
      * throwing HJAXException
      *
      * @param msg message error
@@ -804,6 +920,7 @@ public class Parser {
             logger.severe(e.getMessage());
         }finally{
             try {
+                // stop the reading of file
                 if(errorHandler != null && type == ErrorType.FatalError){
                     reader.close();
                 }
@@ -813,6 +930,10 @@ public class Parser {
         }
     }
 
+    /**
+     * Handle error message provide by throws
+     * @param msg
+     */
     private void handleError(String msg){
         try {
             if(errorHandler != null){
@@ -824,6 +945,13 @@ public class Parser {
         }
     }
 
+    /**
+     * Handle a doctype with external dtd
+     * @param dtdName a name of doctype
+     * @param locationType a location type of doctype with external dtd
+     * @param dtdFilePath a path of doctype with external dtd
+     * @throws HJAXException
+     */
     private void handleDoctype(String dtdName, String locationType, String dtdFilePath) throws HJAXException{
         try{
             if(doctypeHandler != null){
@@ -834,6 +962,12 @@ public class Parser {
         }
     }
 
+    /**
+     * Handle a doctype with internal dtd
+     * @param dtdName a name of doctype
+     * @param content a content of dtd
+     * @throws HJAXException
+     */
     private void handleDoctype(String dtdName, String content) throws HJAXException{
         try{
             if(doctypeHandler != null){
@@ -844,7 +978,14 @@ public class Parser {
         }
     }
 
-    private void handlePrologue(String version, String encoding, boolean isStandalone) throws HJAXException{
+    /**
+     * Handle prologue
+     * @param version a version provide from attribute
+     * @param encoding an encoding provide from attribute
+     * @param isStandalone a standalone provide by attribute
+     * @throws HJAXException
+     */
+    private void handlePrologue(String version, String encoding, Boolean isStandalone) throws HJAXException{
         try{
             if(prologueHandler != null){
                 prologueHandler.handlePrologue(version, encoding, isStandalone);
@@ -854,6 +995,10 @@ public class Parser {
         }
     }
 
+    /**
+     * Handle entity
+     * @param name
+     */
     private void handleEntity(String name){
         try {
             if(entityHandler != null){
@@ -861,6 +1006,34 @@ public class Parser {
             }
         }catch (HJAXException e){
             handleError(e.getMessage());
+        }
+    }
+
+    /**
+     * Handle queue
+     * @param tagElement
+     */
+    private void handleTagDequeue(TagElement tagElement){
+        try {
+            if(dequeueHandler != null){
+                dequeueHandler.autoProcess(tagElement);
+            }
+        }catch (HJAXException e){
+            handleError(e.getMessage(), "Check corresponding tag on file", ErrorType.FatalError);
+        }
+    }
+
+    /**
+     * Handle tag stack
+     * @param tagElement
+     */
+    private void handleTagStack(TagElement tagElement){
+        try{
+            if(tagStackHandler != null){
+                tagStackHandler.autoProcess(tagElement);
+            }
+        }catch (HJAXException e){
+            handleError(e.getMessage(), "Check corresponding tag on file", ErrorType.FatalError);
         }
     }
 }

@@ -38,6 +38,7 @@ public class TagStack {
      */
     public boolean pullOut(TagElement tag){
         int index = stack.indexOf(tag.getElement());
+        System.out.println("index : " + index);
         if(index == -1){
             Element element = tag.getElement();
             element.setType(HDTDConstants.EMPTY);

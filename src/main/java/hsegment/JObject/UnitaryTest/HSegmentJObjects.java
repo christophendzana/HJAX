@@ -4,12 +4,10 @@
 
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.xml.handler.DoctypeHandler;
-import hsegment.JObject.Swing.Text.xml.handler.EntityHandler;
-import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
+import hsegment.JObject.Swing.Text.xml.TagElement;
+import hsegment.JObject.Swing.Text.xml.handler.*;
 import hsegment.JObject.Swing.Text.html.parser.DTDParser;
 import hsegment.JObject.Swing.Text.xml.Parser;
-import hsegment.JObject.Swing.Text.xml.handler.InstructionTagHandler;
 import hsegment.JObject.Swing.Text.xml.handlerImpl.*;
 import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
 import hsegment.JObject.Swing.Text.xml.process.HandlePrologue;
@@ -41,14 +39,16 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(label, SwingConstants.RIGHT);
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
-        ErrorHandlerImpl errorHandlerUT = new ErrorHandlerImpl();
-        CommentHandlerImpl commentHandlerUT = new CommentHandlerImpl(errorHandlerUT);
-        TextHandlerImpl textHandlerUT = new TextHandlerImpl();
-        TagHandlerImpl tagHandlerUT = new TagHandlerImpl(errorHandlerUT);
+        ErrorHandler errorHandlerUT = new ErrorHandlerImpl();
+        CommentHandler commentHandlerUT = new CommentHandlerImpl(errorHandlerUT);
+        TextHandler textHandlerUT = new TextHandlerImpl();
+        TagHandler tagHandlerUT = new TagHandlerImpl(errorHandlerUT);
         InstructionTagHandler instructionTagHandlerUT = new InstructionTagHandlerImpl();
         HandleDoctype doctypeHandler = new DoctypeHandlerImpl();
         HandlePrologue prologueHandler = new PrologueHandlerImpl();
         EntityHandler entityHandler = new EntityHandlerImpl();
+        //TagStackHandler tagStackHandlerUT = new TagStackHandlerImpl();
+        DequeueHandler<TagElement> dequeueHandler = new TagDequeueHandlerImpl();
         Parser p = new Parser();
         p.setCommentHandler(commentHandlerUT);
         p.setTextHandler(textHandlerUT);
@@ -58,6 +58,7 @@ public class HSegmentJObjects {
         p.setPrologueHandler(prologueHandler);
         p.setEntityHandler(entityHandler);
         p.setInstructionTagHandler(instructionTagHandlerUT);
+        p.setDequeueHandler(dequeueHandler);
         p.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
        //parser.parse(new StringReader("<user id=\"20\">lorem </user>"));
                //+"<!doctype test [<!ELEMENT Cours (intervenant, plan)>]>"

@@ -1,11 +1,21 @@
 package hsegment.JObject.Swing.Text.xml;
 
+/**
+ * Implementation of data structure use to store a tag element.
+ * @author Hyacinthe Tsague
+ */
 public class Element implements HDTDConstants {
+    // the row where the tag is located in xml file
     private int rowIndex;
+    // the column the tag is located in xml file
     private int colIndex;
+    // the name of tag
     private String name;
+    // the type of tag: open, close, empty, instruction tag
     private int type = ANY;
+    // content model use in dtd
     private ContentModel contentModel;
+    // the attribute of tag
     private AttributeList attributeList;
 
     public int getRowIndex() {

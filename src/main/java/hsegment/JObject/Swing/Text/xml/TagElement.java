@@ -1,5 +1,9 @@
 package hsegment.JObject.Swing.Text.xml;
 
+/**
+ * A tag element of xml content
+ * @author Hyacinthe Tsague
+ */
 public class TagElement implements Constants {
     private Element element;
     private int type = ANY_TYPE;

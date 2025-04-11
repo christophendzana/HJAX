@@ -1,11 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
 <!DOCTYPE catalog SYSTEM "book.dtd" >
 <catalog>
     <author>Gambardella,  Matthew</author>
     <!-- here is commeq<<<<<<""""?! sds -->
-    <book sros="us&lt;er" lok="use" data="cook">
-        <s/>
-        <title>XML &lt; Developer's Guide</title>
+    <!-- <tag type="comment">Élément mis en commentaire</tag> -->
+    <book sros="us&lt;er look data" lok="use" data="cook">
+
+        <xmlse>XML &lt; Developer's Guide</xmlse>
         <genre>Computer</genre>
         <price>44.95</price>
         <publish_date>2000-10-01</publish_date>
@@ -22,7 +23,7 @@
             an evil sorceress, and her own childhood to become queen
             of the world.</description>
     </book>
-    <béook id="bk\t103">
+    <book id="bk\t103">
         <author>Corets, Eva</author>
         <title>Maevwe Ascendant</title>
         <genre>Fantasy</genre>
@@ -31,7 +32,7 @@
         <description>After the collapse of a nanotechnology
             society in England, the young survivors lay the
             foundation for a new society.</description>
-    </béook>
+    </book>
     <book isd="bk104" id="lucas">
         <author>Corets, Eva</author>
         <title>Oberon's Legacy</title>
@@ -110,7 +111,7 @@
             SAX and more.</description>
     </book>
     <book id="bk112" link="bold">
-        <author>Galos, Mike</author>
+        <author> Galos, Mike</author>
         <title>Visual Studio 7: A Comprehensive Guide</title>
         <genre>Computer</genre>
         <price>49.95</price>

@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface TagStackHandler {
     int countStack(TagStack tagStack);
-    List<TagElement> handleStack(TagStack tagStack);
+    void autoProcess(TagElement tagElement);
 }

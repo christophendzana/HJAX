@@ -3,12 +3,16 @@ package hsegment.JObject.util;
 import hsegment.JObject.Swing.Text.xml.SyntaxRule;
 import hsegment.JObject.Swing.Text.xml.TagElement;
 
+/**
+ * A utils functions
+ * @author Hyacinthe Tsague
+ */
 public  class FunctionUtils {
 
     /**
      * Verify the letters after the first letter.The first letter is verify by <code>verifyStartName()</code> method
-     * @param name
-     * @return true if verified characters are valid
+     * @param name a tag name or attribute name
+     * @return <code>true</code> if verified characters are valid
      */
     public static boolean verifyName(String name){
         // Get the letters array of tag name or attribute name
@@ -29,7 +33,7 @@ public  class FunctionUtils {
     /**
      * Verify if tag name or attribute name start with valid character. Character must be <code>_</code> or <code>:</code>
      * or lower/uppercase alphabetic letter.
-     * @param name
+     * @param name a tag name or attribute name
      * @return true if first character is valid.
      */
     public static boolean verifyStartName(String name){
@@ -37,6 +41,11 @@ public  class FunctionUtils {
         return SyntaxRule.firstCharacterRule(c);
     }
 
+    /**
+     * A source of error, represent by a row and column of current reading character.
+     * @param tag a tag element
+     * @return a string source
+     */
     public static String getSourceError(TagElement tag){
         return " In Row : "+tag.getElement().getRowIndex()+", " + "Column : "+tag.getElement().getColIndex()+" of xml file. ";
     }

@@ -3,6 +3,7 @@ package hsegment.JObject.Swing.Text.xml.handlerImpl;
 import hsegment.JObject.Swing.Text.ErrorType;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 import hsegment.JObject.Swing.Text.xml.AttributeList;
+import hsegment.JObject.Swing.Text.xml.SyntaxRule;
 import hsegment.JObject.Swing.Text.xml.TagElement;
 import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 import hsegment.JObject.Swing.Text.xml.handler.TagHandler;
@@ -39,6 +40,11 @@ public class TagHandlerImpl implements TagHandler {
 
     private void validateTagName(TagElement tag) throws HJAXException{
         String tagName = tag.getElement().getName();
+        //xml name must not be xml
+        if(SyntaxRule.invalidName(tagName)){
+            errorHandler.errorHandler(getSourceError(tag), "Invalid tag name : "+tagName+". ",
+                    "Remove tag name "+tagName, ErrorType.Warning);
+        }
         if(!FunctionUtils.verifyStartName(tagName)){
             errorHandler.errorHandler(getSourceError(tag), "Invalid first character of tag name : "+tagName+". ",
                     "Add a valid first character of tag name, " +

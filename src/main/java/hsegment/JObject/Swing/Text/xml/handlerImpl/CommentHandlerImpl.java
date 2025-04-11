@@ -10,7 +10,7 @@ import hsegment.JObject.Swing.Text.xml.handler.CommentHandler;
 import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 
 /**
- *
+ *An implementation of commentHandler
  * @author Ndzana Christophe, Hyacinthe Tsague
  */
 public class CommentHandlerImpl implements CommentHandler {
@@ -23,6 +23,7 @@ public class CommentHandlerImpl implements CommentHandler {
     @Override
     public void handleComment(String text, int rowIndex) {
         System.out.println("Call HandleComment:  ==> "+ text);
+        // A comment can not contain --
         if(text.contains("--")){
             errorHandler.errorHandler("In row : "+rowIndex, "Invalid comment syntax !",
                     "Comment must not content -- ", ErrorType.FatalError);
