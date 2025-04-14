@@ -4,6 +4,7 @@
 
 package hsegment.JObject.UnitaryTest;
 
+import hsegment.JObject.Swing.Text.xml.ParserProcess;
 import hsegment.JObject.Swing.Text.xml.TagElement;
 import hsegment.JObject.Swing.Text.xml.handler.*;
 import hsegment.JObject.Swing.Text.html.parser.DTDParser;
@@ -39,32 +40,7 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(label, SwingConstants.RIGHT);
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
-        ErrorHandler errorHandlerUT = new ErrorHandlerImpl();
-        CommentHandler commentHandlerUT = new CommentHandlerImpl(errorHandlerUT);
-        TextHandler textHandlerUT = new TextHandlerImpl();
-        TagHandler tagHandlerUT = new TagHandlerImpl(errorHandlerUT);
-        InstructionTagHandler instructionTagHandlerUT = new InstructionTagHandlerImpl();
-        HandleDoctype doctypeHandler = new DoctypeHandlerImpl();
-        HandlePrologue prologueHandler = new PrologueHandlerImpl();
-        EntityHandler entityHandler = new EntityHandlerImpl();
-        //TagStackHandler tagStackHandlerUT = new TagStackHandlerImpl();
-        DequeueHandler<TagElement> dequeueHandler = new TagDequeueHandlerImpl();
-        Parser p = new Parser();
-        p.setCommentHandler(commentHandlerUT);
-        p.setTextHandler(textHandlerUT);
-        p.setTagHandler(tagHandlerUT);
-        p.setErrorHandler(errorHandlerUT);
-        p.setDoctypeHandler(doctypeHandler);
-        p.setPrologueHandler(prologueHandler);
-        p.setEntityHandler(entityHandler);
-        p.setInstructionTagHandler(instructionTagHandlerUT);
-        p.setDequeueHandler(dequeueHandler);
-        p.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
-       //parser.parse(new StringReader("<user id=\"20\">lorem </user>"));
-               //+"<!doctype test [<!ELEMENT Cours (intervenant, plan)>]>"
-               //+ "bonjour je suis <em>"));
-               //int bit = 10;
-        // char c = 48;
-              // System.out.println(c);
+        ParserProcess parserProcess = new ParserProcess();
+        parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
     }
 }

@@ -1,19 +1,20 @@
+<!-- here is commeq<<<<<<""""?! sds -->
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <!DOCTYPE catalog SYSTEM "book.dtd" >
 <catalog>
     <author>Gambardella,  Matthew</author>
     <!-- here is commeq<<<<<<""""?! sds -->
     <!-- <tag type="comment">Élément mis en commentaire</tag> -->
-    <book sros="us&lt;er look data" lok="use" data="cook">
+    <book sros= "us&lt;er look data" lok="user val" data="cook">
 
         <xmlse>XML &lt; Developer's Guide</xmlse>
-        <genre>Computer</genre>
+        <genre></genre>
         <price>44.95</price>
         <publish_date>2000-10-01</publish_date>
         <description>An in-depth look at creating applications
             with XML.</description>
     </book>
-    <book id='bk101' iu='jjk'>
+    <book id="bk'101" iu='jjk'>
         <author> Ralls, Kim</author>
         <title>Midnight Rain</title>
         <genre >Fantasy</genre>
@@ -33,7 +34,7 @@
             society in England, the young survivors lay the
             foundation for a new society.</description>
     </book>
-    <book isd="bk104" id="lucas">
+    <book isd="" id="lucas">
         <author>Corets, Eva</author>
         <title>Oberon's Legacy</title>
         <genre>Fantasy</genre>

@@ -7,7 +7,7 @@ import hsegment.JObject.Swing.Text.xml.process.Prologue;
  * An implementation of HandlePrologue interface.
  * @author Hyacinthe Tsague
  */
-public class PrologueHandlerImpl extends HandlePrologue {
+public class PrologueHandlerImpl implements HandlePrologue {
     //Prologue initialisation
     private Prologue prologue;
     @Override

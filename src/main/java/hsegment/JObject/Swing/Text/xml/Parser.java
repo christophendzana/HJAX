@@ -271,6 +271,10 @@ public class Parser {
                     if(isHandleText){
                        addSpace(textValue);
                     }
+                    if(isStartTag && !isStartTagName && !isStartTagAttributeValue && !attributeName.isEmpty() && !isDoctypeTag && !isCommentTag){
+                        handleError("Invalid space before attribute value",
+                                "Remove space before attribute value", ErrorType.FatalError);
+                    }
                 }
                 // we found open bracket to read internal dtd
                 case '[' -> {
@@ -777,11 +781,15 @@ public class Parser {
         attributeList.setName(attributeKVList.get(0).getName());
         attributeList.setValue(attributeKVList.get(0).getValue());
         AttributeList newAttributeList;
+        System.out.println("Attribute name :"+attributeKVList.get(0).getName());
+        System.out.println("Attribute value :"+attributeKVList.get(0).getValue());
         // add the rest of attributes on the attributeList chain 'next'
         for(int i = 1; i < attributeKVList.size(); i++){
             newAttributeList = new AttributeList();
             newAttributeList.setName(attributeKVList.get(i).getName());
             newAttributeList.setValue(attributeKVList.get(i).getValue());
+            System.out.println("Attribute name :"+attributeKVList.get(i).getName());
+            System.out.println("Attribute value :"+attributeKVList.get(i).getValue());
             attributeList.checkNext(newAttributeList);
         }
         return attributeList;

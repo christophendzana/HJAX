@@ -10,6 +10,6 @@ import hsegment.JObject.Swing.Text.handler.PrologHandler;
  *
  * @author Ndzana christophe
  */
-public abstract class HandlePrologue implements PrologHandler{
-    public abstract void handlePrologue(final String version, final String encoding, Boolean isStandAlone);
+public interface HandlePrologue extends PrologHandler{
+    void handlePrologue(final String version, final String encoding, Boolean isStandAlone);
 }

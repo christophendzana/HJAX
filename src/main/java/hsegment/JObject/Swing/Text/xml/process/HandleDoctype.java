@@ -8,8 +8,8 @@ package hsegment.JObject.Swing.Text.xml.process;
 /**
  * @author Hyacinthe Tsague
  */
-public abstract class HandleDoctype{
+public interface HandleDoctype{
 
-    public abstract void handleDoctype(final String dtdName, final String locationType, final String dtdFilePath);
-    public abstract void handleDoctype(final String dtdName, final String content);
+    void handleDoctype(final String dtdName, final String locationType, final String dtdFilePath);
+    void handleDoctype(final String dtdName, final String content);
 }

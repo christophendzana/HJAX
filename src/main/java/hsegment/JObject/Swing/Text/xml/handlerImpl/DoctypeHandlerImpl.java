@@ -6,7 +6,7 @@ import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
  * An implementation of HandleDoctype interface.
  * @author Hyacinthe Tsague
  */
-public class DoctypeHandlerImpl extends HandleDoctype {
+public class DoctypeHandlerImpl implements HandleDoctype {
     // Handle an external dtd. Get from absolute path or download from internet
     @Override
     public void handleDoctype(String dtdName, String locationType, String dtdFilePath) {
