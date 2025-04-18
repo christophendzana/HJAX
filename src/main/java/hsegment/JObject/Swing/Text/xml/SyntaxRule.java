@@ -44,4 +44,11 @@ public class SyntaxRule {
             default -> false;
         };
     }
+
+    public static boolean validElementType(String elementType){
+        return switch (elementType){
+            case "#CDATA", "#PCDATA", "ANY", "EMPTY" -> true;
+            default -> false;
+        };
+    }
 }

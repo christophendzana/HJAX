@@ -50,4 +50,5 @@ public class ParserProcess {
     public void parse(Reader in) throws IOException, HJAXException {
         this.parser.parse(in);
     }
+
 }

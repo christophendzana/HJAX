@@ -4,6 +4,7 @@
 
 package hsegment.JObject.UnitaryTest;
 
+import hsegment.JObject.Swing.Text.xml.ParserDTD;
 import hsegment.JObject.Swing.Text.xml.ParserProcess;
 import hsegment.JObject.Swing.Text.xml.TagElement;
 import hsegment.JObject.Swing.Text.xml.handler.*;
@@ -13,6 +14,7 @@ import hsegment.JObject.Swing.Text.xml.handlerImpl.*;
 import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
 import hsegment.JObject.Swing.Text.xml.process.HandlePrologue;
 
+import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 
@@ -40,7 +42,13 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(label, SwingConstants.RIGHT);
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
-        ParserProcess parserProcess = new ParserProcess();
-        parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
+        //ParserProcess parserProcess = new ParserProcess();
+        //parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
+        ParserDTD parserDTD = new ParserDTD();
+        ErrorHandler errorHandler = new ErrorHandlerImpl();
+        ElementHandler elementHandler = new ElementHandlerImpl(errorHandler);
+        parserDTD.setElementHandler(elementHandler);
+        parserDTD.setErrorHandler(errorHandler);
+        parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
     }
 }

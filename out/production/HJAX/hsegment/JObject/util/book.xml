@@ -1,10 +1,10 @@
+<!-- here is commeq<<<<<<""""?! sds -->
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <!DOCTYPE catalog SYSTEM "book.dtd" >
 <catalog>
     <author>Gambardella,  Matthew</author>
     <!-- here is commeq<<<<<<""""?! sds -->
     <!-- <tag type="comment">Élément mis en commentaire</tag> -->
-    <!-- UT 12-04-2025 CHECK TAG WITHOUT ATT VALUE -->
     <book sros= "us&lt;er look data" lok="user val" data="cook">
 
         <xmlse>XML &lt; Developer's Guide</xmlse>

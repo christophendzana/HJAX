@@ -1,33 +1,3 @@
-<?xml version="1.0" encoding="UTF-8"?>
-        <!ELEMENT books (book+, totalCost, customer)>
-        <!ELEMENT book (bookInfo, salesInfo)>
-        <!ATTLIST book contentType (Fiction | Nonfiction) #REQUIRED format (Hardback |
-        Paperback) #REQUIRED>
-        <!ELEMENT bookInfo (title, author, publisher, isbn)>
-        <!ELEMENT title (#PCDATA)>
-        <!ELEMENT author (#PCDATA)>
-        <!ELEMENT publisher (#PCDATA)>
-        <!ELEMENT isbn (#PCDATA)>
-        <!ELEMENT salesInfo (price, itemNumber, date, source, shipping, cost)>
-        <!ELEMENT price (#PCDATA)>
-        <!ATTLIST price priceType (Retail | Wholesale) #REQUIRED>
-        <!ELEMENT itemNumber (#PCDATA)>
-        <!ELEMENT date (#PCDATA)>
-        <!ELEMENT source EMPTY>
-        <!ATTLIST source sourceType (Retail | Wholesale) #REQUIRED>
-        <!ELEMENT shipping (#PCDATA)>
-        <!ELEMENT cost (#PCDATA)>
-        <!ELEMENT totalCost (#PCDATA)>
-        <!ELEMENT customer (custNumber, lastName, firstName, address, city, state, zip,
-        phone, email)>
-        <!ATTLIST customer custType (newRetail | prevRetail | newWholesale |
-        prevWholesale) #REQUIRED>
-        <!ELEMENT custNumber (#PCDATA)>
-        <!ELEMENT lastName (#PCDATA)>
-        <!ELEMENT firstName (#PCDATA)>
-        <!ELEMENT address (#PCDATA)>
-        <!ELEMENT city (#PCDATA)>
-        <!ELEMENT state (#PCDATA)>
-        <!ELEMENT zip (#PCDATA)>
-        <!ELEMENT phone (#PCDATA)>
-        <!ELEMENT email (#PCDATA)>
+<!ELEMENT elem (elemu | elemo | elemi)+>
+        <!ELEMENT item (#PCDATA)>
+        <!ELEMENT  elemk (elemp|(elemo,(yu?|(io*,oio+)))|eleml*)*>

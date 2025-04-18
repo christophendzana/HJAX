@@ -1,5 +1,6 @@
 package hsegment.JObject.util;
 
+import hsegment.JObject.Swing.Text.xml.Element;
 import hsegment.JObject.Swing.Text.xml.SyntaxRule;
 import hsegment.JObject.Swing.Text.xml.TagElement;
 
@@ -43,10 +44,24 @@ public  class FunctionUtils {
 
     /**
      * A source of error, represent by a row and column of current reading character.
-     * @param tag a tag element
+     * @param element an element
      * @return a string source
      */
-    public static String getSourceError(TagElement tag){
-        return " In Row : "+tag.getElement().getRowIndex()+", " + "Column : "+tag.getElement().getColIndex()+" of xml file. ";
+    public static String getSourceError(Element element){
+        return " In Row : "+element.getRowIndex()+", " + "Column : "+element.getColIndex()+" of xml file. ";
+    }
+
+    /**
+     * A source of error, represent by a row and column of current reading character.
+     * @param rowIndex a row in reading
+     * @param colIndex a column in reading
+     * @return a string source
+     */
+    public static String getSourceError(int rowIndex, int colIndex){
+        return " In Row : "+rowIndex+", " + "Column : "+colIndex+" of xml file. ";
+    }
+
+    public static boolean verifyElementType(String elementType){
+        return SyntaxRule.validElementType(elementType);
     }
 }
