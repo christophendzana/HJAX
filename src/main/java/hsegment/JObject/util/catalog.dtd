@@ -1,3 +1,1 @@
-<!ELEMENT elem (elemu | elemo | elemi)+>
-        <!ELEMENT item (#PCDATA)>
-        <!ELEMENT  elemk (elemp|(elemo,(yu?|(io*,oio+)))|eleml*)*>
+<!ATTLIST tag meta CDATA #FIXED   "google" google CDATA "lors" >

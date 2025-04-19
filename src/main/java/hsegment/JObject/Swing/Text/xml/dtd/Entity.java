@@ -1,4 +1,4 @@
-package hsegment.JObject.Swing.Text.xml;
+package hsegment.JObject.Swing.Text.xml.dtd;
 
 public class Entity {
     private String name;

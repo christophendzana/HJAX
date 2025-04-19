@@ -4,17 +4,10 @@
 
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.xml.ParserDTD;
-import hsegment.JObject.Swing.Text.xml.ParserProcess;
-import hsegment.JObject.Swing.Text.xml.TagElement;
+import hsegment.JObject.Swing.Text.xml.dtd.ParserDTD;
 import hsegment.JObject.Swing.Text.xml.handler.*;
-import hsegment.JObject.Swing.Text.html.parser.DTDParser;
-import hsegment.JObject.Swing.Text.xml.Parser;
 import hsegment.JObject.Swing.Text.xml.handlerImpl.*;
-import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
-import hsegment.JObject.Swing.Text.xml.process.HandlePrologue;
 
-import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 

@@ -1,6 +1,6 @@
 package hsegment.JObject.Swing.Text.xml.handler;
 
-import hsegment.JObject.Swing.Text.xml.ContentModel;
+import hsegment.JObject.Swing.Text.xml.dtd.ContentModel;
 import hsegment.JObject.Swing.Text.xml.Element;
 
 public interface ElementHandler {

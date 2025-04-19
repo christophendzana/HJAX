@@ -1,5 +1,7 @@
 package hsegment.JObject.Swing.Text.xml;
 
+import hsegment.JObject.Swing.Text.xml.dtd.ContentModel;
+
 /**
  * Implementation of data structure use to store a tag element.
  * @author Hyacinthe Tsague

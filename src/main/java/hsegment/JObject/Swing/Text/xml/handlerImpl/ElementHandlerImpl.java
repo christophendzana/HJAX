@@ -1,7 +1,7 @@
 package hsegment.JObject.Swing.Text.xml.handlerImpl;
 import hsegment.JObject.Swing.Text.ErrorType;
-import hsegment.JObject.Swing.Text.xml.Content;
-import hsegment.JObject.Swing.Text.xml.ContentModel;
+import hsegment.JObject.Swing.Text.xml.dtd.Content;
+import hsegment.JObject.Swing.Text.xml.dtd.ContentModel;
 import hsegment.JObject.Swing.Text.xml.Element;
 import hsegment.JObject.Swing.Text.xml.handler.ElementHandler;
 import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
