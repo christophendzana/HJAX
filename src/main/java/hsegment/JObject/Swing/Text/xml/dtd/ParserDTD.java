@@ -9,12 +9,15 @@ import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 public class ParserDTD {
     private Reader reader;
     private int rowIndex;
     private int columnIndex;
+    private List<DTDAttributeContent> tempContent;
     private boolean isStartTag;
     private boolean isStartTagName;
     private boolean isEndReadingAttributes;
@@ -66,9 +69,11 @@ public class ParserDTD {
                                 entity = parseEntity();
                             }
                             case "ATTLIST" -> {
+                                tempContent = new ArrayList<>();
                                 isEndReadingAttributes = false;
                                 dtdAttribute = parseDTDAttribute();
                                 System.out.println(dtdAttribute);
+                                dtdAttribute = null;
                             }
                             case "--" -> {
                                 //handle comment
@@ -244,120 +249,16 @@ public class ParserDTD {
     private DTDAttribute parseDTDAttribute() throws IOException {
         char c;
         DTDAttribute dtdAttribute = null;
-        DTDAttributeList dtdAttributeList = null;
         StringBuilder textValue = new StringBuilder();
-        while(reader.ready()){
+        OUTER : while(reader.ready()){
             c = (char)reader.read();
             switch (c){
                 case ' ' -> {
                     if(dtdAttribute == null && !textValue.isEmpty()){
                         dtdAttribute = new DTDAttribute();
                         dtdAttribute.setElementName(textValue.toString());
-                        dtdAttributeList = parseAttributeList(dtdAttributeList);
+                        parseAttributeList(dtdAttribute);
                         textValue.setLength(0);
-                        break;
-                    }
-                }
-                default -> {
-                    textValue.append(c);
-                }
-            }
-            if(isEndReadingAttributes && dtdAttributeList != null){
-                dtdAttribute.setAttributeList(dtdAttributeList);
-            }
-        }
-        return dtdAttribute;
-    }
-
-    private DTDAttributeList parseAttributeList(DTDAttributeList attributeList) throws IOException {
-        char c;
-        StringBuilder textValue = new StringBuilder();
-        int countDoubleQuotes = 0;
-        int countSingleQuotes = 0;
-        DefaultValue defaultValue = null;
-
-        boolean isReadingDefaultValueType = false;
-        boolean isEndReading = false;
-        OUTER : while(reader.ready()){
-            c = (char)reader.read();
-            switch (c){
-                case ' ' -> {
-                    if(attributeList == null){
-                        attributeList = new DTDAttributeList();
-                        attributeList.setAttributeName(textValue.toString());
-                        textValue.setLength(0);
-                        break;
-                    }
-                    if(attributeList != null && attributeList.getAttributeName() != null
-                            && attributeList.getAttributeType() == 0){
-                        attributeList.setAttributeType(getType(textValue.toString()));
-                        textValue.setLength(0);
-                        defaultValue = new DefaultValue();
-                        break;
-                    }
-                    if(attributeList != null && defaultValue != null
-                            && isReadingDefaultValueType){
-                        defaultValue.setType(textValue.toString());
-                        if(textValue.toString().equals("#IMPLIED") || textValue.toString().equals("#REQUIRED")){
-                            isEndReading = true;
-                        }
-                        isReadingDefaultValueType = false;
-                        textValue.setLength(0);
-                    }
-                    if(attributeList != null && isEndReading){
-                        attributeList.setDefaultValue(defaultValue);
-                        reader.mark(0);
-                        char nextChar = (char)reader.read();
-                        reader.reset();
-                        if(nextChar != '>' && nextChar != ' '){
-                            DTDAttributeList nextAttributeList = null;
-                            attributeList.checkNext(parseAttributeList(nextAttributeList));
-                        }
-                    }
-                }
-                case '"', '\'' -> {
-                    if(isEndReading){
-                        handleError("Invalid content : "+textValue, "Remove the content !",
-                                ErrorType.FatalError);
-                    }
-                    if(c == '"' && defaultValue != null && countDoubleQuotes == 0){
-                        countDoubleQuotes++;
-                        break;
-                    }
-                    if(c == '\'' && defaultValue != null && countSingleQuotes == 0){
-                        countSingleQuotes++;
-                        break;
-                    }
-                    if(c == '"' && defaultValue != null && countDoubleQuotes == 1
-                            && (defaultValue.getType() != null && defaultValue.getType().equals("#FIXED"))
-                            || defaultValue.getType() == null){
-                        defaultValue.setValue(textValue.toString());
-                        isEndReading = true;
-                        break;
-                    }
-                    if(c == '\'' && defaultValue != null && countSingleQuotes == 1
-                            && (defaultValue.getType() != null && defaultValue.getType().equals("#FIXED"))
-                            || defaultValue.getType() == null){
-                        defaultValue.setValue(textValue.toString());
-                        isEndReading = true;
-                        break;
-                    }
-
-                }
-                case '#' -> {
-                    if(defaultValue != null){
-                        textValue.append(c);
-                        isReadingDefaultValueType = true;
-                    }
-                }
-                case '>' -> {
-                    if(attributeList != null && isReadingDefaultValueType && !textValue.isEmpty()){
-                        defaultValue.setType(textValue.toString());
-                    }
-                    if(attributeList != null && defaultValue != null){
-                        attributeList.setDefaultValue(defaultValue);
-                        textValue.setLength(0);
-                        isEndReadingAttributes = true;
                         break OUTER;
                     }
                 }
@@ -366,7 +267,116 @@ public class ParserDTD {
                 }
             }
         }
-        return attributeList;
+        return dtdAttribute;
+    }
+
+    private DTDAttribute parseAttributeList(final DTDAttribute dtdAttribute) throws IOException {
+        char c;
+        StringBuilder textValue = new StringBuilder();
+        DTDAttributeContent attributeContent = null;
+        int countDoubleQuotes = 0;
+        int countSingleQuotes = 0;
+        DefaultValue defaultValue = null;
+        boolean startReadingAttribute = false;
+        boolean startReadingDefaultValueType = false;
+        OUTER : while(reader.ready()){
+            c = (char)reader.read();
+            switch (c){
+                case ' ' -> {
+                    // get and set attribute name
+                    if(attributeContent == null && !textValue.isEmpty()){
+                        attributeContent = new DTDAttributeContent();
+                        attributeContent.setAttributeName(textValue.toString());
+                        textValue.setLength(0);
+                        startReadingAttribute = true;
+                        break;
+                    }
+                    // get and set attribute type
+                    if(startReadingAttribute && attributeContent.getAttributeName() != null && defaultValue == null){
+                        attributeContent.setAttributeType(getType(textValue.toString()));
+                        defaultValue = new DefaultValue();
+                        textValue.setLength(0);
+                        break;
+                    }
+                    // get and set attribute default value
+                    if(startReadingAttribute && attributeContent.getAttributeType() != 0 && defaultValue != null){
+                        defaultValue.setType(textValue.toString());
+                        if(textValue.toString().equals("#IMPLIED") || textValue.toString().equals("#REQUIRED")){
+                            attributeContent.setDefaultValue(defaultValue);
+                            tempContent.add(attributeContent);
+                            startReadingDefaultValueType = false;
+                            startReadingAttribute = false;
+                            textValue.setLength(0);
+                            attributeContent = null;
+                            defaultValue = null;
+                            break;
+                        }
+                    }
+                }
+                case '#' -> {
+                    if(startReadingAttribute && attributeContent.getAttributeType() != 0){
+                        startReadingDefaultValueType = true;
+                        textValue.append(c);
+                    }
+                }
+                case '"', '\'' -> {
+                    if(startReadingAttribute && countDoubleQuotes == 0 && c == '"' && defaultValue != null){
+                        countDoubleQuotes++;
+                        textValue.setLength(0);
+                        break;
+                    }
+                    if(startReadingAttribute && countSingleQuotes == 0 && c == '\'' && defaultValue != null){
+                        countSingleQuotes++;
+                        textValue.setLength(0);
+                        break;
+                    }
+                    if(startReadingAttribute && (countDoubleQuotes == 1 && c == '"' || countSingleQuotes == 1 && c == '\'')
+                            && defaultValue != null){
+                        if(!startReadingDefaultValueType && defaultValue.getType() == null
+                                && defaultValue.getValue() == null){
+                            defaultValue.setValue(textValue.toString());
+                        }
+                        if(startReadingDefaultValueType && defaultValue.getType() == null || (defaultValue.getType() != null
+                                && defaultValue.getType().equals("#FIXED"))){
+                            defaultValue.setValue(textValue.toString());
+                        }
+
+                        startReadingAttribute = false;
+                        startReadingDefaultValueType = false;
+                        attributeContent.setDefaultValue(defaultValue);
+                        tempContent.add(attributeContent);
+                        attributeContent = null;
+                        defaultValue = null;
+                        textValue.setLength(0);
+                        countDoubleQuotes = 0;
+                    }
+                }
+                case '>' -> {
+                    if(startReadingAttribute && defaultValue != null && !textValue.isEmpty()){
+                        if(defaultValue.getValue() == null
+                                && (textValue.toString().equals("#REQUIRED") || textValue.toString().equals("#IMPLIED"))){
+                            defaultValue.setType(textValue.toString());
+                            attributeContent.setDefaultValue(defaultValue);
+                            tempContent.add(attributeContent);
+                            attributeContent = null;
+                            defaultValue = null;
+                            textValue.setLength(0);
+                            startReadingAttribute = false;
+                            startReadingDefaultValueType = false;
+                        }
+                    }
+                    if(tempContent != null){
+                        dtdAttribute.setAll(tempContent);
+                        tempContent = null;
+                        break OUTER;
+                    }
+                }
+                default -> {
+                    textValue.append(c);
+                }
+            }
+        }
+        return dtdAttribute;
     }
 
     private Entity parseEntity() throws IOException {
