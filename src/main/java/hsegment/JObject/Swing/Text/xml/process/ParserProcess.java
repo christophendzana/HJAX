@@ -1,12 +1,10 @@
-package hsegment.JObject.Swing.Text.xml;
+package hsegment.JObject.Swing.Text.xml.process;
 
-import hsegment.JObject.Swing.Text.ErrorType;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
-import hsegment.JObject.Swing.Text.handler.PrologHandler;
+import hsegment.JObject.Swing.Text.xml.Parser;
+import hsegment.JObject.Swing.Text.xml.TagElement;
 import hsegment.JObject.Swing.Text.xml.handler.*;
 import hsegment.JObject.Swing.Text.xml.handlerImpl.*;
-import hsegment.JObject.Swing.Text.xml.process.HandleDoctype;
-import hsegment.JObject.Swing.Text.xml.process.HandlePrologue;
 
 import java.io.IOException;
 import java.io.Reader;

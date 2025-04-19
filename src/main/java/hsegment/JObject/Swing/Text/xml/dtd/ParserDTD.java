@@ -3,6 +3,8 @@ package hsegment.JObject.Swing.Text.xml.dtd;
 import hsegment.JObject.Swing.Text.ErrorType;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 import hsegment.JObject.Swing.Text.xml.*;
+import hsegment.JObject.Swing.Text.xml.error.SourceError;
+import hsegment.JObject.Swing.Text.xml.handler.DTDAttributeHandler;
 import hsegment.JObject.Swing.Text.xml.handler.ElementHandler;
 import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 
@@ -20,12 +22,17 @@ public class ParserDTD {
     private List<DTDAttributeContent> tempContent;
     private boolean isStartTag;
     private boolean isStartTagName;
-    private boolean isEndReadingAttributes;
+
     private TagStack tagStack;
 
     private Logger logger;
     private ErrorHandler errorHandler;
     private ElementHandler elementHandler;
+    private DTDAttributeHandler dtdAttributeHandler;
+
+    public void setDtdAttributeHandler(DTDAttributeHandler dtdAttributeHandler) {
+        this.dtdAttributeHandler = dtdAttributeHandler;
+    }
 
     public void setErrorHandler(ErrorHandler errorHandler) {
         this.errorHandler = errorHandler;
@@ -44,11 +51,16 @@ public class ParserDTD {
         Element element = null;
         Entity entity = null;
         DTDAttribute dtdAttribute = null;
+        rowIndex++;
         while(reader.ready()){
             columnIndex++;
             c = (char)reader.read();
             switch(c){
                 case '<' -> {
+                    if(isStartTag){
+                        handleError("Not found close blanket !",
+                                "Remove open blanket or add close blanket", ErrorType.FatalError);
+                    }
                     isStartTag = true;
                     //
                 }
@@ -62,17 +74,17 @@ public class ParserDTD {
                         switch (textValue.toString()){
                             case "ELEMENT" -> {
                                 element = parseElement();
-                                isStartTag = false;
                                 isStartTagName = false;
+                                handleElement(element);
                             }
                             case "ENTITY" -> {
                                 entity = parseEntity();
                             }
                             case "ATTLIST" -> {
                                 tempContent = new ArrayList<>();
-                                isEndReadingAttributes = false;
                                 dtdAttribute = parseDTDAttribute();
                                 System.out.println(dtdAttribute);
+                                handleAttributeList(dtdAttribute);
                                 dtdAttribute = null;
                             }
                             case "--" -> {
@@ -84,6 +96,10 @@ public class ParserDTD {
                         }
                         textValue.setLength(0);
                     }
+                }
+                case '>' -> {
+                    handleError("Not found open blanket !",
+                            "Remove close blanket or add open blanket", ErrorType.FatalError);
                 }
                 case '\n' -> {
                     rowIndex++;
@@ -136,6 +152,7 @@ public class ParserDTD {
                         System.out.println(parentContentModel.toString());
                     }
                     textValue.setLength(0);
+                    isStartTag = false;
                     break OUTER;
                 }
                 default -> {
@@ -252,6 +269,7 @@ public class ParserDTD {
         StringBuilder textValue = new StringBuilder();
         OUTER : while(reader.ready()){
             c = (char)reader.read();
+            columnIndex++;
             switch (c){
                 case ' ' -> {
                     if(dtdAttribute == null && !textValue.isEmpty()){
@@ -279,10 +297,16 @@ public class ParserDTD {
         DefaultValue defaultValue = null;
         boolean startReadingAttribute = false;
         boolean startReadingDefaultValueType = false;
+        boolean startReadingDefaultValue = false;
         OUTER : while(reader.ready()){
             c = (char)reader.read();
+            columnIndex++;
             switch (c){
                 case ' ' -> {
+                    if(startReadingDefaultValue){
+                        textValue.append(c);
+                        break;
+                    }
                     // get and set attribute name
                     if(attributeContent == null && !textValue.isEmpty()){
                         attributeContent = new DTDAttributeContent();
@@ -299,7 +323,8 @@ public class ParserDTD {
                         break;
                     }
                     // get and set attribute default value
-                    if(startReadingAttribute && attributeContent.getAttributeType() != 0 && defaultValue != null){
+                    if(startReadingAttribute && attributeContent.getAttributeType() != 0
+                            && defaultValue != null && checkDefaultType(textValue.toString())){
                         defaultValue.setType(textValue.toString());
                         if(textValue.toString().equals("#IMPLIED") || textValue.toString().equals("#REQUIRED")){
                             attributeContent.setDefaultValue(defaultValue);
@@ -314,19 +339,33 @@ public class ParserDTD {
                     }
                 }
                 case '#' -> {
+                    if(startReadingDefaultValue){
+                        textValue.append(c);
+                        break;
+                    }
                     if(startReadingAttribute && attributeContent.getAttributeType() != 0){
                         startReadingDefaultValueType = true;
                         textValue.append(c);
                     }
                 }
                 case '"', '\'' -> {
+                    if(startReadingDefaultValue && countDoubleQuotes == 1 && c == '\''){
+                        textValue.append(c);
+                        break;
+                    }
+                    if(startReadingDefaultValue && countSingleQuotes == 1 && c == '"'){
+                        textValue.append(c);
+                        break;
+                    }
                     if(startReadingAttribute && countDoubleQuotes == 0 && c == '"' && defaultValue != null){
                         countDoubleQuotes++;
+                        startReadingDefaultValue = true;
                         textValue.setLength(0);
                         break;
                     }
                     if(startReadingAttribute && countSingleQuotes == 0 && c == '\'' && defaultValue != null){
                         countSingleQuotes++;
+                        startReadingDefaultValue = true;
                         textValue.setLength(0);
                         break;
                     }
@@ -340,7 +379,7 @@ public class ParserDTD {
                                 && defaultValue.getType().equals("#FIXED"))){
                             defaultValue.setValue(textValue.toString());
                         }
-
+                        startReadingDefaultValue = false;
                         startReadingAttribute = false;
                         startReadingDefaultValueType = false;
                         attributeContent.setDefaultValue(defaultValue);
@@ -349,11 +388,16 @@ public class ParserDTD {
                         defaultValue = null;
                         textValue.setLength(0);
                         countDoubleQuotes = 0;
+                        countSingleQuotes = 0;
                     }
                 }
                 case '>' -> {
+                    if(startReadingDefaultValue){
+                        textValue.append(c);
+                        break;
+                    }
                     if(startReadingAttribute && defaultValue != null && !textValue.isEmpty()){
-                        if(defaultValue.getValue() == null
+                        if(defaultValue.getValue() == null && checkDefaultType(textValue.toString())
                                 && (textValue.toString().equals("#REQUIRED") || textValue.toString().equals("#IMPLIED"))){
                             defaultValue.setType(textValue.toString());
                             attributeContent.setDefaultValue(defaultValue);
@@ -365,6 +409,8 @@ public class ParserDTD {
                             startReadingDefaultValueType = false;
                         }
                     }
+                    startReadingDefaultValue = false;
+                    isStartTag = false;
                     if(tempContent != null){
                         dtdAttribute.setAll(tempContent);
                         tempContent = null;
@@ -397,9 +443,11 @@ public class ParserDTD {
         };
     }
 
-    private DefaultValue parseDefaultValue(String defaultValue){
-
-        return null;
+    private boolean checkDefaultType(String defaultValue){
+        return switch (defaultValue){
+            case "#REQUIRED","#IMPLIED","#FIXED" -> true;
+            default -> throw new HJAXException("Unknown default type: " + defaultValue);
+        };
     }
 
     protected void handleElement(Element element){
@@ -407,6 +455,14 @@ public class ParserDTD {
             if(elementHandler != null){
                 elementHandler.handleElement(element);
             }
+        }catch (HJAXException e){
+            handleError(e.getMessage());
+        }
+    }
+
+    private void handleAttributeList(DTDAttribute dtdAttribute){
+        try {
+            dtdAttributeHandler.handleDTDAttribute(dtdAttribute, new SourceError(rowIndex, columnIndex));
         }catch (HJAXException e){
             handleError(e.getMessage());
         }
@@ -453,4 +509,5 @@ public class ParserDTD {
             }
         }
     }
+
 }

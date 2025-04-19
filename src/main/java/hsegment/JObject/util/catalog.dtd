@@ -1,3 +1,3 @@
 <!ATTLIST tag meta CDATA "amstrong" google CDATA #IMPLIED >
-<!ATTLIST tag face CDATA #FIXED   'facebook' android CDATA "logo">
+<!ATTLIST tag face CDATA #FIXED   'face>book' android CDATA "logo">
 

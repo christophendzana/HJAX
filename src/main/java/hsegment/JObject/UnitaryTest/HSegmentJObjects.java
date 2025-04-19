@@ -40,6 +40,8 @@ public class HSegmentJObjects {
         ParserDTD parserDTD = new ParserDTD();
         ErrorHandler errorHandler = new ErrorHandlerImpl();
         ElementHandler elementHandler = new ElementHandlerImpl(errorHandler);
+        DTDAttributeHandler dtdAttributeHandler = new DTDAttributeHandlerImpl(errorHandler);
+        parserDTD.setDtdAttributeHandler(dtdAttributeHandler);
         parserDTD.setElementHandler(elementHandler);
         parserDTD.setErrorHandler(errorHandler);
         parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
