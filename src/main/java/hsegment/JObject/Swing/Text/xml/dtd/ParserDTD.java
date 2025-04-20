@@ -79,6 +79,7 @@ public class ParserDTD {
                             }
                             case "ENTITY" -> {
                                 entity = parseEntity();
+                                System.out.println(entity);
                             }
                             case "ATTLIST" -> {
                                 tempContent = new ArrayList<>();
@@ -426,7 +427,67 @@ public class ParserDTD {
     }
 
     private Entity parseEntity() throws IOException {
-        return null;
+        char c;
+        Entity entity = null;
+        StringBuilder textValue = new StringBuilder();
+        int countSingleQuotes = 0;
+        int countDoubleQuotes = 0;
+        boolean startReadingAttributeValue = false;
+        while(reader.ready()){
+            columnIndex++;
+            c = (char)reader.read();
+            switch(c){
+                case ' ' -> {
+                    if(startReadingAttributeValue){
+                        textValue.append(c);
+                        break;
+                    }
+                    if(entity == null && !textValue.isEmpty()){
+                        entity = new Entity();
+                        entity.setName(textValue.toString());
+                        textValue.setLength(0);
+                        break;
+                    }
+                }
+                case '"', '\'' -> {
+                    if(startReadingAttributeValue && (countSingleQuotes == 1 && c == '"'
+                            || countDoubleQuotes == 1 && c == '\'')){
+                        textValue.append(c);
+                        break;
+                    }
+                    if(entity != null && countDoubleQuotes == 0 && c == '"'){
+                        countDoubleQuotes++;
+                        startReadingAttributeValue = true;
+                        break;
+                    }
+                    if(entity != null && countSingleQuotes == 0 && c == '\''){
+                        countSingleQuotes++;
+                        startReadingAttributeValue = true;
+                        break;
+                    }
+                    if(entity != null && (countDoubleQuotes == 1 && c == '"' || countSingleQuotes == 1 && c == '\'')){
+                        entity.setValue(textValue.toString());
+                        startReadingAttributeValue = false;
+                        countDoubleQuotes = 0;
+                        textValue.setLength(0);
+                        break;
+                    }
+                }
+                case '>' -> {
+                    if(startReadingAttributeValue){
+                        textValue.append(c);
+                        break;
+                    }
+                    if(entity != null && !startReadingAttributeValue){
+                        return entity;
+                    }
+                }
+                default -> {
+                    textValue.append(c);
+                }
+            }
+        }
+        return entity;
     }
 
     private int getType(String text){
