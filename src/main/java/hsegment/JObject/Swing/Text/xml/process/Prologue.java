@@ -13,7 +13,7 @@ public class Prologue {
     private String version;
     private String encoding;
     private boolean isStandAlone;
-    public Prologue(String version, String encoding, boolean isStandAlone) {
+    public Prologue(String version, String encoding, Boolean isStandAlone) {
         this.version = version;
         this.encoding = encoding;
         this.isStandAlone = isStandAlone;

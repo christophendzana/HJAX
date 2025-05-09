@@ -9,5 +9,5 @@ package hsegment.JObject.Swing.Text.xml.handler;
  * @author Ndzana christophe
  */
 public interface CommentHandler {
-    void handleComment(String text, int rowIndex);
+    void handleComment(char[] text);
 }

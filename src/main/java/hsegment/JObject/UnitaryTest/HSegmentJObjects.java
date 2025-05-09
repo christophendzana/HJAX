@@ -4,12 +4,12 @@
 
 package hsegment.JObject.UnitaryTest;
 
-import hsegment.JObject.Swing.Text.xml.dtd.ParserDTD;
-import hsegment.JObject.Swing.Text.xml.handler.*;
-import hsegment.JObject.Swing.Text.xml.handlerImpl.*;
+import hsegment.JObject.Swing.Text.xml.process.ParserProcess;
 
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
@@ -35,15 +35,18 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(label, SwingConstants.RIGHT);
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
-        //ParserProcess parserProcess = new ParserProcess();
-        //parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
-        ParserDTD parserDTD = new ParserDTD();
-        ErrorHandler errorHandler = new ErrorHandlerImpl();
-        ElementHandler elementHandler = new ElementHandlerImpl(errorHandler);
-        DTDAttributeHandler dtdAttributeHandler = new DTDAttributeHandlerImpl(errorHandler);
-        parserDTD.setDtdAttributeHandler(dtdAttributeHandler);
-        parserDTD.setElementHandler(elementHandler);
-        parserDTD.setErrorHandler(errorHandler);
-        parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
+
+        ParserProcess parserProcess = new ParserProcess();
+        parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
+        
+        //ParserDTD parserDTD = new ParserDTD();
+        //ErrorHandler errorHandler = new ErrorHandlerImpl();
+        //ElementHandler elementHandler = new ElementHandlerImpl(errorHandler);
+        //DTDAttributeHandler dtdAttributeHandler = new DTDAttributeHandlerImpl(errorHandler);
+        //parserDTD.setDtdAttributeHandler(dtdAttributeHandler);
+        //parserDTD.setElementHandler(elementHandler);
+        //parserDTD.setErrorHandler(errorHandler);
+        //parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
     }
+
 }

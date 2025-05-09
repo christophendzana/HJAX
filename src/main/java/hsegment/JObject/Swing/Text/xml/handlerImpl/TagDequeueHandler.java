@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentLinkedDeque;
  * use to check the correct tag imbrication. A LIFO queue is used to add only open tags and retrieves them while
  * them when close tags with the same name is found.
  */
-public class TagDequeueHandlerImpl implements DequeueHandler<TagElement>  {
+public class TagDequeueHandler implements DequeueHandler<TagElement>  {
     //Queue initialisation
     private final ConcurrentLinkedDeque<TagElement> tagsDeque = new ConcurrentLinkedDeque<>();
     // Empty state initialisation

@@ -63,6 +63,7 @@ public class Element implements HDTDConstants {
     public void setAttributeList(AttributeList attributeList) {
         this.attributeList = attributeList;
     }
+    public Element(){}
     public Element(int rowIndex, int colIndex, String name) {
         this.rowIndex = rowIndex;
         this.colIndex = colIndex;

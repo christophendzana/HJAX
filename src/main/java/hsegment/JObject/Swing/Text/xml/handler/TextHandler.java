@@ -9,5 +9,5 @@ package hsegment.JObject.Swing.Text.xml.handler;
  * @author Ndzana christophe
  */
 public interface TextHandler {
-    void handleText(String text);
+    void handleText(char[] text);
 }

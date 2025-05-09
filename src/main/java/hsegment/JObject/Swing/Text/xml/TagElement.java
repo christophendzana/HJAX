@@ -24,6 +24,7 @@ public class TagElement implements Constants {
         this.type = type;
     }
 
+    public TagElement(){}
     public TagElement(Element element, int type) {
         this.element = element;
         this.type = type;

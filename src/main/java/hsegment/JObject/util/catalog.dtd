@@ -1,5 +1,13 @@
-<!ATTLIST tag meta CDATA "amstrong" google CDATA #IMPLIED >
-<!ATTLIST tag face CDATA #FIXED   'face>book' android CDATA "logo">
-        <!ENTITY aka "also known' as">
+<!ELEMENT elem (elema+, ((ele, eli) | elemp), elemi)>
+<!ELEMENT elem (elemu | elemk | elemn)*>
+<!ELEMENT item ((item, item) | (item, item))>
+<!ATTLIST section id ID #IMPLIED>
+<!ATTLIST book name NMTOKEN #IMPLIED>
+<!ATTLIST rule style CDATA "free">
+<!ENTITY aka "also known as">
+
+
+
+
 
 
