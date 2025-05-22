@@ -16,6 +16,7 @@ public class AttributeList implements  HDTDConstants {
     // the values of attribute with many values
     private List<String> values;
     private int type = ANY;
+    private String defaultValue;
     // the rest of attributes
     private AttributeList next;
 
@@ -85,6 +86,16 @@ public class AttributeList implements  HDTDConstants {
 
     public List<String> getValues() {
         return values;
+    }
+
+    public void setValues(String value) {
+        values.add(value);
+    }
+    public String getDefaultValue() {
+        return defaultValue;
+    }
+    public void setDefaultValue(String defaultValue) {
+        this.defaultValue = defaultValue;
     }
     public AttributeList(){}
 }

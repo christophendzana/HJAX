@@ -10,7 +10,7 @@
     <book sros="us&lt;er look! data" lok="user val" data="cook">
 
         <xmlse>XML &lt; Developer's Guide</xmlse>
-        <genre sfsf/>
+        <genre/>
         <price>44.95</price>
         <publish_date>2000-10-01</publish_date>
         <description>An in-depth look at creating applications
@@ -84,7 +84,7 @@
         <description>An anthology of horror stories about roaches,
             centipedes, scorpions  and other insects.</description>
     </book>
-    <b°ook id="bk109">
+    <book id="bk109">
         <author>Kress, Peter</author>
         <title>Paradox Lost</title>
         <genre>Science Fiction</genre>
@@ -115,7 +115,7 @@
     </book>
     <book id="bk112" link="bold">
         <author> Galos, Mike</author>
-        <titl)e>Visual Studio 7: A Comprehensive Guide</title>
+        <title>Visual Studio 7: A Comprehensive Guide</title>
         <genre>Computer</genre>
         <price>49.95</price>
         <or/>

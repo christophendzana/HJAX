@@ -19,6 +19,8 @@ public class Element implements HDTDConstants {
     private ContentModel contentModel;
     // the attribute of tag
     private AttributeList attributeList;
+    private int index;
+    private char cardinal;
 
     public int getRowIndex() {
         return rowIndex;
@@ -49,6 +51,22 @@ public class Element implements HDTDConstants {
     }
     public void setType(int type) {
         this.type = type;
+    }
+
+    public int getIndex() {
+        return index;
+    }
+
+    public void setIndex(int index) {
+        this.index = index;
+    }
+
+    public char getCardinal() {
+        return cardinal;
+    }
+
+    public void setCardinal(char cardinal) {
+        this.cardinal = cardinal;
     }
 
     public ContentModel getContentModel() {

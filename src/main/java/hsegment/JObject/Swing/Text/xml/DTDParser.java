@@ -1,12 +1,9 @@
-package hsegment.JObject.Swing.Text.xml.dtd;
+package hsegment.JObject.Swing.Text.xml;
 
 import hsegment.JObject.Swing.Text.ErrorType;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
-import hsegment.JObject.Swing.Text.xml.*;
-import hsegment.JObject.Swing.Text.xml.error.SourceError;
-import hsegment.JObject.Swing.Text.xml.handler.DTDAttributeHandler;
+import hsegment.JObject.Swing.Text.xml.dtd.*;
 import hsegment.JObject.Swing.Text.xml.handler.ElementHandler;
-import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -15,40 +12,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
-public class ParserDTD {
-    private Reader reader;
-    private int rowIndex;
-    private int columnIndex;
+public class DTDParser extends Parser implements XMLValidator {
     private List<DTDAttributeContent> tempContent;
-    private boolean isStartTag;
-    private boolean isStartTagName;
-
-    private TagStack tagStack;
-
-    private Logger logger;
-    private ErrorHandler errorHandler;
     private ElementHandler elementHandler;
-    private DTDAttributeHandler dtdAttributeHandler;
-
-    public void setDtdAttributeHandler(DTDAttributeHandler dtdAttributeHandler) {
-        this.dtdAttributeHandler = dtdAttributeHandler;
-    }
-
-    public void setErrorHandler(ErrorHandler errorHandler) {
-        this.errorHandler = errorHandler;
-    }
+    private ContentModel contentModel;
 
     public void setElementHandler(ElementHandler elementHandler) {
         this.elementHandler = elementHandler;
+    }
+
+    public HDTD getDTD(){
+        return null;
     }
 
     public void parse(Reader in) throws IOException {
         reader = new BufferedReader(in);
         tagStack = new TagStack();
         logger = Logger.getLogger(this.getClass().getName());
-        char c;
         StringBuilder textValue = new StringBuilder();
-        Element element = null;
+        element = null;
         Entity entity = null;
         DTDAttribute dtdAttribute = null;
         rowIndex++;
@@ -58,7 +40,7 @@ public class ParserDTD {
             switch(c){
                 case '<' -> {
                     if(isStartTag){
-                        handleError("Not found close blanket !",
+                        handleError(getErrorSource(),"Not found close blanket !",
                                 "Remove open blanket or add close blanket", ErrorType.FatalError);
                     }
                     isStartTag = true;
@@ -73,7 +55,7 @@ public class ParserDTD {
                         isStartTagName = false;
                         switch (textValue.toString()){
                             case "ELEMENT" -> {
-                                element = parseElement();
+                                parseDTDElement();
                                 isStartTagName = false;
                                 handleElement(element);
                             }
@@ -85,21 +67,20 @@ public class ParserDTD {
                                 tempContent = new ArrayList<>();
                                 dtdAttribute = parseDTDAttribute();
                                 System.out.println(dtdAttribute);
-                                handleAttributeList(dtdAttribute);
                                 dtdAttribute = null;
                             }
                             case "--" -> {
                                 //handle comment
                             }
                             default -> {
-                                handleError("Unknown tag !", "Remove or correct the tag", ErrorType.FatalError);
+                                handleError(getErrorSource(), "Unknown tag !", "Remove or correct the tag", ErrorType.FatalError);
                             }
                         }
                         textValue.setLength(0);
                     }
                 }
                 case '>' -> {
-                    handleError("Not found open blanket !",
+                    handleError(getErrorSource(),"Not found open blanket !",
                             "Remove close blanket or add open blanket", ErrorType.FatalError);
                 }
                 case '\n' -> {
@@ -119,11 +100,11 @@ public class ParserDTD {
         }
     }
 
-    private Element parseElement() throws IOException {
+    protected void parseDTDElement() throws IOException {
         char c;
         StringBuilder textValue = new StringBuilder();
         ContentModel parentContentModel = null;
-        Element element = null;
+        element = null;
         OUTER: while (reader.ready()){
             c = (char)reader.read();
             switch (c){
@@ -132,13 +113,12 @@ public class ParserDTD {
                         // set the element name
                         element = new Element(rowIndex, columnIndex, textValue.toString());
                         parentContentModel = parseContentModel(parentContentModel);
-                        handleContentModel(parentContentModel);
                         textValue.setLength(0);
                     }
 
                 }
                 case '+', '?', '*', '|', ',' -> {
-                    handleError("Invalid position of operator : "+c, "Remove the operator",
+                    handleError(getErrorSource(),"Invalid position of operator : "+c, "Remove the operator",
                             ErrorType.FatalError);
                 }
                 case '>' -> {
@@ -146,7 +126,7 @@ public class ParserDTD {
                         element.setType(getType(textValue.toString()));
                     }
                     if(element != null && parentContentModel != null && !textValue.isEmpty()){
-                        handleError("Invalid content : "+textValue, "Remove the content !", ErrorType.FatalError);
+                        handleError(getErrorSource(),"Invalid content : "+textValue, "Remove the content !", ErrorType.FatalError);
                     }
                     if(element != null && parentContentModel != null){
                         element.setContentModel(parentContentModel);
@@ -161,10 +141,9 @@ public class ParserDTD {
                 }
             }
         }
-        return element;
     }
 
-    private ContentModel parseContentModel(ContentModel contentModel) throws IOException {
+    protected ContentModel parseContentModel(ContentModel contentModel) throws IOException {
         char c;
         StringBuilder textValue = new StringBuilder();
         boolean isEndReading = false;
@@ -179,7 +158,7 @@ public class ParserDTD {
                 }
                 case ',', '|' -> {
                     if(contentModel == null){
-                        handleError("Invalid position of operator : "+c, "Remove the operator",
+                        handleError(getErrorSource(),"Invalid position of operator : "+c, "Remove the operator",
                                 ErrorType.FatalError);
                     }
                     if(contentModel != null && content != null && !textValue.isEmpty()){
@@ -201,7 +180,7 @@ public class ParserDTD {
                 }
                 case '*', '+', '?' -> {
                     if(contentModel == null){
-                        handleError("Invalid position of operator : "+c, "Remove the operator",
+                        handleError(getErrorSource(),"Invalid position of operator : "+c, "Remove the operator",
                                 ErrorType.FatalError);
                     }
                     // process of handling of many occurrence operator
@@ -221,7 +200,7 @@ public class ParserDTD {
                 case '(' -> {
                     if(!textValue.isEmpty()){
                         textValue.append(c);
-                        handleError("Invalid content : "+textValue, "Remove the content !", ErrorType.FatalError);
+                        handleError(getErrorSource(),"Invalid content : "+textValue, "Remove the content !", ErrorType.FatalError);
                     }
                     content = new Content();
                     // process of handling start elements group
@@ -236,7 +215,7 @@ public class ParserDTD {
                 }
                 case ')' -> {
                     if(contentModel == null){
-                        handleError("Not found open bracket of content model", "Remove this close bracket",
+                        handleError(getErrorSource(),"Not found open bracket of content model", "Remove this close bracket",
                                 ErrorType.FatalError);
                     }
                     // process of handling end elements group
@@ -264,7 +243,7 @@ public class ParserDTD {
         return contentModel;
     }
 
-    private DTDAttribute parseDTDAttribute() throws IOException {
+    protected DTDAttribute parseDTDAttribute() throws IOException {
         char c;
         DTDAttribute dtdAttribute = null;
         StringBuilder textValue = new StringBuilder();
@@ -426,7 +405,7 @@ public class ParserDTD {
         return dtdAttribute;
     }
 
-    private Entity parseEntity() throws IOException {
+    protected Entity parseEntity() throws IOException {
         char c;
         Entity entity = null;
         StringBuilder textValue = new StringBuilder();
@@ -490,6 +469,8 @@ public class ParserDTD {
         return entity;
     }
 
+    protected void parseNotation(){}
+
     private int getType(String text){
         return switch (text){
             case "EMPTY" -> Constants.EMPTY;
@@ -521,14 +502,6 @@ public class ParserDTD {
         }
     }
 
-    private void handleAttributeList(DTDAttribute dtdAttribute){
-        try {
-            dtdAttributeHandler.handleDTDAttribute(dtdAttribute, new SourceError(rowIndex, columnIndex));
-        }catch (HJAXException e){
-            handleError(e.getMessage());
-        }
-    }
-
     private void handleContentModel(ContentModel contentModel){
         try {
             if(elementHandler != null){
@@ -539,36 +512,5 @@ public class ParserDTD {
         }
     }
 
-    protected void handleError(String msg){
-        try {
-            if(errorHandler != null){
-                logger.severe(msg);
-                reader.close();
-            }
-        }catch (Exception e){
-            logger.severe(e.getMessage());
-        }
-    }
-
-    protected void handleError(String message, String debug, ErrorType errorType){
-        try{
-            if(errorHandler != null){
-                errorHandler.errorHandler("In Row : "+rowIndex+" , Column : "+columnIndex, message, debug, errorType);
-            }
-        }catch (HJAXException e){
-            logger.severe("HJAXException :"+e.getMessage());
-        }catch (Exception e){
-            logger.severe(e.getMessage());
-        }finally {
-            try {
-                // stop the reading of file
-                if(errorHandler != null && errorType == ErrorType.FatalError){
-                    reader.close();
-                }
-            } catch (Exception e) {
-                logger.severe("Exception :"+e.getMessage());
-            }
-        }
-    }
 
 }

@@ -24,9 +24,9 @@ import java.util.logging.Logger;
  * @author Hyacinthe Tsague, Ndzana Christophe
  */
 public class Parser implements XMLValidator {
-    private Reader reader;
-    private boolean isStartTag;
-    private boolean isStartTagName;
+    protected Reader reader;
+    protected boolean isStartTag;
+    protected boolean isStartTagName;
     private boolean isStartTagAttributeName;
     private boolean isStartTagAttributeValue;
     private boolean isDoctypeTag;
@@ -35,7 +35,7 @@ public class Parser implements XMLValidator {
     private boolean isHandleAttributeValue;
     private boolean isHandleEntity;
 
-    private Element element;
+    protected Element element;
     private TagElement tagElement;
     private List<AttributeKV> attributeKVList;
     private StringBuilder textValue;
@@ -47,20 +47,20 @@ public class Parser implements XMLValidator {
     private int processingInstructionMark = 0;
     private StringBuilder tagName;
     private StringBuilder textAfterTagName;
-    private char c;
+    protected char c;
 
 
-    private int rowIndex = 1;
-    private int columnIndex;
+    protected int rowIndex = 1;
+    protected int columnIndex;
     private boolean isProcessInstruction;
     private boolean isCloseTag;
     private boolean isSingleTag;
     private Doctype doctype;
     private Prologue prologue;
-    private TagStack tagStack;
+    protected TagStack tagStack;
 
     private EntityHandler entityHandler;
-    private ErrorHandler errorHandler;
+    protected ErrorHandler errorHandler;
     private TagHandler tagHandler;
     private TextHandler textHandler;
     private CommentHandler commentHandler;
@@ -70,7 +70,7 @@ public class Parser implements XMLValidator {
     private InstructionTagHandler instructionTagHandler;
     private DequeueHandler<TagElement> dequeueHandler;
     private TagStackHandler tagStackHandler;
-    private Logger logger;
+    protected Logger logger;
     protected XMLRules xmlRules;
 
     public EntityHandler getEntityHandler() {
@@ -648,7 +648,7 @@ public class Parser implements XMLValidator {
      * Format of error source
      * @return the string format of error source
      */
-    private String getErrorSource(){
+    protected String getErrorSource(){
         return "Row :"+rowIndex+",Column:"+columnIndex;
     }
 
@@ -872,7 +872,7 @@ public class Parser implements XMLValidator {
      * Handle error message provide by throws
      * @param msg error
      */
-    private void handleError(String msg){
+    protected void handleError(String msg){
         try {
             if(errorHandler != null){
                 logger.severe(msg);

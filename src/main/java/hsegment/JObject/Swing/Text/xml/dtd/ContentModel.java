@@ -1,5 +1,7 @@
 package hsegment.JObject.Swing.Text.xml.dtd;
 
+import hsegment.JObject.Swing.Text.xml.Element;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,6 +10,9 @@ public class ContentModel {
     private List<Content> values;
     private List<ContentModel> content;
     private char operator;
+    private int type;
+    private char cardinal;
+    private int[] indexList;
 
     public ContentModel(){
         values = new ArrayList<>();
@@ -45,6 +50,28 @@ public class ContentModel {
     public void setOperator(char operator) {
         this.operator = operator;
     }
+
+    public int getType() {
+        return type;
+    }
+
+    public void setType(int type) {
+        this.type = type;
+    }
+
+    public char getCardinal() {
+        return cardinal;
+    }
+
+    public void setCardinal(char cardinal) {
+        this.cardinal = cardinal;
+    }
+
+    protected boolean addElementIndex(String name){return false;}
+    protected Element getElement(){
+        return null;
+    }
+    protected void getElementList(List<String> elements){}
 
     @Override
     public String toString() {
