@@ -14,22 +14,21 @@ import java.util.logging.Logger;
 
 public class DTDParser extends Parser implements XMLValidator {
     private List<DTDAttributeContent> tempContent;
-    private ElementHandler elementHandler;
     private ContentModel contentModel;
+    private HDTD hdtd;
 
-    public void setElementHandler(ElementHandler elementHandler) {
-        this.elementHandler = elementHandler;
-    }
 
     public HDTD getDTD(){
-        return null;
+        return hdtd;
     }
 
     public void parse(Reader in) throws IOException {
         reader = new BufferedReader(in);
         tagStack = new TagStack();
+        //todo set the name of hdtd
+        hdtd = new HDTD("");
         logger = Logger.getLogger(this.getClass().getName());
-        StringBuilder textValue = new StringBuilder();
+        textValue = new StringBuilder();
         element = null;
         Entity entity = null;
         DTDAttribute dtdAttribute = null;
@@ -57,7 +56,6 @@ public class DTDParser extends Parser implements XMLValidator {
                             case "ELEMENT" -> {
                                 parseDTDElement();
                                 isStartTagName = false;
-                                handleElement(element);
                             }
                             case "ENTITY" -> {
                                 entity = parseEntity();
@@ -71,6 +69,8 @@ public class DTDParser extends Parser implements XMLValidator {
                             }
                             case "--" -> {
                                 //handle comment
+                                textValue.setLength(0);
+                                parseComment();
                             }
                             default -> {
                                 handleError(getErrorSource(), "Unknown tag !", "Remove or correct the tag", ErrorType.FatalError);
@@ -102,7 +102,7 @@ public class DTDParser extends Parser implements XMLValidator {
 
     protected void parseDTDElement() throws IOException {
         char c;
-        StringBuilder textValue = new StringBuilder();
+        textValue = new StringBuilder();
         ContentModel parentContentModel = null;
         element = null;
         OUTER: while (reader.ready()){
@@ -111,14 +111,14 @@ public class DTDParser extends Parser implements XMLValidator {
                 case ' ' -> {
                     if(!textValue.isEmpty() && parentContentModel == null){
                         // set the element name
-                        element = new Element(rowIndex, columnIndex, textValue.toString());
+                        element = hdtd.getElement(textValue.toString());
                         parentContentModel = parseContentModel(parentContentModel);
                         textValue.setLength(0);
                     }
 
                 }
                 case '+', '?', '*', '|', ',' -> {
-                    handleError(getErrorSource(),"Invalid position of operator : "+c, "Remove the operator",
+                    handleError(getErrorSource(),"Invalid position of operator/cardinal : "+c, "Remove the operator/cardinal",
                             ErrorType.FatalError);
                 }
                 case '>' -> {
@@ -145,7 +145,7 @@ public class DTDParser extends Parser implements XMLValidator {
 
     protected ContentModel parseContentModel(ContentModel contentModel) throws IOException {
         char c;
-        StringBuilder textValue = new StringBuilder();
+        textValue = new StringBuilder();
         boolean isEndReading = false;
         Content content = new Content();
         while(reader.ready()){
@@ -168,19 +168,19 @@ public class DTDParser extends Parser implements XMLValidator {
                     }
                     textValue.setLength(0);
                     // process of handling sequence operator
-                    if(contentModel != null && contentModel.getSplitOperator() == 0){
-                        contentModel.setSplitOperator(c);
+                    if(contentModel != null && contentModel.getOperator() == 0){
+                        contentModel.setOperator(c);
                     }
-                    if(contentModel != null && contentModel.getSplitOperator() != 0 && contentModel.getSplitOperator() != c){
+                    if(contentModel != null && contentModel.getOperator() != 0 && contentModel.getOperator() != c){
                         //todo handle error
-                        System.out.println("Error : Found different split operator");
+                        System.out.println("Error : Found different operator");
                     }
 
                     // process of handling choice operator
                 }
                 case '*', '+', '?' -> {
                     if(contentModel == null){
-                        handleError(getErrorSource(),"Invalid position of operator : "+c, "Remove the operator",
+                        handleError(getErrorSource(),"Invalid position of cardinal : "+c, "Remove the cardinal",
                                 ErrorType.FatalError);
                     }
                     // process of handling of many occurrence operator
@@ -189,18 +189,20 @@ public class DTDParser extends Parser implements XMLValidator {
                     if(contentModel != null && !isEndReading){
                         content.setOperator(c);
                     }
-                    if(contentModel != null && isEndReading && contentModel.getOperator() == 0){
-                        contentModel.setOperator(c);
+                    if(contentModel != null && isEndReading && contentModel.getCardinal() == 0){
+                        contentModel.setCardinal(c);
                         return contentModel;
                     }
-                    if(contentModel != null && contentModel.getOperator() != 0 && contentModel.getOperator() != c){
-                        System.out.println("Error : Found different operator");
+                    if(contentModel != null && contentModel.getCardinal() != 0 && contentModel.getCardinal() != c){
+                        handleError(getErrorSource(), "Found different cardinal",
+                                "Check cardinal and remove it", ErrorType.Warning);
                     }
                 }
                 case '(' -> {
                     if(!textValue.isEmpty()){
                         textValue.append(c);
-                        handleError(getErrorSource(),"Invalid content : "+textValue, "Remove the content !", ErrorType.FatalError);
+                        handleError(getErrorSource(),"Invalid content : "+textValue,
+                                "Remove the content !", ErrorType.FatalError);
                     }
                     content = new Content();
                     // process of handling start elements group
@@ -209,7 +211,6 @@ public class DTDParser extends Parser implements XMLValidator {
                     }else{
                         ContentModel temp = new ContentModel();
                         temp = parseContentModel(temp);
-                        handleContentModel(temp);
                         contentModel.setContent(temp);
                     }
                 }
@@ -491,26 +492,4 @@ public class DTDParser extends Parser implements XMLValidator {
             default -> throw new HJAXException("Unknown default type: " + defaultValue);
         };
     }
-
-    protected void handleElement(Element element){
-        try {
-            if(elementHandler != null){
-                elementHandler.handleElement(element);
-            }
-        }catch (HJAXException e){
-            handleError(e.getMessage());
-        }
-    }
-
-    private void handleContentModel(ContentModel contentModel){
-        try {
-            if(elementHandler != null){
-                elementHandler.handleContentModel(contentModel, rowIndex, columnIndex);
-            }
-        }catch (HJAXException e){
-            handleError(e.getMessage());
-        }
-    }
-
-
 }

@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ContentModel {
-    private char splitOperator;
     private List<Content> values;
     private List<ContentModel> content;
     private char operator;
@@ -17,14 +16,6 @@ public class ContentModel {
     public ContentModel(){
         values = new ArrayList<>();
         content = new ArrayList<>();
-    }
-
-    public char getSplitOperator() {
-        return splitOperator;
-    }
-
-    public void setSplitOperator(char splitOperator) {
-        this.splitOperator = splitOperator;
     }
 
     public List<Content> getValues() {
@@ -75,8 +66,8 @@ public class ContentModel {
 
     @Override
     public String toString() {
-        System.out.println("SplitOperator: " + splitOperator);
-        System.out.println("Operator: " + operator);
+        System.out.println("SplitOperator: " + operator);
+        System.out.println("Operator: " + cardinal);
         values.forEach(content1 -> {
             System.out.println("--------------");
             System.out.println("name "+content1.getName());

@@ -4,15 +4,7 @@
  */
 package hsegment.JObject.util;
 
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.ListIterator;
-import java.util.RandomAccess;
-import java.util.Spliterator;
-import java.util.Vector;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
@@ -200,7 +192,7 @@ public class Dictionnary<E>
      */
     public E get(String name){
         for(Object column : columns){
-            if(((Column)column).isCharIdentification(name.charAt(0))){
+            if(column != null && ((Column)column).isCharIdentification(name.charAt(0))){
                 for(Object line : ((Column)column).lines){
                     
                     boolean equal = caseSensitive ? name.equals(((Line)line).element.toString()) : 

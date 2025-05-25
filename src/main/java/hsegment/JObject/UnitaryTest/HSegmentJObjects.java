@@ -4,6 +4,8 @@
 
 package hsegment.JObject.UnitaryTest;
 
+import hsegment.JObject.Swing.Text.xml.DTDParser;
+import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
 import hsegment.JObject.Swing.Text.xml.process.ParserProcess;
 
 import java.io.FileReader;
@@ -36,17 +38,15 @@ public class HSegmentJObjects {
         f.addTitleBarComponent(button, SwingConstants.RIGHT);
         f.setVisible(true);**/
 
-        ParserProcess parserProcess = new ParserProcess();
-        parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
+        //ParserProcess parserProcess = new ParserProcess();
+        //parserProcess.parse(new FileReader("src/main/java/hsegment/JObject/util/book.xml"));
         
-        //ParserDTD parserDTD = new ParserDTD();
-        //ErrorHandler errorHandler = new ErrorHandlerImpl();
+        DTDParser parserDTD = new DTDParser();
         //ElementHandler elementHandler = new ElementHandlerImpl(errorHandler);
         //DTDAttributeHandler dtdAttributeHandler = new DTDAttributeHandlerImpl(errorHandler);
         //parserDTD.setDtdAttributeHandler(dtdAttributeHandler);
         //parserDTD.setElementHandler(elementHandler);
-        //parserDTD.setErrorHandler(errorHandler);
-        //parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
+        parserDTD.parse(new FileReader("src/main/java/hsegment/JObject/util/catalog.dtd"));
     }
 
 }

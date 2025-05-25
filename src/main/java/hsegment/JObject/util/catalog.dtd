@@ -3,6 +3,8 @@
 <!ELEMENT item ((item, item) | (item, item))>
 <!ATTLIST section id ID #IMPLIED>
 <!ATTLIST book name NMTOKEN #IMPLIED>
+        <!-- here is comment dtd <<<<<<""""?! sds -->
+
 <!ATTLIST rule style CDATA "free">
 <!ENTITY aka "also known as">
 

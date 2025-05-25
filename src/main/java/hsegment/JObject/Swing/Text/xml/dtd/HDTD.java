@@ -9,11 +9,20 @@ public class HDTD {
     private Dictionnary<Element> elements;
     private Dictionnary<Entity> entities;
     private Dictionnary<Notation> notations;
+    private String name;
 
-    public HDTD(String name) {}
+    public HDTD(String name) {
+        this.name = name;
+        elements = new Dictionnary<>(27, 2,true,false);
+    }
 
     public Element getElement(String name) {
-        return null;
+        Element element = elements.get(name);
+        if (element == null) {
+            element = new Element(name);
+            elements.add(element);
+        }
+        return element;
     }
 
     public Notation getNotations(String notation){
@@ -25,7 +34,17 @@ public class HDTD {
     }
 
     public Element defineElement(String name, int type, boolean omitEnd, ContentModel contentModel, AttributeList atts){
-        return null;
+        Element element = getElement(name);
+        element.setType(type);
+        element.setAttributeList(atts);
+        element.setContentModel(contentModel);
+        return element;
+    }
+
+    public Element defineElement(int rowIndex, int columnIndex, Element element){
+        element.setRowIndex(rowIndex);
+        element.setColIndex(columnIndex);
+        return element;
     }
 
     public Notation defineNotation(String notation){

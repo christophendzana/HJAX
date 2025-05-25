@@ -38,7 +38,7 @@ public class Parser implements XMLValidator {
     protected Element element;
     private TagElement tagElement;
     private List<AttributeKV> attributeKVList;
-    private StringBuilder textValue;
+    protected StringBuilder textValue;
     private StringBuilder attributeName;
     private StringBuilder attributeValue;
     private int countSingleQuotes = 0;
@@ -561,6 +561,7 @@ public class Parser implements XMLValidator {
                         }
                     }
                     reset();
+                    textAfterTagName.setLength(0);
                     return;
                 }
                 // we found next line
@@ -641,7 +642,6 @@ public class Parser implements XMLValidator {
         processingInstructionMark = 0;
         countSlash = 0;
         textValue.setLength(0);
-        textAfterTagName.setLength(0);
     }
 
     /**
@@ -741,6 +741,7 @@ public class Parser implements XMLValidator {
                 }
                 case '>' -> {
                     parseDoctypeContent();
+                    textAfterTagName.setLength(0);
                     reset();
                     return;
                 }
