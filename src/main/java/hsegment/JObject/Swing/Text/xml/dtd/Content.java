@@ -2,6 +2,7 @@ package hsegment.JObject.Swing.Text.xml.dtd;
 
 public class Content {
     private String name;
+    private int type;
     private char operator;
 
     public Content(){}
@@ -25,5 +26,11 @@ public class Content {
 
     public void setOperator(char operator) {
         this.operator = operator;
+    }
+    public int getType() {
+        return type;
+    }
+    public void setType(int type) {
+        this.type = type;
     }
 }

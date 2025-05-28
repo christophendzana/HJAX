@@ -26,7 +26,7 @@ public class Element implements HDTDConstants {
         return rowIndex;
     }
 
-    public void setRowIndex(int rowIndex) {
+    protected void setRowIndex(int rowIndex) {
         this.rowIndex = rowIndex;
     }
 
@@ -34,7 +34,7 @@ public class Element implements HDTDConstants {
         return colIndex;
     }
 
-    public void setColIndex(int colIndex) {
+    protected void setColIndex(int colIndex) {
         this.colIndex = colIndex;
     }
 
@@ -42,14 +42,14 @@ public class Element implements HDTDConstants {
         return name;
     }
 
-    public void setName(String name) {
+    protected void setName(String name) {
         this.name = name;
     }
 
     public int getType() {
         return type;
     }
-    public void setType(int type) {
+    protected void setType(int type) {
         this.type = type;
     }
 
@@ -57,7 +57,7 @@ public class Element implements HDTDConstants {
         return index;
     }
 
-    public void setIndex(int index) {
+    protected void setIndex(int index) {
         this.index = index;
     }
 
@@ -65,20 +65,20 @@ public class Element implements HDTDConstants {
         return cardinal;
     }
 
-    public void setCardinal(char cardinal) {
+    protected void setCardinal(char cardinal) {
         this.cardinal = cardinal;
     }
 
     public ContentModel getContentModel() {
         return contentModel;
     }
-    public void setContentModel(ContentModel contentModel) {
+    protected void setContentModel(ContentModel contentModel) {
         this.contentModel = contentModel;
     }
     public AttributeList getAttributeList() {
         return attributeList;
     }
-    public void setAttributeList(AttributeList attributeList) {
+    protected void setAttributeList(AttributeList attributeList) {
         this.attributeList = attributeList;
     }
     public Element(){}

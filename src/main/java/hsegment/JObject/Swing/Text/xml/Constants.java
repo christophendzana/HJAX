@@ -29,4 +29,5 @@ public interface Constants extends XMLConstants, SchemaConstants, HTMLConstants{
     int FIXED = 21;
     int IMPLIED = 22;
     int CDATA = 23;
+    int PCDATA = 24;
 }

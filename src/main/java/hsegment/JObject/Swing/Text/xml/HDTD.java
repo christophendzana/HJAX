@@ -1,8 +1,8 @@
-package hsegment.JObject.Swing.Text.xml.dtd;
+package hsegment.JObject.Swing.Text.xml;
 
 import hsegment.JObject.Swing.Text.html.parser.Notation;
-import hsegment.JObject.Swing.Text.xml.AttributeList;
-import hsegment.JObject.Swing.Text.xml.Element;
+import hsegment.JObject.Swing.Text.xml.dtd.ContentModel;
+import hsegment.JObject.Swing.Text.xml.dtd.Entity;
 import hsegment.JObject.util.Dictionnary;
 
 public class HDTD {

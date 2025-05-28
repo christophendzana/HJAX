@@ -70,8 +70,9 @@ public class ContentModel {
         System.out.println("Operator: " + cardinal);
         values.forEach(content1 -> {
             System.out.println("--------------");
-            System.out.println("name "+content1.getName());
-            System.out.println("content operator "+content1.getOperator());
+            System.out.println("name element type:"+content1.getName());
+            System.out.println("element type:"+content1.getType());
+            System.out.println("cardinal :"+content1.getOperator());
             System.out.println("----------------");
         });
         content.forEach(contentModel -> {

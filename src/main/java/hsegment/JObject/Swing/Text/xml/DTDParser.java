@@ -3,7 +3,6 @@ package hsegment.JObject.Swing.Text.xml;
 import hsegment.JObject.Swing.Text.ErrorType;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 import hsegment.JObject.Swing.Text.xml.dtd.*;
-import hsegment.JObject.Swing.Text.xml.handler.ElementHandler;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -32,7 +31,6 @@ public class DTDParser extends Parser implements XMLValidator {
         element = null;
         Entity entity = null;
         DTDAttribute dtdAttribute = null;
-        rowIndex++;
         while(reader.ready()){
             columnIndex++;
             c = (char)reader.read();
@@ -46,7 +44,12 @@ public class DTDParser extends Parser implements XMLValidator {
                     //
                 }
                 case '!' -> {
-                    isStartTagName = true;
+                    if(isStartTag){
+                        isStartTagName = true;
+                    }else{
+                        handleError(getErrorSource(), "Invalid syntax declaration",
+                                "Correct the syntax of declaration", ErrorType.FatalError);
+                    }
                     //
                 }
                 case ' ' -> {
@@ -73,7 +76,8 @@ public class DTDParser extends Parser implements XMLValidator {
                                 parseComment();
                             }
                             default -> {
-                                handleError(getErrorSource(), "Unknown tag !", "Remove or correct the tag", ErrorType.FatalError);
+                                handleError(getErrorSource(), "Unknown tag name : "+textValue.toString(),
+                                        "Remove or correct the tag name", ErrorType.FatalError);
                             }
                         }
                         textValue.setLength(0);
@@ -94,6 +98,11 @@ public class DTDParser extends Parser implements XMLValidator {
                     columnIndex = 0;
                 }
                 default -> {
+                    if(!isStartTag){
+                        handleError(getErrorSource(), "Invalid content '"+textValue.toString()+"' outside tags",
+                                "Remove the invalid content", ErrorType.FatalError);
+                        break;
+                    }
                     textValue.append(c);
                 }
             }
@@ -118,15 +127,16 @@ public class DTDParser extends Parser implements XMLValidator {
 
                 }
                 case '+', '?', '*', '|', ',' -> {
-                    handleError(getErrorSource(),"Invalid position of operator/cardinal : "+c, "Remove the operator/cardinal",
-                            ErrorType.FatalError);
+                    handleError(getErrorSource(),"Invalid position of operator/cardinal : "+c,
+                            "Remove the operator/cardinal", ErrorType.FatalError);
                 }
                 case '>' -> {
                     if(element != null && parentContentModel == null && !textValue.isEmpty()){
                         element.setType(getType(textValue.toString()));
                     }
                     if(element != null && parentContentModel != null && !textValue.isEmpty()){
-                        handleError(getErrorSource(),"Invalid content : "+textValue, "Remove the content !", ErrorType.FatalError);
+                        handleError(getErrorSource(),"Invalid content : "+textValue,
+                                "Remove the content !", ErrorType.FatalError);
                     }
                     if(element != null && parentContentModel != null){
                         element.setContentModel(parentContentModel);
@@ -158,11 +168,16 @@ public class DTDParser extends Parser implements XMLValidator {
                 }
                 case ',', '|' -> {
                     if(contentModel == null){
-                        handleError(getErrorSource(),"Invalid position of operator : "+c, "Remove the operator",
-                                ErrorType.FatalError);
+                        handleError(getErrorSource(),"Invalid position of operator : "+c,
+                                "Remove the operator", ErrorType.FatalError);
                     }
                     if(contentModel != null && content != null && !textValue.isEmpty()){
-                        content.setName(textValue.toString());
+                        //handle default type of element
+                        if(textValue.toString().startsWith("#")){
+                            content.setType(getType(textValue.substring(1)));
+                        }else{
+                            content.setName(textValue.toString());
+                        }
                         contentModel.setValues(content);
                         content = new Content();
                     }
@@ -172,16 +187,16 @@ public class DTDParser extends Parser implements XMLValidator {
                         contentModel.setOperator(c);
                     }
                     if(contentModel != null && contentModel.getOperator() != 0 && contentModel.getOperator() != c){
-                        //todo handle error
-                        System.out.println("Error : Found different operator");
+                        handleError(getErrorSource(), "Found different operator",
+                                "Change the operator", ErrorType.FatalError);
                     }
 
                     // process of handling choice operator
                 }
                 case '*', '+', '?' -> {
                     if(contentModel == null){
-                        handleError(getErrorSource(),"Invalid position of cardinal : "+c, "Remove the cardinal",
-                                ErrorType.FatalError);
+                        handleError(getErrorSource(),"Invalid position of cardinal : "+c,
+                                "Remove the cardinal", ErrorType.FatalError);
                     }
                     // process of handling of many occurrence operator
                     // process of handling not null occurrence operator
@@ -216,12 +231,17 @@ public class DTDParser extends Parser implements XMLValidator {
                 }
                 case ')' -> {
                     if(contentModel == null){
-                        handleError(getErrorSource(),"Not found open bracket of content model", "Remove this close bracket",
-                                ErrorType.FatalError);
+                        handleError(getErrorSource(),"Not found open bracket of content model",
+                                "Remove this close bracket", ErrorType.FatalError);
                     }
                     // process of handling end elements group
                     if(contentModel != null && content != null && !textValue.isEmpty()){
-                        content.setName(textValue.toString());
+                        //handle content model type
+                        if(textValue.toString().startsWith("#")){
+                            content.setType(getType(textValue.substring(1)));
+                        }else{
+                            content.setName(textValue.toString());
+                        }
                         contentModel.setValues(content);
                         content = null;
                     }
@@ -476,20 +496,21 @@ public class DTDParser extends Parser implements XMLValidator {
         return switch (text){
             case "EMPTY" -> Constants.EMPTY;
             case "CDATA" -> Constants.CDATA;
+            case "PCDATA" -> Constants.PCDATA;
             case "ID" -> Constants.ID;
             case "IDREF" -> Constants.IDREF;
             case "NOTATION" -> Constants.NOTATION;
             case "IDREFS" -> Constants.IDREFS;
             case "NMTOKEN" -> Constants.NMTOKEN;
             case "NMTOKENS" -> Constants.NMTOKENS;
-            default -> throw new HJAXException("Unknown element type: " + text);
+            default -> throw new HJAXException(getErrorSource()+", Unknown element type: " + text);
         };
     }
 
     private boolean checkDefaultType(String defaultValue){
         return switch (defaultValue){
             case "#REQUIRED","#IMPLIED","#FIXED" -> true;
-            default -> throw new HJAXException("Unknown default type: " + defaultValue);
+            default -> throw new HJAXException(getErrorSource()+", Unknown default type: " + defaultValue);
         };
     }
 }

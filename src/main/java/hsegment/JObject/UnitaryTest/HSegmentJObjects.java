@@ -5,13 +5,9 @@
 package hsegment.JObject.UnitaryTest;
 
 import hsegment.JObject.Swing.Text.xml.DTDParser;
-import hsegment.JObject.Swing.Text.xml.handler.ErrorHandler;
-import hsegment.JObject.Swing.Text.xml.process.ParserProcess;
 
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  *
