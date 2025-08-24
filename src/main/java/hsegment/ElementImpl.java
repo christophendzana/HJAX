@@ -7,10 +7,13 @@ package DOM;
 import APIDOMException.AttributeNotFoundException;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 import Interface.*;
-import APIDOMException.InvalideAttributException;
+import APIDOMException.InvalidAttributException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import org.w3c.dom.DOMException;
 import org.w3c.dom.Entity;
 
 /**
@@ -125,7 +128,7 @@ public class ElementImpl extends NodeImpl implements Element {
         if (attributes.getNamedItem(name) == null ) {
             
             if (attr.getValue().isEmpty()) {
-                throw new InvalideAttributException("The value of an attribute"
+                throw new InvalidAttributException("The value of an attribute"
                         + "cannot be empty");
             }else{
                    attributes.setNamedItem(attr);
@@ -163,7 +166,7 @@ public class ElementImpl extends NodeImpl implements Element {
     }
     
     public void removeAllAttribute(){
-        this.attributes.clear();
+        this.attributes.removeAll();
     }
     
     public ElementImpl getElementById(String value){
@@ -197,4 +200,22 @@ public class ElementImpl extends NodeImpl implements Element {
         }        
         return elements;
     }  
+    
+    public ElementImpl cloneNode(boolean deep){
+        
+            ElementImpl clone = new ElementImpl(tagName, holderDocument);
+            
+            clone.tagName = this.nodeName;
+            clone.nodeValue = this.nodeValue;
+            clone.nodeType = this.nodeType;
+            clone.holderDocument = this.holderDocument;            
+            clone.attributes.nodes.putAll(this.attributes.nodes);
+            if (deep && hasChildNodes() ) {
+                for (int i = 0; i < childNodes.getLength(); i++) {                    
+                    NodeImpl child = childNodes.item(i); 
+                    clone.appendChild(child.cloneNode(true));                    
+                }
+            }
+       return clone;        
+    }    
 }
