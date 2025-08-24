@@ -6,6 +6,8 @@ package DOM;
 
 import Interface.Node;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.w3c.dom.DOMException;
@@ -147,7 +149,7 @@ public abstract class NodeImpl implements Node {
  
     @Override
     public boolean hasChildNodes() {
-        return this.getChildNodes() != null;
+        return this.getChildNodes().getLength() > 0;
     }
 
     @Override
@@ -161,25 +163,30 @@ public abstract class NodeImpl implements Node {
             clone.nodeType = this.nodeType;
             clone.holderDocument = this.holderDocument;            
 
-            if (this.hasAttributes()) {                  
-               
-            }
-            
-            if (deep) {
+            if (deep && hasChildNodes() ) {
                 for (int i = 0; i < childNodes.getLength(); i++) {
+                    
                     NodeImpl child = childNodes.item(i);
+
+                    if (child.getNodeType() == NodeImpl.ATTRIBUTE_NODE) {
+                       HashMap<String, NodeImpl> attrList = new HashMap<>();
+                       attrList.put(child.getNodeName(), child);
+                    }
+                    
                     clone.appendChild(child.cloneNode(true));
+                    
+                    return clone;
                 }
             }
             
-        } catch (Exception e) {
+        } catch (IllegalAccessException | IllegalArgumentException | InstantiationException | NoSuchMethodException | InvocationTargetException | DOMException e) {
         }        
         return null;
     }
 
     @Override
     public boolean hasAttributes() {
-        return this.getAttributes() != null;
+        return this.getAttributes().getLength() > 0;
     }
 
     @Override
