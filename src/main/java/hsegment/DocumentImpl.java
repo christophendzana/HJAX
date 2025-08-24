@@ -48,21 +48,28 @@ public class DocumentImpl extends NodeImpl implements Document {
 
     @Override
     public ElementImpl createElement(String tagName, Document holderDocument) throws HJAXException {
-
+        
+        if (!isXMLName(tagName, xml11Version)) {
+            throw new InvalidCharacterException("Invalid name");
+        }
+        
         // Exception à lever si la syntax de tagname n'est pas correcte
         ElementImpl element = new ElementImpl(tagName, this);        
         return element;
     }
 
     @Override
-    public AttributeImpl createAttribute(String name, String value, DocumentImpl holderDocument, boolean specified, ElementImpl holderElement) throws HJAXException {
-        AttributeImpl attr = new AttributeImpl(name, value, holderDocument, specified);
+    public AttributeImpl createAttribute(String name, String value, DocumentImpl holderDocument, boolean specified, ElementImpl holderElement){
+        AttributeImpl attr = new AttributeImpl(name, value, this, specified);
         attr.setHolderElement(holderElement);
         return attr;
     }
 
     @Override
     public Text createTextNodeImpl(String data) {
+        if (!isXMLName(data, xml11Version)) {
+            throw new InvalidCharacterException("Invalid data");
+        }
         TextImpl text = new TextImpl(data, this);
         return text;
     }
