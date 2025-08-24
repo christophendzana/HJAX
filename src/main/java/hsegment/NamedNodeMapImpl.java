@@ -4,9 +4,8 @@
  */
 package DOM;
 
+import APIDOMException.InvalidAttributException;
 import Interface.NamedNodeMap;
-import hsegment.JObject.Swing.Text.ParserException.HJAXException;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -16,7 +15,7 @@ import java.util.Map;
  */
 public class NamedNodeMapImpl implements NamedNodeMap {
 
-    private final Map<String, NodeImpl> nodes;  
+    protected Map<String, NodeImpl> nodes;  
     
     public NamedNodeMapImpl(Map<String, ?extends NodeImpl> initialNodes){ // En plus de NodeImpl il peut contenir ses sous type 
         nodes = new LinkedHashMap<>(initialNodes);
@@ -28,19 +27,18 @@ public class NamedNodeMapImpl implements NamedNodeMap {
     }
 
     @Override
-    public NodeImpl setNamedItem(NodeImpl node) throws HJAXException {
-        
+    public NodeImpl setNamedItem(NodeImpl node)  {
+       
         if (node == null) return null;
         
-        if ( !(node instanceof AttributeImpl) ) {            
-            // Message d'Erreur: Seul les Attributs peuvent être ajoutés.
-        }
-        
+        if ( !(node instanceof AttributeImpl) ) {  
+            throw new InvalidAttributException("Only AttributImpl instance");
+        }        
         return nodes.put(node.getNodeName(), node);
     }
 
     @Override
-    public NodeImpl removeNamedItem(String name) throws HJAXException {
+    public NodeImpl removeNamedItem(String name) {
         return nodes.remove(name);
     }
 
@@ -66,11 +64,11 @@ public class NamedNodeMapImpl implements NamedNodeMap {
         return nodes.size();
     }
     
-    public void clear(){
-        this.clear();
+    public void removeAll(){
+        nodes.clear();
     }    
     
-    public Map<String , NodeImpl> getNodes(){
+    public Map<String , NodeImpl> getMap(){
         return nodes;
     }
      
