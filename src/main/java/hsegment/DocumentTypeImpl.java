@@ -14,13 +14,13 @@ import java.util.Map;
  */
 public class DocumentTypeImpl extends NodeImpl implements DocumentType {
        
-    private final String name;
-    private final NamedNodeMapImpl entities;
-    private final NamedNodeMapImpl notations;
-    private final String publicId;
-    private final String systemId;
-    private final String internalSubset;
-    private  DocumentImpl holderDocucment;
+    protected String name;
+    protected NamedNodeMapImpl entities;
+    protected NamedNodeMapImpl notations;
+    protected String publicId;
+    protected String systemId;
+    protected String internalSubset;
+    protected  DocumentImpl holderDocucment;
 
     public DocumentTypeImpl(String name, String publicId, String systemId, String internalSubset, DocumentImpl  holderDocument) {
         super(name, DOCUMENT_TYPE_NODE, holderDocument);
@@ -68,6 +68,19 @@ public class DocumentTypeImpl extends NodeImpl implements DocumentType {
     @Override
     public String getInternalSubset() {
         return internalSubset;
+    }
+    
+    public short getNodeType(){
+        return NodeImpl.DOCUMENT_TYPE_NODE;
+    }
+    
+    public NodeImpl cloneNode(boolean deep){
+        DocumentTypeImpl newnode = (DocumentTypeImpl)super.cloneNode(deep);
+        return newnode;
+    }
+    
+    public void setInternalSubset(String data){
+        this.internalSubset = data;
     }
 
     @Override

@@ -8,13 +8,10 @@ import APIDOMException.AttributeNotFoundException;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 import Interface.*;
 import APIDOMException.InvalidAttributException;
-import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import org.w3c.dom.DOMException;
-import org.w3c.dom.Entity;
+
 
 /**
  *
@@ -50,7 +47,7 @@ public class ElementImpl extends NodeImpl implements Element {
     public int getChildCount(){
         int count = 0;
         
-        for (int i = 0; i < this.getChildCount(); i++) {
+        for (int i = 0; i < this.getChildNodes().getLength(); i++) {
             count += count;
         }
         return count;
@@ -61,24 +58,69 @@ public class ElementImpl extends NodeImpl implements Element {
         
         if (!hasChildNodes()) {
             return null;
-        }
-        
-        for (int i = 0; i < this.getChildCount(); i++) {
-            if (this.getChildNodes().item(i).getNodeType() == NodeImpl.ELEMENT_NODE) {
-                return (ElementImpl) this.getChildNodes().item(i);
-            }
-        }
-        return null;
+        }        
+        return getChildElement().getFirst();
     }
     
-    //Liste des élément enfant par attribut
+    public ElementImpl getLastElementChild(){        
+        if (!hasChildNodes()) {
+            return null;
+        }        
+        return getChildElement().getLast();
+    }
+    
+     /**
+     * Renvoie le premier enfant Element
+     * @param index
+     * @return 
+     */
+    public ElementImpl getIndexElement( int index ){        
+        for (int i = 0; i < this.getChildCount(); i++) {            
+            NodeImpl child = this.getChildNodes().item(i);            
+            if (child.getNodeType() == NodeImpl.ELEMENT_NODE && i == index ) {
+                return (ElementImpl) child;
+            }
+        }        
+        return null;
+    }
+        
+   
+    //Liste des éléments enfants par attribut
     public List<ElementImpl> getElementByAttribute (String attrname){
         
         List<ElementImpl> list = new ArrayList<>();
         for (int i = 0; i < this.getChildCount(); i++) {
-            if (this.getChildNodes().item(i).getNodeType() == NodeImpl.ELEMENT_NODE 
-                    && ((ElementImpl) this.getChildNodes().item(i)).getAttributeNode(attrname) != null ) {
-                list.add( (ElementImpl) this.getChildNodes().item(i));
+            NodeImpl child = this.getChildNodes().item(i);
+            if (child.getNodeType() == NodeImpl.ELEMENT_NODE 
+                    && ((ElementImpl) child).getAttributeNode(attrname) != null ) {
+                list.add( (ElementImpl) child);
+            }
+        }
+        return list;
+    }
+    
+    //Liste des éléments enfants exempt d'un attribut en particulier
+    public List<ElementImpl> getElementExempterAttribute (String attrname){
+        
+        List<ElementImpl> list = new ArrayList<>();
+        for (int i = 0; i < this.getChildCount(); i++) {
+            NodeImpl child = this.getChildNodes().item(i);
+            if (child.getNodeType() == NodeImpl.ELEMENT_NODE 
+                    && ((ElementImpl) child).getAttributeNode(attrname) == null ) {
+                list.add( (ElementImpl) child);
+            }
+        }
+        return list;
+    }
+    
+    //Liste de tous les enfants Elements    
+    public List<ElementImpl> getChildElement (){
+        
+        List<ElementImpl> list = new ArrayList<>();
+        for (int i = 0; i < this.getChildCount(); i++) {
+            NodeImpl child = this.getChildNodes().item(i);                     
+            if (child.getNodeType() == NodeImpl.ELEMENT_NODE ) {                 
+                list.add( (ElementImpl) child);
             }
         }
         return list;

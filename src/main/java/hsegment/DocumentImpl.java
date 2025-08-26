@@ -20,7 +20,7 @@ public class DocumentImpl extends NodeImpl implements Document {
     private final boolean xml11Version = false;
 
     public DocumentImpl() {
-        super("#document", Node.COMMENT_NODE, null);
+        super("#document", NodeImpl.DOCUMENT_NODE, null);
         this.holderDocument = this; // le document est son propre holderDocument        
     }
 
