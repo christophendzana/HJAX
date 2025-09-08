@@ -4,38 +4,27 @@
  */
 package DOM;
 
-import Interface.Node;
+import Interface.DocumentNode;
 
 /**
  * @author PSM
  */
-public abstract class NodeImpl implements Node {
+public abstract class DocumentNodeImpl implements DocumentNode {
 
     protected String nodeName;
     protected String nodeValue;
     protected short nodeType;
+    protected NodeImpl nodeParent;
     protected NodeListImpl childNodes;
 
-    public NodeImpl(String name, short nodeType) {
+    public DocumentNodeImpl(String name, short nodeType) {
         this.nodeName = name;
         this.nodeType = nodeType;
-    }
-    
-    @Override
-    public String getNodeName() {
-        return nodeName;
+        this.childNodes = new NodeListImpl();
     }
 
-    @Override
-    public short getNodeType() {
-        return nodeType;
-    }
     
-    @Override
-    public String getNodeValue(){
-        return nodeValue;
-    }
-   
+    
 }
 
 

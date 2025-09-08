@@ -6,8 +6,7 @@ package DOM;
 
 import APIDOMException.InvalidAttributException;
 import Interface.NamedNodeMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.HashMap;
 
 /**
  * Cette Classe permet de manipuler les attibuts
@@ -15,41 +14,41 @@ import java.util.Map;
  */
 public class NamedNodeMapImpl implements NamedNodeMap {
 
-    protected Map<String, NodeImpl> nodes;  
+    private HashMap <String, AttributeImpl> attrs = new HashMap<>();    
     
-    public NamedNodeMapImpl(Map<String, ?extends NodeImpl> initialNodes){ // En plus de NodeImpl il peut contenir ses sous type 
-        nodes = new LinkedHashMap<>(initialNodes);
+    public NamedNodeMapImpl(HashMap<String, AttributeImpl> attributes){ 
+        this.attrs = attributes;
     }    
        
     @Override
     public NodeImpl getNamedItem(String name) {
-        return nodes.get(name);
+        return attrs.get(name);
     }
 
     @Override
-    public NodeImpl setNamedItem(NodeImpl node)  {
+    public NodeImpl setNamedItem(AttributeImpl attr)  {
        
-        if (node == null) return null;
+        if (attrs == null) return null;
         
-        if ( !(node instanceof AttributeImpl) ) {  
-            throw new InvalidAttributException("Only AttributImpl instance");
+        if ( !(attr == null) ) {  
+            throw new InvalidAttributException("Attribut cant be null");
         }        
-        return nodes.put(node.getNodeName(), node);
+        return attrs.put(attr.getNodeName(), attr);
     }
 
     @Override
     public NodeImpl removeNamedItem(String name) {
-        return nodes.remove(name);
+        return attrs.remove(name);
     }
 
     @Override
     public NodeImpl item(int index) {
-        if (index < 0 || index >=nodes.size()) return null;
+        if (index < 0 || index >=attrs.size()) return null;
         
         int i=0;        
          
         // Si nodes comporte 200 attr (Processus lent)
-        for(NodeImpl node : nodes.values()){
+        for(NodeImpl node : attrs.values()){
             if (i == index) {
                 return node;
             }
@@ -61,15 +60,15 @@ public class NamedNodeMapImpl implements NamedNodeMap {
 
     @Override
     public int getLength() {
-        return nodes.size();
+        return attrs.size();
     }
     
     public void removeAll(){
-        nodes.clear();
+        attrs.clear();
     }    
     
-    public Map<String , NodeImpl> getMap(){
-        return nodes;
+    public HashMap<String , AttributeImpl> getMap(){
+        return attrs;
     }
      
 }

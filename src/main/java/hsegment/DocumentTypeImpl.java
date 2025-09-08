@@ -6,10 +6,8 @@ package DOM;
 
 import Interface.DocumentType;
 import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
- *
  * @author PSM
  */
 public class DocumentTypeImpl extends NodeImpl implements DocumentType {
@@ -20,15 +18,13 @@ public class DocumentTypeImpl extends NodeImpl implements DocumentType {
     protected String publicId;
     protected String systemId;
     protected String internalSubset;
-    protected  DocumentImpl holderDocucment;
 
-    public DocumentTypeImpl(String name, String publicId, String systemId, String internalSubset, DocumentImpl  holderDocument) {
-        super(name, DOCUMENT_TYPE_NODE, holderDocument);
+    public DocumentTypeImpl(String name, String publicId, String systemId, String internalSubset) {
+        super(name, DOCUMENT_TYPE_NODE);
         this.name = name;
         this.publicId = publicId;
         this.systemId = systemId;
         this.internalSubset = internalSubset;
-        this.holderDocument = holderDocucment;
         
         this.entities = new NamedNodeMapImpl(new LinkedHashMap<>());
         this.notations = new NamedNodeMapImpl(new LinkedHashMap<>());
@@ -72,11 +68,6 @@ public class DocumentTypeImpl extends NodeImpl implements DocumentType {
     
     public short getNodeType(){
         return NodeImpl.DOCUMENT_TYPE_NODE;
-    }
-    
-    public NodeImpl cloneNode(boolean deep){
-        DocumentTypeImpl newnode = (DocumentTypeImpl)super.cloneNode(deep);
-        return newnode;
     }
     
     public void setInternalSubset(String data){

@@ -24,8 +24,8 @@ public class NotationImpl extends NodeImpl implements Notation {
     protected String systemId;
 
     
-    public NotationImpl(String name, short nodeType, DocumentImpl holderDocument){
-        super(name, nodeType, holderDocument);
+    public NotationImpl(String name, short nodeType){
+        super(name, nodeType);
         this.name = name;
     }
     

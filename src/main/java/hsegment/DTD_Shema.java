@@ -4,16 +4,10 @@
  */
 package DOM;
 
-import Interface.EntityReference;
-
 /**
  *
  * @author FIDELE
  */
-public class EntityReferenceImpl extends NodeImpl implements EntityReference{
-    
-    public EntityReferenceImpl(String name, short nodeType) {
-        super(name, nodeType);
-    }
+public class DTD_Shema {
     
 }

@@ -6,8 +6,7 @@ package DOM;
 
 import Interface.Attribute;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
-import DOM.ElementImpl;
-import DOM.NodeImpl;
+
 import Interface.Node;
 import org.w3c.dom.TypeInfo;
 
@@ -25,13 +24,11 @@ public class AttributeImpl extends NodeImpl implements Attribute {
 
     private String name;
     private String value;
-    private NodeImpl parentNode;
     private ElementImpl holderElement;  
     private boolean specidied;
-    protected DocumentImpl holderDocument;
     
-    public AttributeImpl(String name, String value, DocumentImpl holderDocument, boolean specified){
-        super(name, Node.ATTRIBUTE_NODE, holderDocument);
+    public AttributeImpl(String name, String value, boolean specified){
+        super(name, Node.ATTRIBUTE_NODE);
         this.name = name;
         this.value = value;
         this.specidied = specified;
@@ -82,77 +79,11 @@ public class AttributeImpl extends NodeImpl implements Attribute {
     @Override
     public String getNodeValue() throws HJAXException {
         return value;
-    }
-
-    @Override
-    public void setNodeValue(String nodeValue) throws HJAXException {
-        setValue(nodeValue);
-    }
-
-     @Override
-    public String getTextContent() throws HJAXException {
-        return value;
-    }
-
-    @Override
-    public void setTextContent(String textContent) throws HJAXException {
-        this.value = textContent;
-    }
-    
-    public ElementImpl setHolderElement(ElementImpl element){
-        this.holderElement = element;
-        return element;
-    }
-
-    @Override
-    public boolean isSameNode(NodeImpl other) {
-        return other.getNodeName().equalsIgnoreCase(this.getNodeName()) &&                
-                other.getNodeType() == this.getNodeType();
-         
-    }
-    
+    }  
+      
     @Override
     public short getNodeType() {
         return Node.ATTRIBUTE_NODE;
     }
-
-    @Override
-    public NodeImpl getParentNode() {
-        return parentNode;
-    }
-
-    @Override
-    public NodeListImpl getChildNodes() {
-        return null;
-    }
-
-    @Override
-    public NodeImpl getPreviousSibling() {
-        return null;
-    }
-
-    @Override
-    public NodeImpl getNextSibling() {
-        return null;
-    }
-
-    
-
-    @Override
-    public NodeImpl cloneNode(boolean deep) {
-        return new AttributeImpl(name, value, holderDocument, specidied);
-    }
-
-    @Override
-    public boolean hasAttributes() {
-        return false;
-    }
-
-    @Override
-    public short compareDocumentPosition(NodeImpl other) throws HJAXException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
-   
     
 }

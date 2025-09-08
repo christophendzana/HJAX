@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  *
- * @author PSM
+ * @author Banlock
  */
 public class NodeListImpl implements NodeList {
     
