@@ -4,6 +4,7 @@
  */
 package Interface;
 
+import DOM.TextImpl;
 import org.w3c.dom.DOMException;
 
 /** Text hérite de CharData qui hérite lui même de Node
@@ -15,13 +16,14 @@ public interface Text extends CharData {
     
     /**
      * Breaks this node into two nodes at the specified <code>offset</code>,
-     * keeping both in the tree as siblings. After being split, this node
-     * will contain all the content up to the <code>offset</code> point. A
-     * new node of the same type, which contains all the content at and
-     * after the <code>offset</code> point, is returned. If the original
+     * keeping both in the tree as siblings.After being split, this node
+ will contain all the content up to the <code>offset</code> point. A
+ new node of the same type, which contains all the content at and
+ after the <code>offset</code> point, is returned. If the original
      * node had a parent node, the new node is inserted as the next sibling
      * of the original node. When the <code>offset</code> is equal to the
      * length of this node, the new node has no data.
+     * @param text
      * @param offset The 16-bit unit offset at which to split, starting from
      *   <code>0</code>.
      * @return The new node, of the same type as this node.
@@ -30,27 +32,26 @@ public interface Text extends CharData {
      *   than the number of 16-bit units in <code>data</code>.
      *   <br>NO_MODIFICATION_ALLOWED_ERR: Raised if this node is readonly.
      */
-    public Text splitText(int offset)
+    public TextImpl splitText(TextImpl text, int offset)
                           throws DOMException;
 
     /**
      * Returns whether this text node contains <a href='http://www.w3.org/TR/2004/REC-xml-infoset-20040204#infoitem.character'>
-     * element content whitespace</a>, often abusively called "ignorable whitespace". The text node is
-     * determined to contain whitespace in element content during the load
-     * of the document or if validation occurs while using
-     * <code>Document.normalizeDocument()</code>.
+     * element content whitespace</a>, often abusively called "ignorable whitespace".The text node is
+ determined to contain whitespace in element content during the load
+ of the document or if validation occurs while using
+    <code>Document.normalizeDocument()</code>.
+     * @param text
+     * @return 
      * @since 1.5, DOM Level 3
      */
-    public boolean isElementContentWhitespace();
+    public boolean isElementContentWhitespace(TextImpl text);
 
     /**
      * Returns all text of <code>Text</code> nodes logically-adjacent text
-     * nodes to this node, concatenated in document order.
-     * <br>For instance, in the example below <code>wholeText</code> on the
-     * <code>Text</code> node that contains "bar" returns "barfoo", while on
-     * the <code>Text</code> node that contains "foo" it returns "barfoo".
-     *
-     * <pre>
+     * nodes to this node, concatenated in document order.<br>For instance, in the example below <code>wholeText</code> on the
+    <code>Text</code> node that contains "bar" returns "barfoo", while on
+ the <code>Text</code> node that contains "foo" it returns "barfoo".<pre>
      *                     +-----+
      *                     | &lt;p&gt; |
      *                     +-----+
@@ -67,16 +68,17 @@ public interface Text extends CharData {
      * </pre>
      * <em>Figure: barTextNode.wholeText value is "barfoo"</em>
      *
+     * @param text
+     * @return 
      * @since 1.5, DOM Level 3
      */
-    public String getWholeText();
+    public String getWholeText(TextImpl text);
 
     /**
      * Replaces the text of the current node and all logically-adjacent text
-     * nodes with the specified text. All logically-adjacent text nodes are
-     * removed including the current node unless it was the recipient of the
-     * replacement text.
-     * <p>This method returns the node which received the replacement text.
+     * nodes with the specified text.All logically-adjacent text nodes are
+ removed including the current node unless it was the recipient of the
+ replacement text.<p>This method returns the node which received the replacement text.
      * The returned node is:</p>
      * <ul>
      * <li><code>null</code>, when the replacement text is
@@ -120,6 +122,7 @@ public interface Text extends CharData {
      * <code>replaceWholeText</code> on the <code>Text</code> node that
      * contains "bar" fails, because the <code>EntityReference</code> node
      * "ent" contains an <code>Element</code> node which cannot be removed.</p>
+     * @param text
      * @param content The content of the replacing <code>Text</code> node.
      * @return The <code>Text</code> node created with the specified content.
      * @exception DOMException
@@ -127,7 +130,7 @@ public interface Text extends CharData {
      *   nodes being replaced is readonly.
      * @since 1.5, DOM Level 3
      */
-    public Text replaceWholeText(String content)
+    public TextImpl replaceWholeText(TextImpl text, String content)
                                  throws DOMException;
     
 }

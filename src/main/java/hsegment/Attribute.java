@@ -12,7 +12,7 @@ import org.w3c.dom.TypeInfo;
  *
  * @author PSM
  */
-public interface Attribute extends Node {
+public interface Attribute {
     
      /**
      * Renvoie le nom de cet attribut.Si <code>Node.localName</code> est

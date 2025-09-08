@@ -4,6 +4,8 @@
  */
 package Interface;
 
+import DOM.NodeImpl;
+
 /**
  *
  * @author PSM
@@ -18,7 +20,7 @@ public interface NodeList {
 * @return Le nœud à la position <code>index</code> dans
 * <code>NodeList</code>, ou <code>null</code> s'il ne s'agit pas d'un index valide.
      */
-    public Node item(int index);
+    public NodeImpl item(int index);
 
     /**
      * Nombre de nœuds dans la liste. La plage d'indices de nœuds enfants valides est comprise entre 0 et <code>length-1</code> inclus.

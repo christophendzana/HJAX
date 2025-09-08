@@ -4,6 +4,7 @@
  */
 package Interface;
 
+import DOM.TextImpl;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 
 /**
@@ -12,20 +13,20 @@ import hsegment.JObject.Swing.Text.ParserException.HJAXException;
  */
 public interface CharData {
     
-    public String getData() throws HJAXException;
+    public String getData(TextImpl text) throws HJAXException;
 
-    public void setData(String data) throws HJAXException;
+    public void setData(TextImpl text, String data) throws HJAXException;
 
-    public int getLength();
+    public int getLength(TextImpl text);
 
-    public String substringData(int offset, int count) throws HJAXException;
+    public String substringData(TextImpl text, int offset, int count) throws HJAXException;
 
-    public void appendData(String arg) throws HJAXException;
+    public void appendData(TextImpl text, String arg) throws HJAXException;
 
-    public void insertData(int offset, String arg) throws HJAXException;
+    public void insertData(TextImpl text, int offset, String arg) throws HJAXException;
 
-    public void deleteData(int offset, int count) throws HJAXException;
+    public void deleteData(TextImpl text, int offset, int count) throws HJAXException;
 
-    public void replaceData(int offset, int count, String arg) throws HJAXException;
+    public void replaceData(TextImpl text, int offset, int count, String arg) throws HJAXException;
     
 }

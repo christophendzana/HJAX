@@ -3,9 +3,9 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Interface.java to edit this template
  */
 package Interface;
+import DOM.AttributeImpl;
 import DOM.NodeImpl;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
-import org.w3c.dom.Document;
 /**
  *
  * @author PSM
@@ -49,7 +49,7 @@ public interface NamedNodeMap {
      *   of attributes, or a non-Entity node into the DocumentType's map of
      *   Entities.
      */
-    public NodeImpl setNamedItem(NodeImpl arg)
+    public NodeImpl setNamedItem(AttributeImpl arg)
                              throws HJAXException;
 
     /**

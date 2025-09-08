@@ -5,10 +5,9 @@
 package Interface;
 
 import DOM.AttributeImpl;
-import DOM.DocumentImpl;
 import DOM.ElementImpl;
 import DOM.NodeImpl;
-import Interface.*;
+import DOM.TextImpl;
 import hsegment.JObject.Swing.Text.ParserException.HJAXException;
 
     /**
@@ -90,7 +89,7 @@ import hsegment.JObject.Swing.Text.ParserException.HJAXException;
      * @param data The data for the node.
      * @return The new <code>Text</code> object.
      */
-    public Text createTextNodeImpl(String data);
+    public TextImpl createTextNodeImpl(String data);
   
      /**
      * Creates an <code>Attr</code> of the given name.Note that the
@@ -111,7 +110,7 @@ import hsegment.JObject.Swing.Text.ParserException.HJAXException;
      *   name according to the XML version in use specified in the
      *   <code>Document.xmlVersion</code> attribute.
      */
-    public AttributeImpl createAttribute(String name, String value, DocumentImpl holderDocument, 
+    public AttributeImpl createAttribute(String name, String value, 
             boolean specified, ElementImpl holderElement)
                                 throws HJAXException;
 
@@ -119,6 +118,7 @@ import hsegment.JObject.Swing.Text.ParserException.HJAXException;
      * Returns a <code>NodeImplList</code> of all the <code>Elements</code> in
      * document order with a given tag name and are contained in the
      * document.
+     * @param element
      * @param tagname  The name of the tag to match on. The special value "*"
      *   matches all tags. For XML, the <code>tagname</code> parameter is
      *   case-sensitive, otherwise it depends on the case-sensitivity of the
@@ -126,7 +126,7 @@ import hsegment.JObject.Swing.Text.ParserException.HJAXException;
      * @return A new <code>NodeImplList</code> object containing all the matched
      *   <code>Elements</code>.
      */
-    public NodeImpl getElementsByTagName(String tagname);
+    public NodeImpl getElementsByTagName(NodeImpl element, String tagname);
 
     
     /**
@@ -139,22 +139,23 @@ import hsegment.JObject.Swing.Text.ParserException.HJAXException;
      * @param newParent                
      * @return 
      */
-      public NodeImpl removeNode(NodeImpl refNode, NodeImpl newParent );
+      public NodeImpl removeNodeImpl(NodeImpl refNode, NodeImpl newParent );
    
     /**
      * Returns the <code>Element</code> that has an ID attribute with the
-     * given value. If no such element exists, this returns <code>null</code>
-     * . If more than one element has an ID attribute with that value, what
-     * is returned is undefined.
-     * <br> The DOM implementation is expected to use the attribute
+     * given value.If no such element exists, this returns <code>null</code>
+ . If more than one element has an ID attribute with that value, what
+ is returned is undefined.
+ <br> The DOM implementation is expected to use the attribute
      * <code>Attr.isId</code> to determine if an attribute is of type ID.
      * <p ><b>Note:</b> Attributes with the name "ID" or "id" are not of type
      * ID unless so defined.
+     * @param element
      * @param elementId The unique <code>id</code> value for an element.
      * @return The matching element or <code>null</code> if there is none.
      * @since 1.4, DOM Level 2
      */
-    public ElementImpl getElementById(String elementId);
+    public ElementImpl getElementById(ElementImpl element, String elementId);
 
   
     
