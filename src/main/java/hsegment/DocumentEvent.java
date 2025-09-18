@@ -11,20 +11,19 @@ import java.util.EventObject;
  */
 public class DocumentEvent extends EventObject {
     
-    private transient DocumentImpl doc;
+    private transient Document doc;
     private int type;
     
-    public DocumentEvent(NodeImpl source, DocumentImpl doc) {
+    public DocumentEvent(NodeImpl source, Document doc) {
         super(source);
-        this.doc = doc;
-        type = source.getNodeType();
+        this.doc = doc;        
     }        
     
     public int getNodeType(){      
         return type;
     }
     
-    public DocumentImpl getDocument(){
+    public Document getDocument(){
         return doc;
     }
 }

@@ -4,10 +4,20 @@
  */
 package DOM;
 
+import java.util.ArrayList;
+
 /**
  *
  * @author FIDELE
  */
 public class ParentNode {
     
+        private ArrayList<NodeImpl> ElementHasChilds = new ArrayList<>();
+
+        public ParentNode(){
+            
+        }
+    
+        
+        
 }

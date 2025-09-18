@@ -4,27 +4,26 @@
  */
 package DOM;
 
+
 /**
- * @author PSM
+ *
+ * @author FIDELE
  */
-public abstract class NodeImpl {
-
-    protected String nodeName;
-    protected String nodeValue;
-       
-
-    public NodeImpl(String name) {
-        this.nodeName = name;        
-    }    
+public class EntityNode extends NodeImpl {
     
-    public String getNodeName() {
-        return nodeName;
+     /** Entity name. */
+    protected String name;
+    protected String nodeValue;
+
+    public EntityNode(String name) {
+        super(name);
+    }
+         
+    public String getName (){
+        return name;
     }
     
-    public String getNodeValue(){
+    public String getValue(){
         return nodeValue;
     }
-   
 }
-
-

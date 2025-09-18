@@ -6,15 +6,8 @@ package DOM;
 
 /**
  *
- * @author PSM
+ * @author FIDELE
  */
-public abstract class CharData extends NodeImpl {
-
-    public String data;
-    
-    public CharData(String data) {
-        super("#Text");
-        this.data = data !=null ? data:"";
-    }    
+public class DictionnaryNodes {
     
 }

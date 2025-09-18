@@ -972,19 +972,14 @@ public class XMLChar {
         return true;
     } // isValidName(String):boolean
 
-
-
-
-
     // encodings
 
     /**
-     * Returns true if the encoding name is a valid IANA encoding.
-     * This method does not verify that there is a decoder available
-     * for this encoding, only that the characters are valid for an
-     * IANA encoding name.
-     *
+     * Returns true if the encoding name is a valid IANA encoding.This method does not verify
+     * that there is a decoder available for this encoding, only that the 
+     * characters are valid for an IANA encoding name.     
      * @param ianaEncoding The IANA encoding name.
+     * @return 
      */
     public static boolean isValidIANAEncoding(String ianaEncoding) {
         if (ianaEncoding != null) {
