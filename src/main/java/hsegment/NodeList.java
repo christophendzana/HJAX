@@ -5,6 +5,8 @@
 package DOM;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 
 /**
  *
@@ -52,6 +54,14 @@ public class NodeList{
     
     public void removeAll(){
         nodes.clear();
+    }
+    
+    public ArrayList<NodeImpl> addAll(ArrayList <NodeImpl> list ){
+        
+        for (int i = 0; i < list.size(); i++) {
+            nodes.add(list.get(i));
+        }
+        return list;        
     }
     
     public ArrayList getNodes(){
