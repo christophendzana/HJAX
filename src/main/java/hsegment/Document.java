@@ -114,12 +114,54 @@ public class Document {
         return text;
     }
     
-    public ArrayList<NodeImpl> getElementByAttr(String attrName){
-        return nodeByAttribut.getNodesByType(attrName);
+    public ArrayList<NodeImpl> getNodesByAttr(String attrName){
+        return nodeByAttribut.getNodesByAttribut(attrName);
     }
     
-    public ArrayList<NodeImpl> getElementByType(String type){
+    public ArrayList<NodeImpl> getNodesByType(String type){
         return nodeByType.getNodesByType(type);
+    }
+    
+     /**
+     * Retourne le noeud dont le nom est <code>tagName</code> dans la liste 
+     * des nouds ayant l'attribut <code>attrName</code> et la valeur
+     * <code>value</code>
+     * @param attrName
+     * @param tagName
+     * @param value
+     * @return 
+     */
+    public NodeImpl getNodeByAttrAndNameAndValue(String attrName, String tagName, String value){
+         ArrayList<NodeImpl> list = nodeByAttribut.getNodesByAttribut(attrName);
+        for (int i = 0; i < list.size(); i++) {
+            NodeImpl child = list.get(i);
+            if (child.getNodeName().equalsIgnoreCase(tagName)) {
+                String val = getAttribute( (ElementNode) child, attrName).getNodeValue();
+                if (val.equalsIgnoreCase(value)) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Retourne si oui ou non au moins un noeud a cet attribut
+     * @param attrName
+     * @return 
+     */
+    public boolean existNodeOfAttribut(String attrName){
+        return nodeByAttribut.existNodeOfAttribut(attrName);
+    }
+    
+    /**
+     * Retourne le noeud dont le nom est passé en paramètre dans un type donné
+     * @param type
+     * @param tagName le nom du noeud
+     * @return 
+     */
+    public NodeImpl getNodeByTypeAndName(String type, String tagName){
+        return nodeByType.getNodeByTypeAndName(type, tagName);
     }
     
     public NodeImpl getElementByName(String tagname){
@@ -144,8 +186,8 @@ public class Document {
             }
         }
         return null;
-    }
-
+    }    
+    
     public NodeImpl removeNodeImpl(NodeImpl refNode, NodeImpl newParent) {
 
         if (refNode instanceof ElementNode) {
@@ -580,7 +622,7 @@ public class Document {
   
 
     /**
-     * Permetter la position de deux noeuds enfants
+     * Permutter la position de deux noeuds enfants
      * @param parent
      * @param node1
      * @param node2 
@@ -621,8 +663,7 @@ public class Document {
             children.remove(index);
             children.add(index + 1, child);
         }
-    }
-  
+    }  
     
     public boolean hasChildNodes(NodeImpl refNode) {
         return ((ElementNode) refNode).childNodes.getLength() > 0;
@@ -712,15 +753,31 @@ public class Document {
         getAttributes(element).removeNamedItem(name);
     }
 
+    /**
+     * Ajoute un attribut à un Element donné
+     * @param element
+     * @param newAttribute
+     * @return 
+     */
     public AttributeNode addAttributeNode(ElementNode element, AttributeNode newAttribute) {
         getAttributes(element).addAttribut(newAttribute);
         return newAttribute;
     }
 
+    /**
+     * Retourne le nombre d'enfant d'un Element donné
+     * @param element
+     * @return 
+     */
     public int getChildCount(ElementNode element) {
         return getChildNodes(element).getLength();
     }
 
+    /**
+     * Retourne le premier Enfant de type ElementNode d'un Element donné
+     * @param element
+     * @return 
+     */
     public ElementNode getFirstElementChild(ElementNode element) {
         if (getChildCount(element) == 0) {
             return null;
@@ -735,6 +792,11 @@ public class Document {
         return list.getFirst();
     }
 
+    /**
+     * Retourne le dernier Enfant de type ElementNode d'un Element donné
+     * @param element
+     * @return 
+     */
     public ElementNode getLastElementChild(ElementNode element) {
         if (getChildCount(element) == 0) {
             return null;
@@ -749,6 +811,12 @@ public class Document {
         return list.getLast();
     }
 
+    /**
+     * Retourne l'index d'un Element enfant
+     * @param element
+     * @param childNode
+     * @return 
+     */
     public int getIndexChild(ElementNode element, ElementNode childNode) {
         if (getChildCount(element) == 0) {
             return -1;
@@ -756,6 +824,11 @@ public class Document {
         return getChildNodes(element).indexNode(childNode.getNodeName());
     }
 
+    /**
+     * Retourne si oui ou non un Element à au moins un attribut
+     * @param element
+     * @return 
+     */
     public boolean hasAttributes(ElementNode element) {
         return getAttributes(element).getLength() > 0;
     }
@@ -779,6 +852,12 @@ public class Document {
         return list;
     }
 
+    /**
+     * Retourne l'Attribut correspond a <code>name</name>
+     * @param element
+     * @param name
+     * @return 
+     */
     public AttributeNode getAttributeNode(ElementNode element, String name) {
         if (!hasAttributes(element)) {
             return null;
@@ -786,10 +865,13 @@ public class Document {
         return (AttributeNode) getAttributes(element).getNamedItem(name);
     }
 
+    /**
+     * Efface tous les attributs d'un ElementNode
+     * @param element 
+     */
     public void removeAllAttribute(ElementNode element) {
         getAttributes(element).removeAll();
     }
-    
     
 
     //// Text Node ////////////////////////////////////////////////////

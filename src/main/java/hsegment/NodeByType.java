@@ -22,7 +22,11 @@ public class NodeByType {
     String[] types = {"AttributeNode", "CharData", "CommentNode", "ElementNode", "DocumentTypeNode", 
                        "EntityNode", "NodeImpl", "NotationNode", "ProcessusInstructionNode", "TextNode"}  ;
     
-    // Ajoute un nœud dans la bonne catégorie
+    /**
+     * Ajoute un noeud dans la catégorie correspondante ou ajoute la cotégorie
+     * si elle est inexistante puis l'ajoute.
+     * @param node 
+     */
     public void addNode(NodeImpl node) {
         String type = node.getClass().getSimpleName(); 
         
@@ -33,7 +37,12 @@ public class NodeByType {
         nodesByType.computeIfAbsent(type, k -> new ArrayList<>()).add(node);
     }
 
-    // Récupère tous les nœuds d’un type donné
+    /**
+     * Renvoie une liste de noeud correspondante au type donné passé
+     * en paramètre et null si il n'y a aucune occurrence
+     * @param type
+     * @return 
+     */
     public ArrayList<NodeImpl> getNodesByType(String type) {
         
         for (String currentType : types) {
@@ -42,6 +51,32 @@ public class NodeByType {
             }
         }
         return null;
+    }
+    
+    /**
+     * Retourne le noeud dont le nom est passé en paramètre dans un type donné
+     * @param type
+     * @param tagName le nom du noeud
+     * @return 
+     */
+    public NodeImpl getNodeByTypeAndName(String type, String tagName){
+        ArrayList<NodeImpl> list = getNodesByType(type);
+        for (int i = 0; i < list.size(); i++) {
+            NodeImpl child = list.get(i);
+            if (child.getNodeName().equalsIgnoreCase(tagName)) {
+                return child;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Retourne si oui ou non au moins un noeud de ce type existe
+     * @param type
+     * @return 
+     */
+    public boolean existNodeOfType(String type){
+        return !getNodesByType(type).isEmpty();
     }
 
     // Affiche un résumé des nœuds par type
