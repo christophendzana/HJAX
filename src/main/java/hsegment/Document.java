@@ -135,7 +135,7 @@ public class Document {
         return null;
     }
 
-    public ElementNode getElementById(ElementNode element, String elementId) {
+    public ElementNode getChildById(ElementNode element, String elementId) {
 
         for (int i = 0; i < getChildNodes(element).getLength(); i++) {
             if (getChildNodes(element).item(i) instanceof ElementNode
@@ -288,19 +288,19 @@ public class Document {
                 NodeList ChildsNodeParent = getChildNodes(parent);
                 
                 if (hasAttributes( (ElementNode) node) && hasChildNodes(node)) {                                        
-                    if (InThisSpecificList(ChildsNodeParent, true, true, node)) {
+                    if (inThisSpecificList(ChildsNodeParent, true, true, node)) {
                         return parent;
                     }                                   
                 }else if(!hasAttributes( (ElementNode) node) && hasChildNodes(node)){
-                    if (InThisSpecificList(ChildsNodeParent, false, true, node)) {
+                    if (inThisSpecificList(ChildsNodeParent, false, true, node)) {
                         return parent;
                     } 
                 }else if(hasAttributes( (ElementNode) node) && !hasChildNodes(node)){
-                    if (InThisSpecificList(ChildsNodeParent, true, false, node)) {
+                    if (inThisSpecificList(ChildsNodeParent, true, false, node)) {
                         return parent;
                     } 
                 }else{
-                    if (InThisSpecificList(ChildsNodeParent, false, false, node)) {
+                    if (inThisSpecificList(ChildsNodeParent, false, false, node)) {
                         return parent;
                     } 
                 }
@@ -318,7 +318,7 @@ public class Document {
      * @param node le noeud element pour qui on fait la vérification
      * @return 
      */
-    public boolean InThisSpecificList(NodeList list, boolean hasAttr, boolean hasChilds, NodeImpl node){
+    public boolean inThisSpecificList(NodeList list, boolean hasAttr, boolean hasChilds, NodeImpl node){
         
         NodeList listBrowse = new NodeList() ;            
                     for (int j = 0; j < list.getLength(); j++) {
@@ -350,6 +350,38 @@ public class Document {
         return listBrowse.contain(node);        
     }
     
+    public int getDepth(NodeImpl node){
+        return node.depth;        
+    }
+
+    public void affectDepth(NodeImpl nodeTarget){
+         int depth = 0;
+        NodeImpl current = nodeTarget; 
+        
+        if (nodeTarget == rootElement) {
+            rootElement.depth = 0;
+        }
+        
+        while(true){
+            NodeImpl parent = getParentNode(current);
+            if (parent == null) { //Noeud racine
+                break;  
+            }
+            depth++;
+            current = parent;
+        }
+        nodeTarget.depth = depth;
+    }
+    
+    public NodeImpl whoIsSuperior(NodeImpl node1, NodeImpl node2){        
+        if (getDepth(node1) - getDepth(node2) > 0 ) {
+            return node1;
+        }else if(getDepth(node1) - getDepth(node2) < 0) {
+            return node2;
+        }
+        return null;
+    }
+       
     public NodeList getChildNodes(NodeImpl refNode) {
         if (refNode instanceof ElementNode) {
             return ((ElementNode) refNode).childNodes;
@@ -398,7 +430,6 @@ public class Document {
             // Fatal Error: Message d'erreur refChild n'existe pas dans la liste
         }
         getChildNodes(refNode).addNodeInIndex(index, newChild);
-        appendChild(refNode, newChild);
         return newChild;
     }
 
@@ -412,6 +443,7 @@ public class Document {
         return newChild;
     }
 
+    
     public NodeImpl removeChild(NodeImpl refNode, NodeImpl oldChild) throws HJAXException {
         getChildNodes(refNode).removeNode(oldChild.getNodeName());
         return oldChild;
@@ -429,7 +461,7 @@ public class Document {
             }
 
             if (newChild instanceof DocumentTypeNode) {
-                throw new java.lang.IllegalArgumentException("Un Document ne peut avoir qu’un seul DocumentType.");
+                throw new APIDOMException.IllegalArgumentException("Un Document ne peut avoir qu’un seul DocumentType.");
             }
 
             // newchild ne peut avoir deux parents
@@ -439,14 +471,159 @@ public class Document {
 
             getChildNodes(refNode).addChild(newChild);
 
-            ElementHasChilds.add(refNode);
+            if (!ElementHasChilds.contains(refNode)) {
+                ElementHasChilds.add(refNode);
+            }            
 
             return newChild;
 
         }
         return null;
+    }   
+    
+    /**
+     * Déplace un noeud enfant vers un autre parent
+     * @param fromParent Noeud source
+     * @param toParent Noeud parent cible
+     * @param child Noeud enfant
+     */
+    public void moveChild(NodeImpl fromParent, NodeImpl toParent, NodeImpl child) {
+            if (getChildNodes(fromParent).contain(child)) {
+                getChildNodes(fromParent).removeNode(child.nodeName);
+                getChildNodes(toParent).addChild(child);
+            }
+            
+            if (!ElementHasChilds.contains(toParent)) {
+                ElementHasChilds.add(toParent);
+            }
+            
+            if (!hasChildNodes(fromParent)) {
+                ElementHasChilds.remove(fromParent);
+            }        
     }
 
+    /**
+     * Encapsule le noeud cible dans un nouveau noued
+     * @param target Noeud cible
+     * @param wrapperName Nom du noeud à crée qui portera le noued cible
+     * @return 
+     */
+    public NodeImpl wrap(NodeImpl target, String wrapperName) {
+        ElementNode wrapper = new ElementNode(wrapperName);
+        getChildNodes(wrapper).addChild(target);
+        
+        if (target != rootElement) {
+             appendChild(getParentNode(target), wrapper);
+        }        
+        return wrapper;
+    }
+
+    /**
+     * Supprime un noeud et rajoute la liste de tout ses enfant à son parent
+     * @param parent
+     * @param child 
+     */
+    public void unwrap(NodeImpl parent, NodeImpl child) {
+        removeChild(parent, child);
+        getChildNodes(parent).addAll(getChildNodes(child).getNodes());
+    }
+
+    /**
+     * Duplique un enfant
+     * @param parent
+     * @param child 
+     */
+    public void duplicate(NodeImpl parent, NodeImpl child) {
+        NodeImpl clone = cloneNode(child, true);
+        appendChild(parent, clone);
+    }
+
+    /**
+     * Remplace tous les noeuds enfants par une nouvelle collection de noeud
+     * @param parent
+     * @param newChildren 
+     */
+    public void replaceChildren(NodeImpl parent, ArrayList<NodeImpl> newChildren) {
+        getChildNodes(parent).removeAll();
+        getChildNodes(parent).addAll(newChildren);
+        if (!ElementHasChilds.contains(parent) && !newChildren.isEmpty()) {
+            ElementHasChilds.add(parent);
+        }
+    }
+
+    /**
+     * Ajoute une nouvelle collection d'enfant à partir de la liste des 
+     * enfants d'un autre parent
+     * @param targetParent
+     * @param sourceParent 
+     */
+    public void mergeChildren(NodeImpl targetParent, NodeImpl sourceParent) {
+        getChildNodes(targetParent).addAll(getChildNodes(sourceParent).getNodes());
+        if (!ElementHasChilds.contains(targetParent)) {
+            ElementHasChilds.add(targetParent);
+        }
+    }
+    
+    /**
+     * Ajoute un enfant spécifique à partir de la liste des 
+     * enfants d'un autre parent
+     * @param targetParent
+     * @param sourceParent 
+     * @param tagname nom de l'élement enfant à ajouter
+     */
+    public void mergeSpecificChild(NodeImpl targetParent, NodeImpl sourceParent, String tagname) {        
+        getChildNodes(targetParent).addChild(getChildInNode((ElementNode) sourceParent, tagname));
+        if (!ElementHasChilds.contains(targetParent)) {
+            ElementHasChilds.add(targetParent);
+        }
+    }
+  
+
+    /**
+     * Permetter la position de deux noeuds enfants
+     * @param parent
+     * @param node1
+     * @param node2 
+     */
+    public void swapNodes(NodeImpl parent, NodeImpl node1, NodeImpl node2) {
+        ArrayList<NodeImpl> children = getChildNodes(parent).getNodes();
+        int i1 = children.indexOf(node1);
+        int i2 = children.indexOf(node2);
+        if (i1 != -1 && i2 != -1) {
+            children.set(i1, node2);
+            children.set(i2, node1);
+        }
+    }
+
+    /**
+     * Déplacer un enfant vers le haut
+     * @param parent
+     * @param child 
+     */
+    public void moveUp(NodeImpl parent, NodeImpl child) {
+        ArrayList<NodeImpl> children = getChildNodes(parent).getNodes();
+        int index = children.indexOf(child);
+        if (index > 0) {
+            children.remove(index);
+            children.add(index - 1, child);
+        }
+    }
+
+    /**
+     * Déplacer un enfant vers le bas
+     * @param parent
+     * @param child 
+     */
+    public void moveDown(NodeImpl parent, NodeImpl child) {
+        List<NodeImpl> children = getChildNodes(parent).getNodes();
+        int index = children.indexOf(child);
+        if (index != -1 && index < children.size() - 1) {
+            children.remove(index);
+            children.add(index + 1, child);
+        }
+    }
+  
+    
     public boolean hasChildNodes(NodeImpl refNode) {
         return ((ElementNode) refNode).childNodes.getLength() > 0;
     }
@@ -582,22 +759,16 @@ public class Document {
     public boolean hasAttributes(ElementNode element) {
         return getAttributes(element).getLength() > 0;
     }
-
-    public void setIdAttribute(ElementNode element, String name, boolean isId) throws HJAXException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
-    }
-
+    
     /**
-     * Returns a child element by matching the attribute passed en as a
-     * parameter
-     *
+     * Returns a child element by matching the attribute passed en as a parameter
      * @param element
      * @param attrname
      * @return
      */
-    public List<ElementNode> getElementExempterAttribute(ElementNode element, String attrname) {
+    public ArrayList<ElementNode> getChildByAttribute(ElementNode element, String attrname) {
 
-        List<ElementNode> list = new ArrayList<>();
+        ArrayList<ElementNode> list = new ArrayList<>();
         for (int i = 0; i < getChildCount(element); i++) {
             NodeImpl child = getChildNodes(element).item(i);
             if (child instanceof ElementNode
@@ -618,6 +789,8 @@ public class Document {
     public void removeAllAttribute(ElementNode element) {
         getAttributes(element).removeAll();
     }
+    
+    
 
     //// Text Node ////////////////////////////////////////////////////
     

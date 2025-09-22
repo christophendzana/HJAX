@@ -11,6 +11,7 @@ public abstract class NodeImpl {
 
     protected String nodeName;
     protected String nodeValue;
+    protected int depth;
        
 
     public NodeImpl(String name) {
