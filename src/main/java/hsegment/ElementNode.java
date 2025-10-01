@@ -14,7 +14,7 @@ import java.util.LinkedHashMap;
 public class ElementNode extends NodeImpl {
 
     protected String tagName;    
-    protected AttributesListNode attributes;    
+    protected AttributesList attributes;    
     protected NodeList childNodes;
     
     
@@ -22,7 +22,7 @@ public class ElementNode extends NodeImpl {
     public ElementNode(String tagName) {
         super(tagName);
         this.tagName = tagName;
-        this.attributes = new AttributesListNode(new LinkedHashMap<>());
+        this.attributes = new AttributesList(new LinkedHashMap<>());
     }       
    
     @Override

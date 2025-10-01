@@ -11,9 +11,6 @@ import java.util.ArrayList;
 import java.util.function.Consumer;
 import java.util.List;
 import org.w3c.dom.DOMException;
-import hsegment.JObject.util.Dictionnary;
-import java.util.HashMap;
-
 
 /**
  *
@@ -25,21 +22,30 @@ public class Document {
     private ElementNode rootElement;
     private final boolean xml11Version = false;
     private ArrayList<DocumentListener> listenerList = new ArrayList<>();
-    private Dictionnary NodesRegistry = new Dictionnary(27, 5, false, false);    
-    private ArrayList<NodeImpl> ElementHasChilds = new ArrayList<>();
-    private NodeByType nodeByType = new NodeByType();
-    private NodeByAttribut nodeByAttribut = new NodeByAttribut(); 
+
+    //Stockage des noeuds
+    private ArrayList<NodeImpl> tree = new ArrayList<>();
+    private ArrayList<NodeImpl> nodesRegister = new ArrayList<>();
+    private NameRegister nameRegister = new NameRegister();
+    private TypeRegister typeRegister = new TypeRegister();
+    private AttrRegister attrRegister = new AttrRegister();
+    
     public Document() {
     }
-    
+
+    /// @param doc
     public void addDocumentListeners(DocumentListener doc) {
-        listenerList.add(doc); 
+        listenerList.add(doc);
     }
 
-    public ElementNode getDocumentElement(){
+    ///
+    /// @return
+    public ElementNode getDocumentElement() {
         return rootElement;
     }
 
+    ///
+    /// @param element
     public void setDocumentElement(ElementNode element) {
         if (getDocumentElement() != null) {
             throw new DomException((short) 1, "Document already has a root element");
@@ -47,6 +53,8 @@ public class Document {
         this.rootElement = element;
     }
 
+    ///
+    /// @return
     public DocumentTypeNode getDoctype() {
         return doctype;
     }
@@ -64,31 +72,33 @@ public class Document {
         ElementNode element = new ElementNode(tagName);
 
         DocumentEvent evt = new DocumentEvent(element, this);
-        
+
         listenerList.forEach(new Consumer<DocumentListener>() {
 
             public void accept(DocumentListener t) {
                 t.nodeAdded(evt);
             }
         });
-        
-        NodesRegistry.add(element);
-        nodeByType.addNode(element);
-        
+
+        nodesRegister.add(element);
+        nameRegister.addNode(tagName, nodesRegister.size() - 1);
+        typeRegister.addNode("ElementNode", nodesRegister.size() - 1);
+
         return element;
     }
 
     public AttributeNode createAttribute(String name, String value, boolean specified, ElementNode holderElement) {
         AttributeNode attr = new AttributeNode(name, value, specified);
         holderElement.attributes.addAttribut(attr);
-        nodeByType.addNode(attr);
-        nodeByAttribut.addNode(holderElement, name);
-        
+
+        typeRegister.addNode("AttributNode", nodesRegister.size() - 1);
+        attrRegister.addNode(name, nodesRegister.size() - 1);
+
         DocumentEvent evt = new DocumentEvent(attr, this);
         listenerList.forEach(new Consumer<DocumentListener>() {
 
             public void accept(DocumentListener t) {
-                
+
                 t.nodeAdded(evt);
             }
         });
@@ -101,8 +111,8 @@ public class Document {
             throw new InvalidCharacterException("Invalid data");
         }
         TextNode text = new TextNode(data);
-        nodeByType.addNode(text);
-        
+        typeRegister.addNode("TextNode", nodesRegister.size() - 1);
+
         DocumentEvent evt = new DocumentEvent(text, this);
         listenerList.forEach(new Consumer<DocumentListener>() {
 
@@ -113,72 +123,90 @@ public class Document {
 
         return text;
     }
-    
-    public ArrayList<NodeImpl> getNodesByAttr(String attrName){
-        return nodeByAttribut.getNodesByAttribut(attrName);
+
+    public ArrayList<Integer> getNodesByAttribut(String attributeName) {
+        return attrRegister.getNodes(attributeName);
     }
-    
-    public ArrayList<NodeImpl> getNodesByType(String type){
-        return nodeByType.getNodesByType(type);
+
+    public ArrayList<Integer> getNodesByType(String type) {
+        return typeRegister.getNodes(type);
     }
-    
-     /**
-     * Retourne le noeud dont le nom est <code>tagName</code> dans la liste 
-     * des nouds ayant l'attribut <code>attrName</code> et la valeur
-     * <code>value</code>
-     * @param attrName
-     * @param tagName
-     * @param value
-     * @return 
-     */
-    public NodeImpl getNodeByAttrAndNameAndValue(String attrName, String tagName, String value){
-         ArrayList<NodeImpl> list = nodeByAttribut.getNodesByAttribut(attrName);
+
+    public ArrayList<NodeImpl> matching(ArrayList<Integer> list) {
+        ArrayList<NodeImpl> result = new ArrayList<>();
+
         for (int i = 0; i < list.size(); i++) {
-            NodeImpl child = list.get(i);
-            if (child.getNodeName().equalsIgnoreCase(tagName)) {
-                String val = getAttribute( (ElementNode) child, attrName).getNodeValue();
-                if (val.equalsIgnoreCase(value)) {
-                    return child;
+            int index = list.get(i);
+
+            for (int j = 0; j < nodesRegister.size(); j++) {
+                if (index == j) {
+                    result.add(nodesRegister.get(j));
                 }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Retourne si oui ou non au moins un noeud a cet attribut
+     *
+     * @param attrName
+     * @return
+     */
+    public boolean existNodeOfAttribut(String attrName) {
+        return !attrRegister.getNodes(attrName).isEmpty();
+    }
+
+    /**
+     * Retourne le noeud dont le nom est passé en paramètre dans un type donné
+     *
+     * @param type
+     * @param tagName le nom du noeud
+     * @return
+     */
+    public NodeImpl getNodeByType(String type, String tagName) {
+        return matching(typeRegister.getNodes(type)).getFirst();
+    }
+
+    public NodeImpl getElement(String name) {
+        char initial = Character.toUpperCase(name.charAt(0));
+
+        ArrayList liste = nameRegister.getNodes(initial);
+
+        return (NodeImpl) matching(liste).getFirst();
+    }
+
+    /**
+     * Retourne l'element dont le nom est <code>@tagName</code> ayant l'attribut
+     * <code>@attrName</code> et la valeur est <code>value</code>
+     *
+     * @param attrName nom de l'attribut
+     * @param value valeur de l'attribut
+     * @return
+     */
+    public ElementNode getElement(String attrName, String value) {
+
+        ArrayList<NodeImpl> list = matching(attrRegister.getNodes(attrName));
+
+        for (int i = 0; i < list.size(); i++) {
+            ElementNode element = (ElementNode) list.get(i);
+
+            if (value.equalsIgnoreCase(element.attributes.getNamedItem(attrName).getValue())) {
+                return element;
             }
         }
         return null;
     }
-    
-    /**
-     * Retourne si oui ou non au moins un noeud a cet attribut
-     * @param attrName
-     * @return 
-     */
-    public boolean existNodeOfAttribut(String attrName){
-        return nodeByAttribut.existNodeOfAttribut(attrName);
-    }
-    
-    /**
-     * Retourne le noeud dont le nom est passé en paramètre dans un type donné
-     * @param type
-     * @param tagName le nom du noeud
-     * @return 
-     */
-    public NodeImpl getNodeByTypeAndName(String type, String tagName){
-        return nodeByType.getNodeByTypeAndName(type, tagName);
-    }
-    
-    public NodeImpl getElementByName(String tagname){
-       NodeImpl node = (NodeImpl) NodesRegistry.get(tagname);
-       return node;
-    }
 
-    public NodeImpl getChildInNode(ElementNode node, String tagname) {
-        NodeList childNode = getChildNodes(node);
-        if (childNode.indexNode(tagname) != -1) {
-            return childNode.item(childNode.indexNode(tagname));
+    public NodeImpl getChildInNode(ElementNode node, String childname) {
+        NodeList childsNodes = getChildNodes(node);
+        if (childsNodes.indexNode(childname) != -1) {
+            return childsNodes.item(childsNodes.indexNode(childname));
         }
         return null;
     }
 
     public ElementNode getChildById(ElementNode element, String elementId) {
-
         for (int i = 0; i < getChildNodes(element).getLength(); i++) {
             if (getChildNodes(element).item(i) instanceof ElementNode
                     && getAttribute((ElementNode) (getChildNodes(element).item(i)), "id").equals(elementId)) {
@@ -186,9 +214,9 @@ public class Document {
             }
         }
         return null;
-    }    
-    
-    public NodeImpl removeNodeImpl(NodeImpl refNode, NodeImpl newParent) {
+    }
+
+    public NodeImpl removeNode(NodeImpl refNode, NodeImpl newParent) {
 
         if (refNode instanceof ElementNode) {
 
@@ -227,7 +255,7 @@ public class Document {
         return refNode;
     }
 
-    public NodeImpl removeNodeImpl(NodeImpl refNode) {
+    public NodeImpl removeNode(NodeImpl refNode) {
         DocumentEvent evt = new DocumentEvent(refNode, this);
         listenerList.forEach(new Consumer<DocumentListener>() {
 
@@ -235,18 +263,18 @@ public class Document {
                 t.nodeAdded(evt);
             }
         });
-        return removeNodeImpl(refNode, null);
+        return removeNode(refNode, null);
     }
 
-    public NodeImpl renameNodeImpl(NodeImpl node, String namespaceURI, String qualifiedName) throws HJAXException {
+    public NodeImpl renameNode(NodeImpl node, String namespaceURI, String qualifiedName) throws HJAXException {
         throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
-    public CommentNode createCommentImpl(String data) {
+    public CommentNode createComment(String data) {
 
         CommentNode comment = new CommentNode(data);
-        nodeByType.addNode(comment);
-        
+        typeRegister.addNode("CommentNode", nodesRegister.size() - 1);
+
         DocumentEvent evt = new DocumentEvent(comment, this);
         listenerList.forEach(new Consumer<DocumentListener>() {
 
@@ -263,7 +291,7 @@ public class Document {
         if (isXMLName(name, xml11Version)) {
             throw new InvalidCharacterException("Invalid name");
         }
-        nodeByType.addNode(new EntityNode(name));
+        typeRegister.addNode("EntityNode", nodesRegister.size() - 1);
         return new EntityNode(name);
     }
 
@@ -271,7 +299,7 @@ public class Document {
             String systemId, String internalSubSet) {
 
         DocumentTypeNode docType = new DocumentTypeNode(name, publicId, systemId, internalSubSet);
-        nodeByType.addNode(docType);
+        typeRegister.addNode("DocumentTypeNode", nodesRegister.size() - 1);
         DocumentEvent evt = new DocumentEvent(docType, this);
         listenerList.forEach(new Consumer<DocumentListener>() {
 
@@ -288,7 +316,7 @@ public class Document {
         }
 
         NotationNode notation = new NotationNode(name);
-        nodeByType.addNode(notation);
+        typeRegister.addNode("NotationNode", nodesRegister.size() - 1);
         DocumentEvent evt = new DocumentEvent(notation, this);
         listenerList.forEach(new Consumer<DocumentListener>() {
 
@@ -323,107 +351,108 @@ public class Document {
 
     public NodeImpl getParentNode(NodeImpl node) {
 
-        if (node instanceof ElementNode) { 
-            for (int i = 0; i < ElementHasChilds.size(); i++) {
+        if (node instanceof ElementNode) {
+            for (int i = 0; i < tree.size(); i++) {
 
-                NodeImpl parent = ElementHasChilds.get(i);
+                NodeImpl parent = tree.get(i);
                 NodeList ChildsNodeParent = getChildNodes(parent);
-                
-                if (hasAttributes( (ElementNode) node) && hasChildNodes(node)) {                                        
+
+                if (hasAttributes((ElementNode) node) && hasChildNodes(node)) {
                     if (inThisSpecificList(ChildsNodeParent, true, true, node)) {
                         return parent;
-                    }                                   
-                }else if(!hasAttributes( (ElementNode) node) && hasChildNodes(node)){
+                    }
+                } else if (!hasAttributes((ElementNode) node) && hasChildNodes(node)) {
                     if (inThisSpecificList(ChildsNodeParent, false, true, node)) {
                         return parent;
-                    } 
-                }else if(hasAttributes( (ElementNode) node) && !hasChildNodes(node)){
+                    }
+                } else if (hasAttributes((ElementNode) node) && !hasChildNodes(node)) {
                     if (inThisSpecificList(ChildsNodeParent, true, false, node)) {
                         return parent;
-                    } 
-                }else{
+                    }
+                } else {
                     if (inThisSpecificList(ChildsNodeParent, false, false, node)) {
                         return parent;
-                    } 
+                    }
                 }
             }
         }
-            
+
         return null;
     }
-    
+
     /**
-     * Retourne si oui ou non un element est dans une liste spécifiques 
+     * Retourne si oui ou non un element est dans une liste spécifiques
+     *
      * @param list ici la liste dans laquelle le tri sera effectuée
      * @param hasAttr si oui ou non l'élément a des attributs
      * @param hasChilds si oui ou non l'élément a des enfants
      * @param node le noeud element pour qui on fait la vérification
-     * @return 
+     * @return
      */
-    public boolean inThisSpecificList(NodeList list, boolean hasAttr, boolean hasChilds, NodeImpl node){
-        
-        NodeList listBrowse = new NodeList() ;            
-                    for (int j = 0; j < list.getLength(); j++) {
-                        NodeImpl currentChild = list.item(j);
-                        
-                        //Création de la liste correspondante
-                        if (hasAttr && hasChilds) {
-                            if (hasAttributes((ElementNode) currentChild)
-                                && hasChildNodes(currentChild)) {
-                                listBrowse.addChild(currentChild);
-                            }
-                        }else if(!hasAttr && hasChilds){
-                             if (!hasAttributes((ElementNode) currentChild)
-                                && hasChildNodes(currentChild)) {
-                                listBrowse.addChild(currentChild);
-                            }
-                        }else if(hasAttr && !hasChilds){
-                             if (hasAttributes((ElementNode) currentChild)
-                                && !hasChildNodes(currentChild)) {
-                                listBrowse.addChild(currentChild);
-                            }
-                        }else{
-                            if (!hasAttributes((ElementNode) currentChild)
-                                && !hasChildNodes(currentChild)) {
-                                listBrowse.addChild(currentChild);
-                            }
-                        }                     
-                    }                    
-        return listBrowse.contain(node);        
-    }
-    
-    public int getDepth(NodeImpl node){
-        return node.depth;        
+    public boolean inThisSpecificList(NodeList list, boolean hasAttr, boolean hasChilds, NodeImpl node) {
+
+        NodeList listBrowse = new NodeList();
+        for (int j = 0; j < list.getLength(); j++) {
+            NodeImpl currentChild = list.item(j);
+
+            //Création de la liste correspondante
+            if (hasAttr && hasChilds) {
+                if (hasAttributes((ElementNode) currentChild)
+                        && hasChildNodes(currentChild)) {
+                    listBrowse.addChild(currentChild);
+                }
+            } else if (!hasAttr && hasChilds) {
+                if (!hasAttributes((ElementNode) currentChild)
+                        && hasChildNodes(currentChild)) {
+                    listBrowse.addChild(currentChild);
+                }
+            } else if (hasAttr && !hasChilds) {
+                if (hasAttributes((ElementNode) currentChild)
+                        && !hasChildNodes(currentChild)) {
+                    listBrowse.addChild(currentChild);
+                }
+            } else {
+                if (!hasAttributes((ElementNode) currentChild)
+                        && !hasChildNodes(currentChild)) {
+                    listBrowse.addChild(currentChild);
+                }
+            }
+        }
+        return listBrowse.contain(node);
     }
 
-    public void affectDepth(NodeImpl nodeTarget){
-         int depth = 0;
-        NodeImpl current = nodeTarget; 
-        
+    public int getDepth(NodeImpl node) {
+        return node.depth;
+    }
+
+    public void affectDepth(NodeImpl nodeTarget) {
+        int depth = 0;
+        NodeImpl current = nodeTarget;
+
         if (nodeTarget == rootElement) {
             rootElement.depth = 0;
         }
-        
-        while(true){
+
+        while (true) {
             NodeImpl parent = getParentNode(current);
             if (parent == null) { //Noeud racine
-                break;  
+                break;
             }
             depth++;
             current = parent;
         }
         nodeTarget.depth = depth;
     }
-    
-    public NodeImpl whoIsSuperior(NodeImpl node1, NodeImpl node2){        
-        if (getDepth(node1) - getDepth(node2) > 0 ) {
+
+    public NodeImpl whoIsSuperior(NodeImpl node1, NodeImpl node2) {
+        if (getDepth(node1) - getDepth(node2) > 0) {
             return node1;
-        }else if(getDepth(node1) - getDepth(node2) < 0) {
+        } else if (getDepth(node1) - getDepth(node2) < 0) {
             return node2;
         }
         return null;
     }
-       
+
     public NodeList getChildNodes(NodeImpl refNode) {
         if (refNode instanceof ElementNode) {
             return ((ElementNode) refNode).childNodes;
@@ -457,7 +486,7 @@ public class Document {
 
     }
 
-    public AttributesListNode getAttributes(ElementNode element) {
+    public AttributesList getAttributes(ElementNode element) {
         return element.attributes;
     }
 
@@ -485,7 +514,6 @@ public class Document {
         return newChild;
     }
 
-    
     public NodeImpl removeChild(NodeImpl refNode, NodeImpl oldChild) throws HJAXException {
         getChildNodes(refNode).removeNode(oldChild.getNodeName());
         return oldChild;
@@ -513,57 +541,60 @@ public class Document {
 
             getChildNodes(refNode).addChild(newChild);
 
-            if (!ElementHasChilds.contains(refNode)) {
-                ElementHasChilds.add(refNode);
-            }            
+            if (!tree.contains(refNode)) {
+                tree.add(refNode);
+            }
 
             return newChild;
 
         }
         return null;
-    }   
-    
+    }
+
     /**
      * Déplace un noeud enfant vers un autre parent
+     *
      * @param fromParent Noeud source
      * @param toParent Noeud parent cible
      * @param child Noeud enfant
      */
     public void moveChild(NodeImpl fromParent, NodeImpl toParent, NodeImpl child) {
-            if (getChildNodes(fromParent).contain(child)) {
-                getChildNodes(fromParent).removeNode(child.nodeName);
-                getChildNodes(toParent).addChild(child);
-            }
-            
-            if (!ElementHasChilds.contains(toParent)) {
-                ElementHasChilds.add(toParent);
-            }
-            
-            if (!hasChildNodes(fromParent)) {
-                ElementHasChilds.remove(fromParent);
-            }        
+        if (getChildNodes(fromParent).contain(child)) {
+            getChildNodes(fromParent).removeNode(child.nodeName);
+            getChildNodes(toParent).addChild(child);
+        }
+
+        if (!tree.contains(toParent)) {
+            tree.add(toParent);
+        }
+
+        if (!hasChildNodes(fromParent)) {
+            tree.remove(fromParent);
+        }
     }
 
     /**
      * Encapsule le noeud cible dans un nouveau noued
+     *
      * @param target Noeud cible
      * @param wrapperName Nom du noeud à crée qui portera le noued cible
-     * @return 
+     * @return
      */
     public NodeImpl wrap(NodeImpl target, String wrapperName) {
         ElementNode wrapper = new ElementNode(wrapperName);
         getChildNodes(wrapper).addChild(target);
-        
+
         if (target != rootElement) {
-             appendChild(getParentNode(target), wrapper);
-        }        
+            appendChild(getParentNode(target), wrapper);
+        }
         return wrapper;
     }
 
     /**
      * Supprime un noeud et rajoute la liste de tout ses enfant à son parent
+     *
      * @param parent
-     * @param child 
+     * @param child
      */
     public void unwrap(NodeImpl parent, NodeImpl child) {
         removeChild(parent, child);
@@ -572,8 +603,9 @@ public class Document {
 
     /**
      * Duplique un enfant
+     *
      * @param parent
-     * @param child 
+     * @param child
      */
     public void duplicate(NodeImpl parent, NodeImpl child) {
         NodeImpl clone = cloneNode(child, true);
@@ -582,50 +614,53 @@ public class Document {
 
     /**
      * Remplace tous les noeuds enfants par une nouvelle collection de noeud
+     *
      * @param parent
-     * @param newChildren 
+     * @param newChildren
      */
     public void replaceChildren(NodeImpl parent, ArrayList<NodeImpl> newChildren) {
         getChildNodes(parent).removeAll();
         getChildNodes(parent).addAll(newChildren);
-        if (!ElementHasChilds.contains(parent) && !newChildren.isEmpty()) {
-            ElementHasChilds.add(parent);
+        if (!tree.contains(parent) && !newChildren.isEmpty()) {
+            tree.add(parent);
         }
     }
 
     /**
-     * Ajoute une nouvelle collection d'enfant à partir de la liste des 
-     * enfants d'un autre parent
+     * Ajoute une nouvelle collection d'enfant à partir de la liste des enfants
+     * d'un autre parent
+     *
      * @param targetParent
-     * @param sourceParent 
+     * @param sourceParent
      */
     public void mergeChildren(NodeImpl targetParent, NodeImpl sourceParent) {
         getChildNodes(targetParent).addAll(getChildNodes(sourceParent).getNodes());
-        if (!ElementHasChilds.contains(targetParent)) {
-            ElementHasChilds.add(targetParent);
+        if (!tree.contains(targetParent)) {
+            tree.add(targetParent);
         }
     }
-    
+
     /**
-     * Ajoute un enfant spécifique à partir de la liste des 
-     * enfants d'un autre parent
+     * Ajoute un enfant spécifique à partir de la liste des enfants d'un autre
+     * parent
+     *
      * @param targetParent
-     * @param sourceParent 
+     * @param sourceParent
      * @param tagname nom de l'élement enfant à ajouter
      */
-    public void mergeSpecificChild(NodeImpl targetParent, NodeImpl sourceParent, String tagname) {        
+    public void mergeSpecificChild(NodeImpl targetParent, NodeImpl sourceParent, String tagname) {
         getChildNodes(targetParent).addChild(getChildInNode((ElementNode) sourceParent, tagname));
-        if (!ElementHasChilds.contains(targetParent)) {
-            ElementHasChilds.add(targetParent);
+        if (!tree.contains(targetParent)) {
+            tree.add(targetParent);
         }
     }
-  
 
     /**
      * Permutter la position de deux noeuds enfants
+     *
      * @param parent
      * @param node1
-     * @param node2 
+     * @param node2
      */
     public void swapNodes(NodeImpl parent, NodeImpl node1, NodeImpl node2) {
         ArrayList<NodeImpl> children = getChildNodes(parent).getNodes();
@@ -639,8 +674,9 @@ public class Document {
 
     /**
      * Déplacer un enfant vers le haut
+     *
      * @param parent
-     * @param child 
+     * @param child
      */
     public void moveUp(NodeImpl parent, NodeImpl child) {
         ArrayList<NodeImpl> children = getChildNodes(parent).getNodes();
@@ -653,8 +689,9 @@ public class Document {
 
     /**
      * Déplacer un enfant vers le bas
+     *
      * @param parent
-     * @param child 
+     * @param child
      */
     public void moveDown(NodeImpl parent, NodeImpl child) {
         List<NodeImpl> children = getChildNodes(parent).getNodes();
@@ -663,32 +700,32 @@ public class Document {
             children.remove(index);
             children.add(index + 1, child);
         }
-    }  
-    
+    }
+
     public boolean hasChildNodes(NodeImpl refNode) {
         return ((ElementNode) refNode).childNodes.getLength() > 0;
     }
 
     public NodeImpl cloneNode(NodeImpl refNode, boolean deep) {
-        
+
         if (refNode instanceof ElementNode) {
             ElementNode clone = new ElementNode(refNode.getNodeName());
             if ((hasAttributes((ElementNode) refNode))) {
                 for (int i = 0; i < ((ElementNode) refNode).attributes.getLength(); i++) {
-                    NodeImpl attr = ((ElementNode) refNode).attributes.item(i);
+                    AttributeNode attr = ((ElementNode) refNode).attributes.item(i);
                     clone.attributes.addAttribut(attr);
                 }
             }
-            
+
             if (deep) {
                 for (int i = 0; i < getChildNodes(refNode).getLength(); i++) {
                     NodeImpl child = getChildNodes(refNode).item(i);
                     clone.childNodes.addChild(cloneNode(child, deep));
                 }
-            }            
+            }
             return clone;
-        }else if(refNode instanceof AttributeNode){
-            
+        } else if (refNode instanceof AttributeNode) {
+
         }
         return null;
     }
@@ -755,9 +792,10 @@ public class Document {
 
     /**
      * Ajoute un attribut à un Element donné
+     *
      * @param element
      * @param newAttribute
-     * @return 
+     * @return
      */
     public AttributeNode addAttributeNode(ElementNode element, AttributeNode newAttribute) {
         getAttributes(element).addAttribut(newAttribute);
@@ -766,8 +804,9 @@ public class Document {
 
     /**
      * Retourne le nombre d'enfant d'un Element donné
+     *
      * @param element
-     * @return 
+     * @return
      */
     public int getChildCount(ElementNode element) {
         return getChildNodes(element).getLength();
@@ -775,8 +814,9 @@ public class Document {
 
     /**
      * Retourne le premier Enfant de type ElementNode d'un Element donné
+     *
      * @param element
-     * @return 
+     * @return
      */
     public ElementNode getFirstElementChild(ElementNode element) {
         if (getChildCount(element) == 0) {
@@ -794,8 +834,9 @@ public class Document {
 
     /**
      * Retourne le dernier Enfant de type ElementNode d'un Element donné
+     *
      * @param element
-     * @return 
+     * @return
      */
     public ElementNode getLastElementChild(ElementNode element) {
         if (getChildCount(element) == 0) {
@@ -813,9 +854,10 @@ public class Document {
 
     /**
      * Retourne l'index d'un Element enfant
+     *
      * @param element
      * @param childNode
-     * @return 
+     * @return
      */
     public int getIndexChild(ElementNode element, ElementNode childNode) {
         if (getChildCount(element) == 0) {
@@ -826,15 +868,18 @@ public class Document {
 
     /**
      * Retourne si oui ou non un Element à au moins un attribut
+     *
      * @param element
-     * @return 
+     * @return
      */
     public boolean hasAttributes(ElementNode element) {
         return getAttributes(element).getLength() > 0;
     }
-    
+
     /**
-     * Returns a child element by matching the attribute passed en as a parameter
+     * Returns a child element by matching the attribute passed en as a
+     * parameter
+     *
      * @param element
      * @param attrname
      * @return
@@ -854,9 +899,10 @@ public class Document {
 
     /**
      * Retourne l'Attribut correspond a <code>name</name>
+     *
      * @param element
      * @param name
-     * @return 
+     * @return
      */
     public AttributeNode getAttributeNode(ElementNode element, String name) {
         if (!hasAttributes(element)) {
@@ -867,12 +913,12 @@ public class Document {
 
     /**
      * Efface tous les attributs d'un ElementNode
-     * @param element 
+     *
+     * @param element
      */
     public void removeAllAttribute(ElementNode element) {
         getAttributes(element).removeAll();
     }
-    
 
     //// Text Node ////////////////////////////////////////////////////
     

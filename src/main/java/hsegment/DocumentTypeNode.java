@@ -42,8 +42,7 @@ public class DocumentTypeNode extends NodeImpl {
         return systemId;
     }
     
-    // Sous-ensemble interne (ex: définitions internes dans <!DOCTYPE ... [ ... ]>)
-    
+    // Sous-ensemble interne (ex: définitions internes dans <!DOCTYPE ... [ ... ]>)    
     public String getInternalSubset() {
         return internalSubset;
     }
