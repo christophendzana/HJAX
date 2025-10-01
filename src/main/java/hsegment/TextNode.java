@@ -11,10 +11,12 @@ package DOM;
 public class TextNode extends CharData {
     
     private String data;
+    private ElementNode element;
     
-    public TextNode(String data) {
+    public TextNode(String data, ElementNode element) {
         super("#Text");
         this.data = data;
+        this.element = element;
     }
     
     public String getData(){
@@ -23,6 +25,14 @@ public class TextNode extends CharData {
   
     public void setData(String data){
         this.data = data;
+    }
+    
+    public ElementNode getHolderElement(){
+        return this.element;
+    }
+    
+    public void setHolderElement(ElementNode element){
+        this.element = element;
     }
 }
     

@@ -15,10 +15,8 @@ public class ElementNode extends NodeImpl {
 
     protected String tagName;    
     protected AttributesList attributes;    
-    protected NodeList childNodes;
-    
-    
-    
+    protected NodeList childNodes;  
+        
     public ElementNode(String tagName) {
         super(tagName);
         this.tagName = tagName;

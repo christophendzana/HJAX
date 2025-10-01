@@ -19,7 +19,7 @@ import org.w3c.dom.DOMException;
 public class Document {
 
     private DocumentTypeNode doctype;
-    private ElementNode rootElement;
+    private ElementNode rootElement = null;
     private final boolean xml11Version = false;
     private ArrayList<DocumentListener> listenerList = new ArrayList<>();
 
@@ -106,11 +106,11 @@ public class Document {
         return attr;
     }
 
-    public TextNode createTextNodeImpl(String data) {
+    public TextNode createTextNodeImpl(String data, ElementNode element) {
         if (!isXMLName(data, xml11Version)) {
             throw new InvalidCharacterException("Invalid data");
         }
-        TextNode text = new TextNode(data);
+        TextNode text = new TextNode(data, element);
         typeRegister.addNode("TextNode", nodesRegister.size() - 1);
 
         DocumentEvent evt = new DocumentEvent(text, this);
@@ -197,9 +197,15 @@ public class Document {
         }
         return null;
     }
-
-    public NodeImpl getChildInNode(ElementNode node, String childname) {
-        NodeList childsNodes = getChildNodes(node);
+    
+    /**
+     * Retourne le noeud enfant correspondant au nom passé en paramètre
+     * @param ParentNode
+     * @param childname
+     * @return 
+     */
+    public NodeImpl getChildInNode(ElementNode ParentNode, String childname) {
+        NodeList childsNodes = getChilds(ParentNode);
         if (childsNodes.indexNode(childname) != -1) {
             return childsNodes.item(childsNodes.indexNode(childname));
         }
@@ -207,10 +213,10 @@ public class Document {
     }
 
     public ElementNode getChildById(ElementNode element, String elementId) {
-        for (int i = 0; i < getChildNodes(element).getLength(); i++) {
-            if (getChildNodes(element).item(i) instanceof ElementNode
-                    && getAttribute((ElementNode) (getChildNodes(element).item(i)), "id").equals(elementId)) {
-                return (ElementNode) getChildNodes(rootElement).item(i);
+        for (int i = 0; i < getChilds(element).getLength(); i++) {
+            if (getChilds(element).item(i) instanceof ElementNode
+                    && getAttribute((ElementNode) (getChilds(element).item(i)), "id").equals(elementId)) {
+                return (ElementNode) getChilds(rootElement).item(i);
             }
         }
         return null;
@@ -220,7 +226,7 @@ public class Document {
 
         if (refNode instanceof ElementNode) {
 
-            if (!getChildNodes(rootElement).contain(refNode)) {
+            if (!getChilds(rootElement).contain(refNode)) {
                 throw new NodeNotFoundException("Not found node");
             }
 
@@ -228,19 +234,19 @@ public class Document {
                 // Message d'erreur : le noeud ne peut pas être null
             }
 
-            if (getParentNode(refNode) == null) {
+            if (getParent(refNode) == null) {
                 throw new NodeHierarchyException("Impossible to delete root node");
             }
 
             if (newParent == null) {
-                getChildNodes(refNode).removeAll();
-                removeChild(getParentNode(refNode), refNode);
+                getChilds(refNode).removeAll();
+                removeChild(getParent(refNode), refNode);
             } else {
-                for (int i = 0; i < getChildNodes(refNode).getLength(); i++) {
-                    appendChild(newParent, getChildNodes(refNode).item(i));
+                for (int i = 0; i < getChilds(refNode).getLength(); i++) {
+                    appendChild(newParent, getChilds(refNode).item(i));
                 }
-                getChildNodes(refNode).removeAll();
-                removeChild(getParentNode(refNode), refNode);
+                getChilds(refNode).removeAll();
+                removeChild(getParent(refNode), refNode);
             }
 
         }
@@ -264,10 +270,6 @@ public class Document {
             }
         });
         return removeNode(refNode, null);
-    }
-
-    public NodeImpl renameNode(NodeImpl node, String namespaceURI, String qualifiedName) throws HJAXException {
-        throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
     public CommentNode createComment(String data) {
@@ -349,13 +351,13 @@ public class Document {
         node.nodeValue = nodeValue;
     }
 
-    public NodeImpl getParentNode(NodeImpl node) {
+    public NodeImpl getParent(NodeImpl node) {
 
         if (node instanceof ElementNode) {
             for (int i = 0; i < tree.size(); i++) {
 
                 NodeImpl parent = tree.get(i);
-                NodeList ChildsNodeParent = getChildNodes(parent);
+                NodeList ChildsNodeParent = getChilds(parent);
 
                 if (hasAttributes((ElementNode) node) && hasChildNodes(node)) {
                     if (inThisSpecificList(ChildsNodeParent, true, true, node)) {
@@ -376,10 +378,49 @@ public class Document {
                 }
             }
         }
-
         return null;
     }
+    
+    public NodeImpl getParent (String tagName){
+        return getParent(getElement(tagName));
+    }
 
+    
+     public NodeImpl appendChild(NodeImpl refNode, NodeImpl newChild) throws HJAXException {
+
+        if (refNode instanceof ElementNode) {
+
+            if (newChild == null) {
+                throw new java.lang.IllegalArgumentException("Le noeud en paramètre ne peut être null");
+            }
+            if (newChild == refNode) {
+                throw new DomException(DomException.HIERARCHY_REQUEST_ERR, "Un noeud ne peut être enfant de lui même");
+            }
+
+            if (newChild instanceof DocumentTypeNode) {
+                throw new APIDOMException.IllegalArgumentException("Un Document ne peut avoir qu’un seul DocumentType.");
+            }
+
+            // newchild ne peut avoir deux parents
+            if (getParent(newChild) != null) {
+                removeChild(getParent(newChild), newChild);
+            }
+
+            getChilds(refNode).addChild(newChild);
+            
+            if (refNode == rootElement) {
+                newChild.depth = 1;
+            }else{
+                affectDepth(newChild);
+            }
+            
+            tree.add(newChild);           
+
+            return newChild;
+        }
+        return null;
+    }
+    
     /**
      * Retourne si oui ou non un element est dans une liste spécifiques
      *
@@ -434,7 +475,7 @@ public class Document {
         }
 
         while (true) {
-            NodeImpl parent = getParentNode(current);
+            NodeImpl parent = getParent(current);
             if (parent == null) { //Noeud racine
                 break;
             }
@@ -453,23 +494,23 @@ public class Document {
         return null;
     }
 
-    public NodeList getChildNodes(NodeImpl refNode) {
+    public NodeList getChilds(NodeImpl refNode) {
         if (refNode instanceof ElementNode) {
             return ((ElementNode) refNode).childNodes;
         }
         return null;
     }
-
+    
     public NodeImpl getFirstChild(ElementNode element) {
-        return hasChildNodes(element) ? getChildNodes(element).item(0) : null;
+        return hasChildNodes(element) ? getChilds(element).item(0) : null;
     }
 
     public NodeImpl getLastChild(ElementNode element) {
-        return hasChildNodes(element) ? getChildNodes(element).item(getChildNodes(element).getLength() - 1) : null;
+        return hasChildNodes(element) ? getChilds(element).item(getChilds(element).getLength() - 1) : null;
     }
 
     public NodeImpl getPreviousSibling(NodeImpl node) {
-        NodeList children = getChildNodes(getParentNode(node));
+        NodeList children = getChilds(getParent(node));
 
         int index = children.indexNode(node.getNodeName());
 
@@ -478,7 +519,7 @@ public class Document {
 
     public NodeImpl getNextSibling(NodeImpl node) {
 
-        NodeList children = getChildNodes(getParentNode(node));
+        NodeList children = getChilds(getParent(node));
 
         int index = children.indexNode(node.getNodeName());
 
@@ -495,60 +536,28 @@ public class Document {
             return appendChild(refNode, newChild);
         }
 
-        int index = getChildNodes(refNode).indexNode(refChild.nodeName);
+        int index = getChilds(refNode).indexNode(refChild.nodeName);
 
         if (index == -1) {
             // Fatal Error: Message d'erreur refChild n'existe pas dans la liste
         }
-        getChildNodes(refNode).addNodeInIndex(index, newChild);
+        getChilds(refNode).addNodeInIndex(index, newChild);
         return newChild;
     }
 
     public NodeImpl replaceChild(NodeImpl refNode, NodeImpl newChild, NodeImpl oldChild) throws HJAXException {
-        int index = getChildNodes(refNode).indexNode(oldChild.getNodeName());
+        int index = getChilds(refNode).indexNode(oldChild.getNodeName());
 
-        getChildNodes(refNode).removeNode(oldChild.getNodeValue());
+        getChilds(refNode).removeNode(oldChild.getNodeValue());
 
-        getChildNodes(refNode).addNodeInIndex(index, newChild);
+        getChilds(refNode).addNodeInIndex(index, newChild);
 
         return newChild;
     }
 
     public NodeImpl removeChild(NodeImpl refNode, NodeImpl oldChild) throws HJAXException {
-        getChildNodes(refNode).removeNode(oldChild.getNodeName());
+        getChilds(refNode).removeNode(oldChild.getNodeName());
         return oldChild;
-    }
-
-    public NodeImpl appendChild(NodeImpl refNode, NodeImpl newChild) throws HJAXException {
-
-        if (refNode instanceof ElementNode) {
-
-            if (newChild == null) {
-                throw new java.lang.IllegalArgumentException("Le noeud en paramètre ne peut être null");
-            }
-            if (newChild == refNode) {
-                throw new DomException(DomException.HIERARCHY_REQUEST_ERR, "Un noeud ne peut être enfant de lui même");
-            }
-
-            if (newChild instanceof DocumentTypeNode) {
-                throw new APIDOMException.IllegalArgumentException("Un Document ne peut avoir qu’un seul DocumentType.");
-            }
-
-            // newchild ne peut avoir deux parents
-            if (getParentNode(newChild) != null) {
-                removeChild(getParentNode(newChild), newChild);
-            }
-
-            getChildNodes(refNode).addChild(newChild);
-
-            if (!tree.contains(refNode)) {
-                tree.add(refNode);
-            }
-
-            return newChild;
-
-        }
-        return null;
     }
 
     /**
@@ -559,9 +568,9 @@ public class Document {
      * @param child Noeud enfant
      */
     public void moveChild(NodeImpl fromParent, NodeImpl toParent, NodeImpl child) {
-        if (getChildNodes(fromParent).contain(child)) {
-            getChildNodes(fromParent).removeNode(child.nodeName);
-            getChildNodes(toParent).addChild(child);
+        if (getChilds(fromParent).contain(child)) {
+            getChilds(fromParent).removeNode(child.nodeName);
+            getChilds(toParent).addChild(child);
         }
 
         if (!tree.contains(toParent)) {
@@ -582,10 +591,10 @@ public class Document {
      */
     public NodeImpl wrap(NodeImpl target, String wrapperName) {
         ElementNode wrapper = new ElementNode(wrapperName);
-        getChildNodes(wrapper).addChild(target);
+        getChilds(wrapper).addChild(target);
 
         if (target != rootElement) {
-            appendChild(getParentNode(target), wrapper);
+            appendChild(getParent(target), wrapper);
         }
         return wrapper;
     }
@@ -598,7 +607,7 @@ public class Document {
      */
     public void unwrap(NodeImpl parent, NodeImpl child) {
         removeChild(parent, child);
-        getChildNodes(parent).addAll(getChildNodes(child).getNodes());
+        getChilds(parent).addAll(getChilds(child).getNodes());
     }
 
     /**
@@ -619,8 +628,8 @@ public class Document {
      * @param newChildren
      */
     public void replaceChildren(NodeImpl parent, ArrayList<NodeImpl> newChildren) {
-        getChildNodes(parent).removeAll();
-        getChildNodes(parent).addAll(newChildren);
+        getChilds(parent).removeAll();
+        getChilds(parent).addAll(newChildren);
         if (!tree.contains(parent) && !newChildren.isEmpty()) {
             tree.add(parent);
         }
@@ -634,7 +643,7 @@ public class Document {
      * @param sourceParent
      */
     public void mergeChildren(NodeImpl targetParent, NodeImpl sourceParent) {
-        getChildNodes(targetParent).addAll(getChildNodes(sourceParent).getNodes());
+        getChilds(targetParent).addAll(getChilds(sourceParent).getNodes());
         if (!tree.contains(targetParent)) {
             tree.add(targetParent);
         }
@@ -649,7 +658,7 @@ public class Document {
      * @param tagname nom de l'élement enfant à ajouter
      */
     public void mergeSpecificChild(NodeImpl targetParent, NodeImpl sourceParent, String tagname) {
-        getChildNodes(targetParent).addChild(getChildInNode((ElementNode) sourceParent, tagname));
+        getChilds(targetParent).addChild(getChildInNode((ElementNode) sourceParent, tagname));
         if (!tree.contains(targetParent)) {
             tree.add(targetParent);
         }
@@ -663,7 +672,7 @@ public class Document {
      * @param node2
      */
     public void swapNodes(NodeImpl parent, NodeImpl node1, NodeImpl node2) {
-        ArrayList<NodeImpl> children = getChildNodes(parent).getNodes();
+        ArrayList<NodeImpl> children = getChilds(parent).getNodes();
         int i1 = children.indexOf(node1);
         int i2 = children.indexOf(node2);
         if (i1 != -1 && i2 != -1) {
@@ -679,7 +688,7 @@ public class Document {
      * @param child
      */
     public void moveUp(NodeImpl parent, NodeImpl child) {
-        ArrayList<NodeImpl> children = getChildNodes(parent).getNodes();
+        ArrayList<NodeImpl> children = getChilds(parent).getNodes();
         int index = children.indexOf(child);
         if (index > 0) {
             children.remove(index);
@@ -694,7 +703,7 @@ public class Document {
      * @param child
      */
     public void moveDown(NodeImpl parent, NodeImpl child) {
-        List<NodeImpl> children = getChildNodes(parent).getNodes();
+        List<NodeImpl> children = getChilds(parent).getNodes();
         int index = children.indexOf(child);
         if (index != -1 && index < children.size() - 1) {
             children.remove(index);
@@ -718,8 +727,8 @@ public class Document {
             }
 
             if (deep) {
-                for (int i = 0; i < getChildNodes(refNode).getLength(); i++) {
-                    NodeImpl child = getChildNodes(refNode).item(i);
+                for (int i = 0; i < getChilds(refNode).getLength(); i++) {
+                    NodeImpl child = getChilds(refNode).item(i);
                     clone.childNodes.addChild(cloneNode(child, deep));
                 }
             }
@@ -732,7 +741,7 @@ public class Document {
 
     public String getTextContent(NodeImpl refNode) throws HJAXException {
         StringBuilder content = new StringBuilder();
-        NodeList children = getChildNodes(refNode);
+        NodeList children = getChilds(refNode);
         for (int i = 0; i < children.getLength(); i++) {
             NodeImpl child = children.item(i);
             if (child instanceof TextNode) {
@@ -809,7 +818,7 @@ public class Document {
      * @return
      */
     public int getChildCount(ElementNode element) {
-        return getChildNodes(element).getLength();
+        return getChilds(element).getLength();
     }
 
     /**
@@ -824,7 +833,7 @@ public class Document {
         }
         List<ElementNode> list = new ArrayList<>();
         for (int i = 0; i < getChildCount(element); i++) {
-            NodeImpl child = getChildNodes(element).item(i);
+            NodeImpl child = getChilds(element).item(i);
             if (child instanceof ElementNode) {
                 list.add((ElementNode) child);
             }
@@ -844,7 +853,7 @@ public class Document {
         }
         List<ElementNode> list = new ArrayList<>();
         for (int i = 0; i < getChildCount(element); i++) {
-            NodeImpl child = getChildNodes(element).item(i);
+            NodeImpl child = getChilds(element).item(i);
             if (child instanceof ElementNode) {
                 list.add((ElementNode) child);
             }
@@ -863,7 +872,7 @@ public class Document {
         if (getChildCount(element) == 0) {
             return -1;
         }
-        return getChildNodes(element).indexNode(childNode.getNodeName());
+        return getChilds(element).indexNode(childNode.getNodeName());
     }
 
     /**
@@ -888,7 +897,7 @@ public class Document {
 
         ArrayList<ElementNode> list = new ArrayList<>();
         for (int i = 0; i < getChildCount(element); i++) {
-            NodeImpl child = getChildNodes(element).item(i);
+            NodeImpl child = getChilds(element).item(i);
             if (child instanceof ElementNode
                     && getAttributeNode((ElementNode) child, attrname) != null) {
                 list.add((ElementNode) child);
@@ -932,14 +941,14 @@ public class Document {
         }
         String newData = data.substring(offset);
         data = data.substring(0, offset);
-        TextNode newTextNodeImpl = new TextNode(newData);
+        TextNode newTextNodeImpl = new TextNode(newData, text.getHolderElement());
 
         // Insère juste après ce nœud
-        NodeImpl parent = getParentNode(text);
+        NodeImpl parent = getParent(text);
         if (parent != null && parent instanceof NodeImpl) {
-            int index = getChildNodes(parent).indexNode(text.getNodeName());
+            int index = getChilds(parent).indexNode(text.getNodeName());
             if (index != -1) {
-                getChildNodes(parent).addNodeInIndex(index + 1, newTextNodeImpl);
+                getChilds(parent).addNodeInIndex(index + 1, newTextNodeImpl);
             }
         }
         return newTextNodeImpl;
@@ -952,9 +961,9 @@ public class Document {
 
     public String getWholeText(TextNode text) {
         StringBuilder sb = new StringBuilder();
-        NodeImpl parent = getParentNode(text);
+        NodeImpl parent = getParent(text);
         if (parent != null) {
-            NodeList siblings = getChildNodes(parent);
+            NodeList siblings = getChilds(parent);
             for (int i = 0; i < siblings.getLength(); i++) {
                 NodeImpl node = siblings.item(i);
                 if (node instanceof TextNode) {
@@ -968,22 +977,22 @@ public class Document {
     }
 
     public TextNode replaceWholeText(TextNode text, String content) throws DOMException {
-        if (getParentNode(text) == null) {
+        if (getParent(text) == null) {
             text.setData(content);
             return text;
         }
 
         //On parcours à l'envers pour éviter les problèmes d'indexation
         //Quand on supprime en cours de boucle.
-        NodeList siblings = getChildNodes(getParentNode(text));
+        NodeList siblings = getChilds(getParent(text));
         for (int i = siblings.getLength() - 1; i >= 0; i--) {
             NodeImpl node = siblings.item(i);
             if (node instanceof TextNode) {
-                removeChild(getParentNode(text), node);
+                removeChild(getParent(text), node);
             }
         }
-        TextNode newTextNodeImpl = new TextNode(content);
-        appendChild(getParentNode(text), newTextNodeImpl);
+        TextNode newTextNodeImpl = new TextNode(content, text.getHolderElement());
+        appendChild(getParent(text), newTextNodeImpl);
         return newTextNodeImpl;
     }
 
