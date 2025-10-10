@@ -35,7 +35,7 @@ public class XPathParser {
             if (!part.isEmpty()) {
                 if (part.contains("[@")&&part.contains("=") ) {
                     
-                    Pattern pattern = Pattern.compile("\\[@(\\w+)='(\\w+)'\\]");
+                    Pattern pattern = Pattern.compile("@(\\w+)='([^']+)'");
                     Matcher matcher = pattern.matcher(part);
                     String attrname = matcher.group(1);
                     String attrvalue = matcher.group(2);   
