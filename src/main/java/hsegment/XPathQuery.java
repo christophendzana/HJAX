@@ -5,6 +5,7 @@
 package xpathAPI;
 
 import DOM.Document;
+import java.util.ArrayList;
 
 /**
  *Représente une requête 
@@ -19,6 +20,23 @@ public class XPathQuery {
     public XPathQuery(String expression, Document document) {
         this.expression = expression;
         this.document = document;
+    }
+    
+    public boolean isValidExpression(String expression){
+        
+        if (expression == null || expression.isEmpty()) {
+            return false;
+        }
+        
+        XPathParser parser = new XPathParser();
+        
+        try {
+            ArrayList<XPathStep> steps = parser.parse(expression);
+            return (steps != null && !steps.isEmpty());
+        } catch (Exception e) {
+            return false;
+        }
+        
     }
 
     public XPathResult execute() {

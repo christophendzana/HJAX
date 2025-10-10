@@ -8,17 +8,18 @@ import DOM.AttributeNode;
 import DOM.Document;
 import DOM.ElementNode;
 import DOM.NodeImpl;
+import DOM.NodeList;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Coeur logique
- *Analyse les expression XPath
+ * Coeur logique Analyse les expression XPath et execute les requêtes
+ *
  * @author FIDELE
  */
 public class XPathProcessor {
-    
-     private Document document;
+
+    private Document document;
 
     public XPathProcessor(Document document) {
         this.document = document;
@@ -44,23 +45,23 @@ public class XPathProcessor {
 
         XPathStep step = steps.get(index);
         List<NodeImpl> matchingChildren = new ArrayList<>();
-        
-        for (int i = 0; i < document.getChildCount((ElementNode) currentNode); i++) {
-            NodeImpl child = document.getChilds(currentNode).item(i);
-            if (child.getNodeName().equals(step.getNodeName())) {
-                
-                if (step.getAttribut()!=null) {
-                    AttributeNode attr = document.getAttributeNode((ElementNode) child, step.getAttribut().getName());
-                    if (attr!=null) {
-                       matchingChildren.add(child);
-                    }else{
-                        System.out.println("Message d'erreur");
-                    }                         
-                }else{
+
+        if (step.getOperator().equalsIgnoreCase("/")) {
+            for (int i = 0; i < document.getChildCount((ElementNode) currentNode); i++) {
+                NodeImpl child = document.getChilds(currentNode).item(i);
+                if (matchingStep(child, step)) {
                     matchingChildren.add(child);
-                }                
+                }
             }
-        }     
+        } else if (step.getOperator().equalsIgnoreCase("//")) {
+            ArrayList childs = getAllDescendants(currentNode);
+            for (int i = 0; i < childs.size(); i++) {
+                NodeImpl child = (NodeImpl) childs.get(i);
+                if (matchingStep(child, step)) {
+                    matchingChildren.add(child);
+                }
+            }
+        }
 
         //Pour chaque enfant trouvé de l'étape précédente on applique 
         //evaluateSteps avec l'étape suivante et recursivement
@@ -70,5 +71,38 @@ public class XPathProcessor {
 
         return result;
     }
-    
+
+    private ArrayList<NodeImpl> getAllDescendants(NodeImpl node) {
+
+        ArrayList<NodeImpl> descendants = new ArrayList<>();
+
+        for (int i = 0; i < document.getChildCount((ElementNode) node); i++) {
+            NodeImpl child = document.getChilds(node).item(i);
+            descendants.add(child);
+            descendants.addAll(getAllDescendants(child));
+        }
+
+        return descendants;
+    }
+
+    private boolean matchingStep(NodeImpl node, XPathStep step) {
+
+        if (!node.getNodeName().equalsIgnoreCase(step.getNodeName())) {
+            return false;
+        }
+
+        if (step.getAttribut() != null) {
+            AttributeNode attrStep = step.getAttribut();
+
+            AttributeNode attrNode = document.getAttributeNode((ElementNode) node, attrStep.getNodeName());
+
+            if (attrNode == null) {
+                return false;
+            }
+
+            return attrNode.getNodeValue().equalsIgnoreCase(attrStep.getNodeValue());
+        }
+        return true;
+    }
+
 }

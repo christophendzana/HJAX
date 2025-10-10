@@ -7,7 +7,7 @@ package xpathAPI;
 import DOM.Document;
 
 /**
- *Gère la connexion entre le document et le moteur XPath
+ *Crée la connexion entre le document et le moteur XPath
  * @author FIDELE
  */
 public class XPathConnexion {
@@ -26,12 +26,16 @@ public class XPathConnexion {
     // Exécute directement une requête XPath en une ligne
     public XPathResult execute(String expression) {
         XPathQuery query = new XPathQuery(expression, document);
-        return query.execute();
+        
+        if (query.isValidExpression(expression)) {
+            return query.execute();
+        }else{
+            return null;
+        }
     }
 
     public Document getDocument() {
         return document;
-    }
-    
+    }   
     
 }
