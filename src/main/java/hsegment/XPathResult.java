@@ -5,6 +5,7 @@
 package xpathAPI;
 
 import DOM.NodeImpl;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -15,16 +16,12 @@ public class XPathResult {
     
     private List<NodeImpl> nodes;
 
-    public XPathResult (List<NodeImpl> nodes) {
+    public XPathResult (ArrayList<NodeImpl> nodes) {
         this.nodes = nodes;
     }
 
     public List<NodeImpl> getNodes() {
         return nodes;
     }
-    
-    public boolean getBoolean() {
-        return nodes != null && !nodes.isEmpty();
-    }
-    
+        
 }

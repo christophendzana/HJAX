@@ -4,7 +4,7 @@
  */
 package xpathAPI;
 
-import DOM.AttributeNode;
+import java.util.ArrayList;
 
 /**
  *Représente une étape du chemin XPath: nom du noeud, filtre, opérateur
@@ -12,37 +12,35 @@ import DOM.AttributeNode;
  */
 public class XPathStep {
     
-    private String operator;   
-    private String nodeName;   
-    private String attrName;
-    private String attrValue;
+    private String depth;   
+    private String nodeName; 
+    private ArrayList<XPathFilter> filters;
 
-    public XPathStep(String operator, String nodeName, String attrName, String attrValue) {
-        this.operator = operator;
+    public XPathStep(String depth, String nodeName, ArrayList<XPathFilter> filters) {
+        this.depth = depth;
         this.nodeName = nodeName;
-        this.attrName = attrName;
-        this.attrValue = attrValue;
+        this.filters = filters;
     }
     
     public XPathStep(String operator, String nodeName){
         this.nodeName = nodeName;
-        this.operator = operator;
+        this.depth = operator;
     }
 
-    public String getOperator() {
-        return operator;
+    public String getDepth() {
+        return depth;
     }
 
     public String getNodeName() {
         return nodeName;
     }
-
-    public AttributeNode getAttribut() {
-        if (attrName!=null && attrValue !=null) {
-            return new AttributeNode(attrName, attrValue, true);
-        }else{
-            return null;
-        }
+    
+    public void addFilter(XPathFilter filter){
+        filters.add(filter);
+    }
+         
+    public ArrayList<XPathFilter> getFilters(){
+        return filters;
     }
     
 }

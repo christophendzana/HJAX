@@ -8,9 +8,10 @@ import DOM.AttributeNode;
 import DOM.Document;
 import DOM.ElementNode;
 import DOM.NodeImpl;
-import DOM.NodeList;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import xpathAPI.XPathFilter.Type;
 
 /**
  * Coeur logique Analyse les expression XPath et execute les requêtes
@@ -36,8 +37,8 @@ public class XPathProcessor {
 
     // Parcours le document selon les étapes décrite par la requete
     private ArrayList<NodeImpl> evaluateSteps(NodeImpl currentNode, List<XPathStep> steps, int index) {
-        ArrayList<NodeImpl> result = new ArrayList<>();
-
+        ArrayList<NodeImpl> result = new ArrayList<>();        
+        
         if (index >= steps.size()) {
             result.add(currentNode);
             return result;
@@ -46,14 +47,14 @@ public class XPathProcessor {
         XPathStep step = steps.get(index);
         List<NodeImpl> matchingChildren = new ArrayList<>();
 
-        if (step.getOperator().equalsIgnoreCase("/")) {
+        if (step.getDepth().equalsIgnoreCase("/")) {
             for (int i = 0; i < document.getChildCount((ElementNode) currentNode); i++) {
                 NodeImpl child = document.getChilds(currentNode).item(i);
                 if (matchingStep(child, step)) {
                     matchingChildren.add(child);
                 }
             }
-        } else if (step.getOperator().equalsIgnoreCase("//")) {
+        } else if (step.getDepth().equalsIgnoreCase("//")) {
             ArrayList childs = getAllDescendants(currentNode);
             for (int i = 0; i < childs.size(); i++) {
                 NodeImpl child = (NodeImpl) childs.get(i);
@@ -86,23 +87,8 @@ public class XPathProcessor {
     }
 
     private boolean matchingStep(NodeImpl node, XPathStep step) {
-
-        if (!node.getNodeName().equalsIgnoreCase(step.getNodeName())) {
-            return false;
-        }
-
-        if (step.getAttribut() != null) {
-            AttributeNode attrStep = step.getAttribut();
-
-            AttributeNode attrNode = document.getAttributeNode((ElementNode) node, attrStep.getNodeName());
-
-            if (attrNode == null) {
-                return false;
-            }
-
-            return attrNode.getNodeValue().equalsIgnoreCase(attrStep.getNodeValue());
-        }
-        return true;
+            
+       
     }
 
 }

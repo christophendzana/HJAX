@@ -14,7 +14,7 @@ import java.util.ArrayList;
  */
 public class XPathQuery {
     
-     private String expression;
+    private String expression;
     private Document document;
 
     public XPathQuery(String expression, Document document) {
@@ -35,8 +35,7 @@ public class XPathQuery {
             return (steps != null && !steps.isEmpty());
         } catch (Exception e) {
             return false;
-        }
-        
+        }        
     }
 
     public XPathResult execute() {
