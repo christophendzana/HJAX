@@ -22,7 +22,7 @@ import javax.management.modelmbean.XMLParseException;
  */
 public class XPathParser extends Parser {
 
-    private XPathEventListener listener;  // Le processeur qui écoutera les événements
+   private XPathEventListener listener;  // Le processeur qui écoutera les événements
     private int position;                 // Position du caractère en cours de lecture
 
     public XPathParser(XPathEventListener listener) {
@@ -40,6 +40,11 @@ public class XPathParser extends Parser {
             position++;
             char c = (char) currentChar;
 
+            //Ignorer les espaces blancs
+            if (Character.isWhitespace(c)) {
+                continue;
+            }
+            
             switch (c) {
                 case '/':
                     // Si on rencontre un slash, il faut vérifier s'il y a un deuxième slash
@@ -59,14 +64,35 @@ public class XPathParser extends Parser {
                 case '[':
                     
                     StringBuilder innerBuffer = new StringBuilder();
+                    boolean predicateClosed = false;
                     int innerChar;
 
                     // Lire tout ce qu’il y a entre [ et ]
-                    while ((innerChar = in.read()) != -1 && innerChar != ']') {
-                        innerBuffer.append((char) innerChar);
+                    while ((innerChar = in.read()) != -1) {
                         position++;
+                        
+                        char ch = (char) innerChar;
+                        
+                        // ch = ] -> fin du predicat
+                        if (ch == ']') {
+                            predicateClosed = true;
+                            break;
+                        }                        
+                        
+                        if (ch == '/') {
+                            throw  new XpathSyntaxException("Erreur de syntax: crochet fermant ']' manquant"
+                                    + "avant '/ à la position' " + position);
+                        }
+                        
+                        innerBuffer.append(ch);
+                        
                     }
 
+                    if (!predicateClosed) {
+                        throw  new XpathSyntaxException("Erreur de syntax: crochet fermant ']' manquant"
+                                    + " à la position' " + position);
+                    }
+                    
                     // Supprimer les espaces inutiles autour
                     String inside = innerBuffer.toString().trim();
 
