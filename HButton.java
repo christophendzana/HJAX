@@ -4,10 +4,11 @@
  */
 package hcomponents;
 
-import hcomponents.controllers.HMouseAdapter;
-import hcomponents.models.HDefaultButtonModel;
 import hcomponents.vues.HBasicButtonUI;
 import java.awt.Color;
+import javax.swing.Action;
+import javax.swing.DefaultButtonModel;
+import javax.swing.Icon;
 import javax.swing.JButton;
 
 /**
@@ -16,24 +17,132 @@ import javax.swing.JButton;
  */
 public class HButton extends JButton {
 
-    private final HDefaultButtonModel model;
-    private final HMouseAdapter controller;
 
+     private int iconTextGap = 4; // par défaut
+    private Color shadowColor = new Color(0, 0, 0, 40);
+    private int shadowOffsetX = 0;
+    private int shadowOffsetY = 4;
+    
     public HButton(String text) {
         super(text);
-        this.model = new HDefaultButtonModel();
-        this.controller = new HMouseAdapter(this, model);
+        updateUI();
+    }
 
-        setModel(model);
+    /**
+     * Creates a button with no set text or icon.
+     */
+    public HButton() {
+        this(null, null);
+    }
+
+    /**
+     * Creates a button with an icon.
+     *
+     * @param icon the Icon image to display on the button
+     */
+    public HButton(Icon icon) {
+        this(null, icon);
+
+    }
+
+    /**
+     * Creates a button where properties are taken from the <code>Action</code>
+     * supplied.
+     *
+     * @param a the <code>Action</code> used to specify the new button
+     *
+     * @since 1.3
+     */
+    public HButton(Action a) {
+        this();
+        setAction(a);
+    }
+
+    /**
+     * Creates a button with initial text and an icon.
+     *
+     * @param text the text of the button
+     * @param icon the Icon image to display on the button
+     */
+    public HButton(String text, Icon icon) {
+        // Create the model
+        setModel(new DefaultButtonModel());
+
+        // initialize
+        init(text, icon);
+    }
+
+    @Override
+    public void updateUI() {
         setUI(new HBasicButtonUI());
         setFocusPainted(false);
         setBorderPainted(false);
         setContentAreaFilled(false);
         setOpaque(false);
+    }
+    
+    public void setVerticalAlignment(int alignment) {
+        super.setVerticalAlignment(alignment);
 
-        addMouseListener(controller);
+        if (alignment == this.getVerticalAlignment()) {
+            return;
+        }
+        int oldValue = this.getVerticalAlignment();
+        super.setVerticalAlignment(checkVerticalKey(alignment, "verticalAlignment Error"));
+
+    }
+    
+    @Override
+    protected int checkVerticalKey(int key, String exception) {
+        if ((key == TOP) || (key == CENTER) || (key == BOTTOM) || (key == EAST) || (key == NORTH )) {
+            return key;
+        } else {
+            throw new IllegalArgumentException(exception);
+        }
+    }
+    
+     public int getIconTextGapCustom() {
+        return iconTextGap;
     }
 
-    
+    public void setIconTextGapCustom(int gap) {
+        this.iconTextGap = gap;
+        revalidate();
+        repaint();
+    }
+
+    public void setTextSize(float size) {
+        setFont(getFont().deriveFont(size));
+        revalidate();
+        repaint();
+    }
+
+    // ---- Shadow ----
+    public Color getShadowColorCustom() {
+        return shadowColor;
+    }
+
+    public void setShadowColorCustom(Color c) {
+        this.shadowColor = c;
+        repaint();
+    }
+
+    public int getShadowOffsetX() {
+        return shadowOffsetX;
+    }
+
+    public void setShadowOffsetX(int offsetX) {
+        this.shadowOffsetX = offsetX;
+        repaint();
+    }
+
+    public int getShadowOffsetY() {
+        return shadowOffsetY;
+    }
+
+    public void setShadowOffsetY(int offsetY) {
+        this.shadowOffsetY = offsetY;
+        repaint();
+    }
 
 }
