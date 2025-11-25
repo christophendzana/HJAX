@@ -29,9 +29,9 @@ public class HBasicButtonUI extends BasicButtonUI {
         currentColor = baseColor;
     }
 
-    public static ComponentUI createUI(JComponent c) {
-        return new HBasicButtonUI();
-    }
+//    public static ComponentUI createUI(JComponent c) {
+//        return new HBasicButtonUI();
+//    }
 
     @Override
     public void paint(Graphics g, JComponent c) {
