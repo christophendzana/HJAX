@@ -17,8 +17,7 @@ import javax.swing.JButton;
  */
 public class HButton extends JButton {
 
-
-     private int iconTextGap = 4; // par défaut
+ private int iconTextGap = 4; // par défaut
     private Color shadowColor = new Color(0, 0, 0, 40);
     private int shadowOffsetX = 0;
     private int shadowOffsetY = 4;
@@ -70,6 +69,7 @@ public class HButton extends JButton {
 
         // initialize
         init(text, icon);
+        updateUI();
     }
 
     @Override
@@ -101,48 +101,6 @@ public class HButton extends JButton {
         }
     }
     
-     public int getIconTextGapCustom() {
-        return iconTextGap;
-    }
-
-    public void setIconTextGapCustom(int gap) {
-        this.iconTextGap = gap;
-        revalidate();
-        repaint();
-    }
-
-    public void setTextSize(float size) {
-        setFont(getFont().deriveFont(size));
-        revalidate();
-        repaint();
-    }
-
-    // ---- Shadow ----
-    public Color getShadowColorCustom() {
-        return shadowColor;
-    }
-
-    public void setShadowColorCustom(Color c) {
-        this.shadowColor = c;
-        repaint();
-    }
-
-    public int getShadowOffsetX() {
-        return shadowOffsetX;
-    }
-
-    public void setShadowOffsetX(int offsetX) {
-        this.shadowOffsetX = offsetX;
-        repaint();
-    }
-
-    public int getShadowOffsetY() {
-        return shadowOffsetY;
-    }
-
-    public void setShadowOffsetY(int offsetY) {
-        this.shadowOffsetY = offsetY;
-        repaint();
-    }
+    
 
 }
