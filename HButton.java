@@ -5,7 +5,9 @@
 package hcomponents;
 
 import hcomponents.vues.HBasicButtonUI;
-import java.awt.Color;
+import hcomponents.vues.HBorder.HAbstractBorder;
+import hcomponents.vues.HBorder.HBorder;
+import hcomponents.vues.HBorder.HShadow;
 import javax.swing.Action;
 import javax.swing.DefaultButtonModel;
 import javax.swing.Icon;
@@ -17,10 +19,9 @@ import javax.swing.JButton;
  */
 public class HButton extends JButton {
 
- private int iconTextGap = 4; // par défaut
-    private Color shadowColor = new Color(0, 0, 0, 40);
-    private int shadowOffsetX = 0;
-    private int shadowOffsetY = 4;
+    private HBorder hBorder;
+    private int cornerRadius =12 ; 
+    private HShadow shadow;
     
     public HButton(String text) {
         super(text);
@@ -89,7 +90,6 @@ public class HButton extends JButton {
         }
         int oldValue = this.getVerticalAlignment();
         super.setVerticalAlignment(checkVerticalKey(alignment, "verticalAlignment Error"));
-
     }
     
     @Override
@@ -101,6 +101,29 @@ public class HButton extends JButton {
         }
     }
     
+    public HBorder getHBorder(){
+        return hBorder;
+    }    
     
-
+    public int getCornerRadius(){
+        return cornerRadius;        
+    }  
+    
+    public void setCornerRadius(int radius){
+        this.cornerRadius = radius;
+        repaint();
+    }
+    
+    public void setHBorder(HAbstractBorder border){
+        this.hBorder = border;
+    }
+    
+    public HShadow getShadow(){
+        return shadow;
+    }
+    
+    public void setShadow(HShadow shadow){
+        this.shadow = shadow;
+    }
+    
 }

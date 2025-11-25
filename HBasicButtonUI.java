@@ -5,9 +5,9 @@
 package hcomponents.vues;
 
 import hcomponents.HButton;
+import hcomponents.vues.HBorder.HBorder;
 import java.awt.*;
 import javax.swing.*;
-import javax.swing.plaf.ComponentUI;
 import javax.swing.plaf.basic.BasicButtonUI;
 
 /**
@@ -16,7 +16,7 @@ import javax.swing.plaf.basic.BasicButtonUI;
  */
 public class HBasicButtonUI extends BasicButtonUI {
 
-    private int cornerRadius = 48;
+    private int cornerRadius = 12;
     private Color baseColor = new Color(66, 165, 245);
     private Color hoverColor = new Color(33, 150, 243);
     private Color pressColor = new Color(30, 136, 229);
@@ -29,21 +29,20 @@ public class HBasicButtonUI extends BasicButtonUI {
         currentColor = baseColor;
     }
 
-//    public static ComponentUI createUI(JComponent c) {
-//        return new HBasicButtonUI();
-//    }
-
     @Override
     public void paint(Graphics g, JComponent c) {
         AbstractButton b = (AbstractButton) c;
+        HButton hButton = (HButton) c;
         int vAlign = b.getVerticalAlignment();
         ButtonModel model = b.getModel();
 
         Graphics2D g2 = (Graphics2D) g.create();
 
+        //Données du composant
         int width = c.getWidth();
         int height = c.getHeight();
-
+        int radius = hButton.getCornerRadius();
+        
         // Lissage  
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
@@ -56,8 +55,10 @@ public class HBasicButtonUI extends BasicButtonUI {
         // Fond  
         GradientPaint gradient = new GradientPaint(0, 0, currentColor.brighter(), 0, height, currentColor.darker());
         g2.setPaint(gradient);
-        g2.fillRoundRect(0, 0, width, height, cornerRadius, cornerRadius);
-
+        
+        //dessin du background 
+        g2.fillRoundRect(0, 0, width, height, radius, radius);              
+        
         if (vAlign != SwingConstants.NORTH && vAlign != SwingConstants.EAST) {
             super.paint(g, c);
             return;
@@ -124,9 +125,13 @@ public class HBasicButtonUI extends BasicButtonUI {
         g.setColor(b.getForeground());
         g.drawString(text, textRect.x, textRect.y + textRect.height - fm.getDescent());
 
+        HBorder border = ((HButton)c ).getHBorder();
+        
+        if (border != null ) {
+            border.paint((Graphics2D) g, hButton, hButton.getWidth(), hButton.getHeight(), radius);        
+        }
+        
         g2.dispose(); //Libérer la mémoire et les flux de données  
     }
-
-  
 
 }
