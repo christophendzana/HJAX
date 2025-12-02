@@ -5,18 +5,17 @@
 package hcomponents.vues;
 
 import hcomponents.HToggleButton;
-import hcomponents.models.HToggleButtonModel;
 import java.awt.BasicStroke;
 import java.awt.Color;
-import java.awt.FontMetrics;
+import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.Shape;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.geom.RoundRectangle2D;
-import javax.swing.AbstractButton;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import javax.swing.ButtonModel;
 import javax.swing.JComponent;
 import javax.swing.Timer;
 import javax.swing.plaf.basic.BasicButtonUI;
@@ -25,109 +24,157 @@ import javax.swing.plaf.basic.BasicButtonUI;
  *
  * @author FIDELE
  */
-public class HToggleButtonUI extends BasicButtonUI implements ActionListener {
+public class HToggleButtonUI extends BasicButtonUI {
  
-    private final HToggleButtonModel model;
-    private float animation = 0f;
-    private Timer timer;
-
-    // Couleurs bootstrap-like
-    private final Color mainRed = new Color(220, 49, 29);
-    private final Color hoverRed = new Color(235, 85, 59);
-    private final Color pressedRed = new Color(180, 39, 29);
-    private final Color selectedRed = new Color(200, 45, 45);
-    private final Color focusBorder = new Color(250, 210, 210);
-    private final Color fontColor = Color.WHITE;
-
-    public HToggleButtonUI(HToggleButtonModel model) {
-        this.model = model;
-        model.addStateListener(this::startAnimationTimer);
-        timer = new Timer(15, this);
+   private Timer hoverTimer;
+    private float hoverProgress = 0f;
+    private static final int ANIMATION_DURATION = 200;
+    private boolean animatingToHover = false;
+    private long animationStartTime = 0;
+    private boolean selected = false;
+    private boolean isHovering = false;
+    
+    @Override
+    public void installUI(JComponent c) {
+        super.installUI(c);
+        HToggleButton button = (HToggleButton) c;
+        
+        // Timer d'animation (identique à HBasicButtonUI)
+        hoverTimer = new Timer(16, new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                long elapsed = System.currentTimeMillis() - animationStartTime;
+                float progress = Math.min(1f, elapsed / (float)ANIMATION_DURATION);
+                
+                if (animatingToHover) hoverProgress = progress;
+                else hoverProgress = 1f - progress;
+                
+                if (elapsed >= ANIMATION_DURATION) {
+                    hoverTimer.stop();
+                    hoverProgress = animatingToHover ? 1f : 0f;
+                }
+                c.repaint();
+            }
+        });
+        
+        // Listeners pour hover
+        c.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseEntered(MouseEvent e) {
+                isHovering = true;
+                startHoverAnimation(true);
+            }
+            
+            @Override
+            public void mouseExited(MouseEvent e) {
+                isHovering = false;
+                startHoverAnimation(false);
+            }
+        });
     }
-
-    private void startAnimationTimer() {
-        if (timer != null && !timer.isRunning()) timer.start();
-    }
-
-    public void actionPerformed(ActionEvent e) {
-        boolean active = model.isHovered() || model.isPressed() || model.isFocused() || model.isSelected();
-        float target = active ? 1f : 0f;
-        if (!active && animation <= 0f) {
-            timer.stop();
-            if (model != null && HToggleButton.lastPainted != null)
-                HToggleButton.lastPainted.repaint();
-            return;
-        }
-        if (Math.abs(animation - target) < 0.08f) {
-            animation = target;
-            timer.stop();
-            if (HToggleButton.lastPainted != null) HToggleButton.lastPainted.repaint();
-            return;
-        }
-        animation += (target - animation) * 0.2;
-        if (HToggleButton.lastPainted != null) HToggleButton.lastPainted.repaint();
-    }
-
+    
     @Override
     public void paint(Graphics g, JComponent c) {
-        HToggleButton.lastPainted = c; // permet à l’UI d’appeler repaint sur le bon bouton
-
+        HToggleButton button = (HToggleButton) c;
+        ButtonModel model = button.getModel();
         Graphics2D g2 = (Graphics2D) g.create();
-        int w = c.getWidth(), h = c.getHeight();
+        
+        int width = c.getWidth();
+        int height = c.getHeight();
+        int radius = button.getCornerRadius();
+        
+        // Lissage
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-        Color bg = blendColor(mainRed, hoverRed, animation);
-        if (model.isPressed()) bg = blendColor(bg, pressedRed, animation);
-        if (model.isSelected()) bg = blendColor(bg, selectedRed, 0.5f * animation);
-
-        // Ombre portée
-        g2.setColor(new Color(220,49,29,45));
-        g2.fill(new RoundRectangle2D.Float(2, 2, w-4, h-4, 18, 18));
-
-        // Fond arrondi
-        Shape round = new RoundRectangle2D.Float(0, 0, w, h, 20, 20);
-        g2.setColor(bg);
-        g2.fill(round);
-
-        // Bordure
-        if (model.isFocused()) {
-            g2.setColor(focusBorder);
-            g2.setStroke(new BasicStroke(4));
-            g2.draw(round);
-        } else {
-            g2.setColor(bg.darker().darker());
-            g2.setStroke(new BasicStroke(2));
-            g2.draw(round);
-        }
-
-        // Texte centré
-        AbstractButton ab = (AbstractButton) c;
-        String txt = ab.getText();
-        FontMetrics metrics = g2.getFontMetrics(ab.getFont());
-        int textX = (w - metrics.stringWidth(txt)) / 2;
-        int textY = (h + metrics.getAscent() - metrics.getDescent()) / 2 - 1;
-        g2.setColor(fontColor);
-        g2.setFont(ab.getFont());
-        g2.drawString(txt, textX, textY);
-
-        // Si sélectionné, affichage d’un tick moderne
+        
+        // Couleurs selon le style et l'état
+        HButtonStyle style = button.getButtonStyle();
+        Color baseColor = style.getBaseColor();
+        Color hoverColor = style.getHoverColor();
+        Color pressColor = style.getPressColor();
+        Color selectedColor = style.getPressColor().darker(); // Couleur spéciale pour selected
+        
+        // Déterminer la couleur actuelle
+        Color currentColor;
         if (model.isSelected()) {
-            g2.setStroke(new BasicStroke(3));
-            g2.setColor(fontColor);
-            int cx = w-24, cy = h/2;
-            g2.drawLine(cx, cy+2, cx+5, cy+6);
-            g2.drawLine(cx+5, cy+6, cx+12, cy-6);
+            currentColor = selectedColor;
+        } else if (model.isPressed()) {
+            currentColor = pressColor;
+        } else {
+            currentColor = interpolateColor(baseColor, hoverColor, hoverProgress);
         }
-
+        
+        // Ombre
+        if (button.getShadow() != null) {
+            button.getShadow().paint(g2, c, width, height, radius);
+        }
+        
+        // Fond avec dégradé
+        GradientPaint gradient = new GradientPaint(
+            0, 0, currentColor.brighter(),
+            0, height, currentColor.darker()
+        );
+        g2.setPaint(gradient);
+        g2.fillRoundRect(0, 0, width - 5, height - 5, radius, radius);
+            
+        // Bordure
+        if (button.getHBorder() != null) {
+            button.getHBorder().paint(g2, button, width, height, radius);
+        } else if (model.isSelected()) {
+            // Bordure de sélection par défaut
+            g2.setColor(style.getTextColor());
+            g2.setStroke(new BasicStroke(2));
+            g2.drawRoundRect(1, 1, width - 3, height - 3, radius, radius);
+        }
+        
+        // Dessiner l'icône de "checked" si sélectionné
+        if (model.isSelected()) {
+            int checkMargin = button.getCheckMarkMargin();           
+            drawCheckmark(g2, width, height, style.getTextColor(), checkMargin);
+        }
+        
+        // Appeler le paint parent pour le texte et l'icône
+        super.paint(g2, c);
+        
         g2.dispose();
     }
-
-    private static Color blendColor(Color a, Color b, float t) {
-        t = Math.max(0f, Math.min(1f, t));
-        int r = (int)(a.getRed() * (1-t) + b.getRed() * t);
-        int g = (int)(a.getGreen() * (1-t) + b.getGreen() * t);
-        int bval = (int)(a.getBlue() * (1-t) + b.getBlue() * t);
-        return new Color(r, g, bval);
+    
+    private void drawCheckmark(Graphics2D g2, int width, int height, Color color, int checkMargin) {
+        
+       g2.setColor(color);
+    g2.setStroke(new BasicStroke(3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    
+    // Taille proportionnelle mais limitée
+    int size = Math.min(16, Math.min(width, height) / 4);
+    
+    // Position : centré verticalement, avec marge à droite
+    int x = width - size - checkMargin;
+    int y = height / 2;
+    
+    // Checkmark 
+    g2.drawLine(x, y, x + size/3, y + size/2);
+    g2.drawLine(x + size/3, y + size/2, x + size, y - size/3);
+    }  
+    
+    private void startHoverAnimation(boolean toHover) {
+        animatingToHover = toHover;
+        animationStartTime = System.currentTimeMillis();
+        if (!hoverTimer.isRunning()) hoverTimer.start();
+    }
+    
+    private Color interpolateColor(Color c1, Color c2, float progress) {
+        progress = Math.max(0, Math.min(1, progress));
+        int r = (int)(c1.getRed() + (c2.getRed() - c1.getRed()) * progress);
+        int g = (int)(c1.getGreen() + (c2.getGreen() - c1.getGreen()) * progress);
+        int b = (int)(c1.getBlue() + (c2.getBlue() - c1.getBlue()) * progress);
+        return new Color(r, g, b);
+    }
+    
+    @Override
+    public void uninstallUI(JComponent c) {
+        if (hoverTimer != null && hoverTimer.isRunning()) {
+            hoverTimer.stop();
+        }
+        super.uninstallUI(c);
     }
     
 }
