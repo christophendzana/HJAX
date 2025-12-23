@@ -5,18 +5,21 @@
 package hcomponents;
 
 import hcomponents.vues.HComboBoxStyle;
-import hcomponents.vues.HFormattedTextFieldStyle;
 import hcomponents.vues.HMenuStyle;
 import hcomponents.vues.HSliderStyle;
 import hcomponents.vues.HTabbedPaneStyle;
+import hcomponents.vues.HWindowStyle;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Insets;
+import java.awt.MouseInfo;
+import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -37,6 +40,7 @@ import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 /**
  * @author FIDELE
@@ -54,8 +58,647 @@ public class Components {
             ImageIcon save = new ImageIcon("save.png");
             ImageIcon copy = new ImageIcon("copy.png");
             ImageIcon cut = new ImageIcon("cut.png");
-            ImageIcon close = new ImageIcon("close.png");                
-        
+            ImageIcon close = new ImageIcon("close.png");           
+                 
+            
+            // TEST HWINdow ========================================================================
+            
+            
+             SwingUtilities.invokeLater(() -> {
+            // Fenêtre propriétaire (exemple) — utile pour positionnement relatif
+            JFrame owner = new JFrame("Fenêtre propriétaire / Demo");
+            owner.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            owner.setSize(900, 600);
+            owner.setLocationRelativeTo(null);
+            owner.setLayout(new FlowLayout());
+
+            // Boutons pour déclencher chaque démonstration manuellement
+            HButton btnSplash = new HButton("Afficher Splash");
+            HButton btnNotification = new HButton("Afficher Notification");
+            HButton btnTooltip = new HButton("Afficher Tooltip");
+            HButton btnPopup = new HButton("Afficher Popup");
+            HButton btnConfirm = new HButton("Afficher Confirm");
+            HButton btnLoading = new HButton("Afficher Loading");
+            HButton btnDraggable = new HButton("Fenêtre Draggable");
+            HButton btnOpacity = new HButton("Changer Opacité + Fade");
+            owner.add(btnSplash);
+            owner.add(btnNotification);
+            owner.add(btnTooltip);
+            owner.add(btnPopup);
+            owner.add(btnConfirm);
+            owner.add(btnLoading);
+            owner.add(btnDraggable);
+            owner.add(btnOpacity);
+
+            owner.setVisible(true);
+
+            // ---------------------------
+            // 1) Splash screen automatique (exécuté une fois au démarrage)
+            // ---------------------------
+            HWindow splash = new HWindow()
+                .asSplashScreen("Mon Application", "Initialisation en cours…", true)
+                .setCornerRadius(24)
+                .setWindowOpacity(0.97f)
+                .centerOnScreen();
+
+            // Apparition avec fondu + fermeture automatique avec fondu
+            splash.showWithFadeIn(600)
+                  .autoClose(1800, true); // ferme après ~1.8s avec fondu sortant
+
+            // ---------------------------
+            // 2) Notification (exemple déclenché par bouton)
+            // ---------------------------
+            btnNotification.addActionListener(e -> {
+                HWindow notif = new HWindow()
+                    .asNotification("Sauvegarde terminée", "Tout s'est bien passé.", HWindowStyle.PRIMARY, true)
+                    .setCornerRadius(14)
+                    .setWindowOpacity(0.95f)
+                    .positionBottomRight(20, 60);
+                notif.showWithFadeIn(350)
+                     .autoClose(4000, true); // auto-close avec fondu
+            });
+
+            // ---------------------------
+            // 3) Tooltip personnalisé (position près du curseur)
+            // ---------------------------
+            btnTooltip.addActionListener(e -> {
+                Point p = MouseInfo.getPointerInfo().getLocation();
+                HWindow tooltip = new HWindow()
+                    .asTooltip("<html><b>Astuce :</b> Ceci est un tooltip HTML</html>")
+                    .setCornerRadius(8)
+                    .setWindowOpacity(0.98f);
+                tooltip.positionAt(p.x + 15, p.y + 15)
+                       .showWithFadeIn(200)
+                       .autoClose(2000, true);
+            });
+
+            // ---------------------------
+            // 4) Popup centré avec contenu personnalisé
+            // ---------------------------
+            btnPopup.addActionListener(e -> {
+                JPanel panel = new JPanel(new BorderLayout(8, 8));
+                panel.setOpaque(false);
+                JLabel content = new JLabel("<html>Voici un <b>popup</b> central avec du contenu personnalisé.</html>");
+                content.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+                panel.add(content, BorderLayout.CENTER);
+
+                HWindow popup = new HWindow()
+                    .asPopup("Popup Exemple", panel, 420, 220)
+                    .setCornerRadius(18)
+                    .setWindowOpacity(0.98f)
+                    .centerOnScreen();
+                popup.showWithFadeIn(350);
+            });
+
+            // ---------------------------
+            // 5) Confirm dialog (avec callbacks)
+            // ---------------------------
+            btnConfirm.addActionListener(e -> {
+                HWindow confirm = new HWindow()
+                    .asConfirmDialog(
+                        "Supprimer élément",
+                        "Voulez-vous vraiment supprimer cet élément ? Cette action est irréversible.",
+                        () -> {
+                            // On confirme -> exemple d'action
+                            // Afficher une petite notification pour feedback
+                            new HWindow()
+                                .asNotification("Suppression", "L'élément a été supprimé.", HWindowStyle.SUCCESS, true)
+                                .positionBottomRight(20, 80)
+                                .showWithFadeIn(300)
+                                .autoClose(2500, true);
+                        },
+                        () -> System.out.println("Utilisateur a annulé l'action.")
+                    )
+                    .setCornerRadius(16)
+                    .centerOnScreen();
+                confirm.showWithFadeIn(250);
+            });
+
+            // ---------------------------
+            // 6) Loading screen (ex: pendant une opération)
+            // ---------------------------
+            btnLoading.addActionListener(e -> {
+                HWindow loading = new HWindow()
+                    .asLoadingScreen("Chargement des données…")
+                    .setCornerRadius(18)
+                    .centerOnScreen();
+                loading.showWithFadeIn(200);
+
+                // Simulation d'une tâche en arrière-plan -> fermeture après 2s
+                new Timer(2000, evt -> loading.hideWithFadeOut(350)).start();
+            });
+
+            // ---------------------------
+            // 7) Fenêtre draggable + custom position + factory helper
+            // ---------------------------
+            btnDraggable.addActionListener(e -> {
+                // Utilisation de la factory withStyle
+                HWindow dragWin = HWindow.withStyle(owner, HWindowStyle.PRIMARY)
+                    .asPopup("Fenêtre déplaçable", new JPanel(), 300, 140)
+                    .setCornerRadius(14)
+                    .setDraggable(true)       // permet le drag de la fenêtre
+                    .setWindowOpacity(0.98f)
+                    .positionAt(200, 150);
+
+                // Contenu simple avec bouton pour fermer
+                JPanel content = new JPanel(new FlowLayout(FlowLayout.CENTER));
+                content.setOpaque(false);
+                HButton close2 = new HButton("Fermer");
+                close2.addActionListener(a -> dragWin.hideWithFadeOut(200));
+                content.add(new JLabel("Glisser la fenêtre par n'importe où."), null);
+                content.add(close2, null);
+
+                dragWin.setContentPane(content);
+                dragWin.showWithFadeIn(250);
+            });
+
+            // ---------------------------
+            // 8) Opacité et animations manuelles
+            // ---------------------------
+            btnOpacity.addActionListener(e -> {
+                HWindow w = new HWindow()
+                    .asNotification("Réglage d'opacité", "Démonstration fondu / opacité", HWindowStyle.INFO, true)
+                    .setCornerRadius(12)
+                    .setWindowOpacity(0.85f)
+                    .positionBottomLeft(20, 60);
+                w.showWithFadeIn(400);
+
+                // Après 2s : réduire l'opacité, puis faire un fade out
+                new Timer(2000, evt -> {
+                    w.setWindowOpacity(0.5f); // change l'opacité sans animation
+                    // Puis fade out avec la méthode dédiée
+                    w.hideWithFadeOut(600);
+                }).setRepeats(false);
+                new Timer(2000, evt -> ((Timer)evt.getSource()).stop()).start();
+            });
+
+            // ---------------------------
+            // BONUS : Exemples d'utilisation de shadow / border si disponibles
+            // ---------------------------
+            // Si votre HShadow et HBorder disposent des constructeurs suivants, vous pouvez
+            // activer l'ombre et la bordure comme ceci (décommenter si compatibles) :
+            /*
+            HWindow shadowDemo = new HWindow()
+                .asNotification("Ombre & Bordure", "Exemple d'ombre et bordure personnalisée", HWindowStyle.PRIMARY, true)
+                .setCornerRadius(16)
+                .centerOnScreen();
+
+            // Exemple supposé de constructeur : HShadow(Color, int blurRadius, int offsetX, int offsetY)
+            shadowDemo.setShadow(new HShadow(new Color(0,0,0,100), 16, 0, 6));
+
+            // Exemple supposé de constructeur concret HBorder(...) ou HAbstractBorder concrète
+            // shadowDemo.setHBorder(new HBorder(Color.GRAY, 2, 10)); // adapter selon implémentation
+            shadowDemo.showWithFadeIn(300).autoClose(3500, true);
+            */
+
+            // ---------------------------
+            // FIN
+            // ---------------------------
+            // Note : vous pouvez aussi appeler directement `new HWindow().asTooltip(...).showWithFadeIn(...)`
+            // ou utiliser les méthodes factory HWindow.withStyle(...) selon vos besoins.
+        });
+            
+            
+            // ======================================================================================
+            
+//             new FormulaireEmail().setVisible(true);            
+            
+            // TEST HDESKTOPPANE ====================================================================
+
+//            SwingUtilities.invokeLater(() -> {
+////             Création du JFrame principal
+//            JFrame frame = new JFrame("Test HDesktopPane");
+//            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+//            frame.setSize(1100, 700);
+//            frame.setLocationRelativeTo(null);
+//
+////             === HDesktopPane avec motif grille ===
+//            HDesktopPane desktop = HDesktopPane.withStyleAndPattern(
+//                HDesktopPaneStyle.LIGHT, 
+//                HDesktopPane.PatternType.GRID
+//            );
+//            desktop.setCornerRadius(0); // Pas de coins arrondis pour remplir le frame
+//            desktop.setPatternSpacing(40);
+//            desktop.setPatternColor(new Color(0, 0, 0, 15));
+//            
+//            frame.setContentPane(desktop);
+//
+////             === FENÊTRE INTERNE 1 - PRIMARY ===
+//            HInternalFrame frame1 = HInternalFrame.withStyle("Document 1", HInternalFrameStyle.PRIMARY);
+//            frame1.setSize(450, 350);
+//            frame1.setLocation(50, 50);
+//            
+//            JPanel content1 = new JPanel(new BorderLayout());
+//            content1.setBackground(Color.WHITE);
+//            content1.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+//            
+//            JTextArea textArea1 = new JTextArea(
+//                "HDesktopPane Moderne\n\n" +
+//                "✓ Fond personnalisé avec dégradé\n" +
+//                "✓ Motif de grille ou points\n" +
+//                "✓ Coins arrondis\n" +
+//                "✓ Compatible avec HInternalFrame\n\n" +
+//                "Essayez de déplacer et redimensionner\n" +
+//                "les fenêtres !"
+//            );
+//            textArea1.setEditable(false);
+//            textArea1.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+//            textArea1.setOpaque(false);
+//            content1.add(textArea1, BorderLayout.CENTER);
+//            
+//            frame1.setContentPane(content1);
+//            frame1.setVisible(true);
+//            desktop.add(frame1);
+//
+////             === FENÊTRE INTERNE 2 - DARK ===
+//            HInternalFrame frame2 = HInternalFrame.withStyle("Fenêtre Sombre", HInternalFrameStyle.DARK);
+//            frame2.setSize(400, 280);
+//            frame2.setLocation(530, 50);
+//            
+//            JPanel content2 = new JPanel(new GridBagLayout());
+//            content2.setBackground(new Color(52, 58, 64));
+//            
+//            JLabel label2 = new JLabel(
+//                "<html><div style='color: white; text-align: center;'>" +
+//                "<h2>Mode Sombre</h2>" +
+//                "<p>Design élégant avec motif de fond</p>" +
+//                "<p>personnalisable</p>" +
+//                "</div></html>"
+//            );
+//            content2.add(label2);
+//            
+//            frame2.setContentPane(content2);
+//            frame2.setVisible(true);
+//            desktop.add(frame2);
+//
+////             === FENÊTRE INTERNE 3 - SUCCESS ===
+//            HInternalFrame frame3 = HInternalFrame.withStyle("Configuration", HInternalFrameStyle.SUCCESS);
+//            frame3.setSize(380, 250);
+//            frame3.setLocation(50, 430);
+//            
+//            JPanel content3 = new JPanel(new BorderLayout());
+//            content3.setBackground(Color.WHITE);   
+//            content3.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+//            
+//            JPanel settingsPanel = new JPanel(new GridLayout(3, 1, 10, 10));
+//            settingsPanel.setOpaque(false);
+//            
+//            JCheckBox cb1 = new JCheckBox("Afficher la grille", true);
+//            cb1.addActionListener(e -> {
+//                desktop.setShowPattern(cb1.isSelected());
+//            });
+//            
+//            JCheckBox cb2 = new JCheckBox("Utiliser le dégradé", true);
+//            cb2.addActionListener(e -> {
+//                desktop.setUseGradient(cb2.isSelected());
+//            });
+//            
+//            HButton btnChangePattern = new HButton("Changer le motif");
+//            btnChangePattern.addActionListener(e -> {
+//                if (desktop.getPatternType() == HDesktopPane.PatternType.GRID) {
+//                    desktop.setPatternType(HDesktopPane.PatternType.DOTS);
+//                } else {
+//                    desktop.setPatternType(HDesktopPane.PatternType.GRID);
+//                }
+//            });
+//            
+//            settingsPanel.add(cb1);
+//            settingsPanel.add(cb2);
+//            settingsPanel.add(btnChangePattern);
+//            
+//            content3.add(settingsPanel, BorderLayout.CENTER);
+//            
+//            frame3.setContentPane(content3);
+//            frame3.setVisible(true);
+//            desktop.add(frame3);
+//
+////             === FENÊTRE INTERNE 4 - INFO ===
+//            HInternalFrame frame4 = HInternalFrame.withStyle("Informations", HInternalFrameStyle.INFO);
+//            frame4.setSize(320, 200);
+//            frame4.setLocation(460, 360);
+//            
+//            JPanel content4 = new JPanel(new BorderLayout());
+//            content4.setBackground(Color.WHITE);
+//            content4.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+//            
+//            JLabel label4 = new JLabel(
+//                "<html><div style='text-align: center;'>" +
+//                "<h3>💡 Astuce</h3>" +
+//                "<p>Utilisez les contrôles pour</p>" +
+//                "<p>personnaliser le fond en temps réel</p>" +
+//                "</div></html>",
+//                SwingConstants.CENTER
+//            );
+//            content4.add(label4, BorderLayout.CENTER);
+//            
+//            frame4.setContentPane(content4);
+//            frame4.setVisible(true);
+//            desktop.add(frame4);
+//
+//            frame.setVisible(true);
+//        });
+//            
+            
+            // TEST HITERNALFRAME ============================================================================
+            
+//            SwingUtilities.invokeLater(() -> {
+////             Création du JFrame principal
+//            HFrame frame = new HFrame("Test HInternalFrame");
+//            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+//            frame.setSize(1000, 700);
+//            frame.setLocationRelativeTo(null);
+//
+////          Création du JDesktopPane (conteneur pour les fenêtres internes)
+//            JDesktopPane desktop = new JDesktopPane();
+//            desktop.setBackground(new Color(240, 242, 245));
+//            frame.setContentPane(desktop);
+//
+////             === FENÊTRE INTERNE 1 - Style PRIMARY ===
+//            HInternalFrame internalFrame1 = HInternalFrame.withStyle("Fenêtre PRIMARY", HInternalFrameStyle.INFO);
+//            internalFrame1.setSize(400, 300);
+//            internalFrame1.setLocation(50, 50);
+//            
+//            JPanel content1 = new JPanel(new BorderLayout());
+//            content1.setBackground(Color.WHITE);
+//            content1.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+//            
+//            JLabel label1 = new JLabel(
+//                "<html><h2>Fenêtre Interne Moderne</h2>" +
+//                "<p>✓ Barre de titre stylée</p>" +
+//                "<p>✓ Boutons HButton personnalisés</p>" +
+//                "<p>✓ Coins arrondis</p>" +
+//                "<p>✓ Déplaçable et redimensionnable</p></html>"
+//            );
+//            content1.add(label1, BorderLayout.CENTER);
+//            
+//            internalFrame1.setContentPane(content1);
+//            internalFrame1.setVisible(true);
+//            desktop.add(internalFrame1);
+//
+////             === FENÊTRE INTERNE 2 - Style DARK ===
+//            HInternalFrame internalFrame2 = HInternalFrame.withStyle("Fenêtre DARK", HInternalFrameStyle.DARK);
+//            internalFrame2.setSize(350, 250);
+//            internalFrame2.setLocation(480, 50);
+//            
+//            JPanel content2 = new JPanel(new GridBagLayout());
+//            content2.setBackground(new Color(52, 58, 64));
+//            
+//            JLabel label2 = new JLabel(
+//                "<html><div style='color: white; text-align: center;'>" +
+//                "<h3>Mode Sombre</h3>" +
+//                "<p>Design élégant et moderne</p>" +
+//                "</div></html>"
+//            );
+//            label2.setForeground(Color.WHITE);
+//            content2.add(label2);
+//            
+//            internalFrame2.setContentPane(content2);
+//            internalFrame2.setVisible(true);
+//            desktop.add(internalFrame2);
+//
+////             === FENÊTRE INTERNE 3 - Style SUCCESS ===
+//            HInternalFrame internalFrame3 = HInternalFrame.withStyle("Fenêtre SUCCESS", HInternalFrameStyle.SUCCESS);
+//            internalFrame3.setSize(400, 200);
+//            internalFrame3.setLocation(50, 380);
+//            
+//            JPanel content3 = new JPanel(new BorderLayout());
+//            content3.setBackground(Color.WHITE);
+//            content3.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
+//            
+//            JLabel label3 = new JLabel(
+//                "<html><div style='text-align: center;'>" +
+//                "<h3 style='color: #198754;'>✓ Opération Réussie</h3>" +
+//                "<p>Double-cliquez sur la barre de titre pour maximiser</p>" +
+//                "</div></html>",
+//                SwingConstants.CENTER
+//            );
+//            content3.add(label3, BorderLayout.CENTER);
+//            
+//            internalFrame3.setContentPane(content3);
+//            internalFrame3.setVisible(true);
+//            desktop.add(internalFrame3);
+//
+//            frame.setVisible(true);
+//        });
+            
+            
+            // TEST HTOOLBAR ========================================================================================
+            
+//            SwingUtilities.invokeLater(() -> {
+//            // Création du HFrame
+//            HFrame frame = new HFrame("Test HToolBar");
+//            frame.setFrameStyle(HFrameStyle.LIGHT);
+//            frame.setSize(900, 600);
+//            frame.setLocationRelativeTo(null);
+//
+//            // Panel principal
+//            JPanel mainPanel = new JPanel(new BorderLayout(0, 0));
+//            mainPanel.setOpaque(false);
+//
+//            // === TOOLBAR HORIZONTALE EN HAUT ===
+//            HToolBar topToolBar = new HToolBar();
+//            topToolBar.setToolBarStyle(HToolBarStyle.PRIMARY);
+//            topToolBar.setToolBarHeight(55);
+//
+//            // Boutons fichier
+//            HButton btnNew = HButton.withStyle("Nouveau", HButtonStyle.LIGHT);
+//            HButton btnOpen = HButton.withStyle("Ouvrir", HButtonStyle.LIGHT);
+//            HButton btnSave = HButton.withStyle("Enregistrer", HButtonStyle.SUCCESS);
+//            
+//            topToolBar.add(btnNew);
+//            topToolBar.add(btnOpen);
+//            topToolBar.add(btnSave);
+//            topToolBar.addSeparator();
+//
+//            // Boutons édition
+//            HButton btnCut = HButton.withStyle("Couper", HButtonStyle.LIGHT);
+//            HButton btnCopy = HButton.withStyle("Copier", HButtonStyle.LIGHT);
+//            HButton btnPaste = HButton.withStyle("Coller", HButtonStyle.LIGHT);
+//            
+//            topToolBar.add(btnCut);
+//            topToolBar.add(btnCopy);
+//            topToolBar.add(btnPaste);
+//            topToolBar.addSeparator();
+//
+//            // Bouton avec espace flexible (pousse vers la droite)
+//            topToolBar.addGlue();
+//            
+//            HButton btnSettings = HButton.withStyle("Paramètres", HButtonStyle.SECONDARY);
+//            topToolBar.add(btnSettings);
+//
+//            mainPanel.add(topToolBar, BorderLayout.NORTH);
+//
+//            // === TOOLBAR VERTICALE À GAUCHE ===
+//            HToolBar leftToolBar = new HToolBar(JToolBar.VERTICAL);
+//            leftToolBar.setToolBarStyle(HToolBarStyle.DARK);
+//            leftToolBar.setToolBarWidth(70);
+//
+//            HButton btnHome = new HButton("🏠");
+//            btnHome.setButtonStyle(HButtonStyle.DARK);
+//            btnHome.setPreferredSize(new Dimension(50, 50));
+//            btnHome.setToolTipText("Accueil");
+//
+//            HButton btnSearch = new HButton("🔍");
+//            btnSearch.setButtonStyle(HButtonStyle.DARK);
+//            btnSearch.setPreferredSize(new Dimension(50, 50));
+//            btnSearch.setToolTipText("Rechercher");
+//
+//            HButton btnSettings2 = new HButton("⚙");
+//            btnSettings2.setButtonStyle(HButtonStyle.DARK);
+//            btnSettings2.setPreferredSize(new Dimension(50, 50));
+//            btnSettings2.setToolTipText("Paramètres");
+//
+//            leftToolBar.add(btnHome);
+//            leftToolBar.add(btnSearch);
+//            leftToolBar.addSeparator();
+//            leftToolBar.add(btnSettings2);
+//
+//            mainPanel.add(leftToolBar, BorderLayout.WEST);
+//
+//            // === CONTENU CENTRAL ===
+//            JPanel centerPanel = new JPanel(new GridBagLayout());
+//            centerPanel.setOpaque(false);
+//
+//            JLabel label = new JLabel(
+//                "<html><div style='text-align: center;'>" +
+//                "<h1>HToolBar Moderne</h1>" +
+//                "<p>✓ Toolbar horizontale en haut</p>" +
+//                "<p>✓ Toolbar verticale à gauche</p>" +
+//                "<p>✓ Séparateurs stylés</p>" +
+//                "<p>✓ Support des HButton</p>" +
+//                "<p>✓ Coins arrondis et dégradés</p>" +
+//                "</div></html>",
+//                SwingConstants.CENTER
+//            );
+//            label.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+//            centerPanel.add(label);
+//
+//            mainPanel.add(centerPanel, BorderLayout.CENTER);
+//
+//            // Ajout au frame
+//            frame.setContent(mainPanel);
+//            frame.setVisible(true);
+//        });
+            
+            
+            // Test HFRAME ===========================================================================================
+            
+//            SwingUtilities.invokeLater(() -> {
+//            // Création du HFrame avec style PRIMARY
+//            HFrame frame = new HFrame("Ma Fenêtre Moderne");
+//            frame.setResizable(true);
+//            frame.setFrameStyle(HFrameStyle.PRIMARY);            
+//            frame.setSize(900, 600);
+//            frame.setLocationRelativeTo(null);
+//
+//            // Panel de contenu avec démo
+//            JPanel content = new JPanel(new BorderLayout(20, 20));
+//            content.setOpaque(false);
+//            content.setBorder(BorderFactory.createEmptyBorder(30, 30, 30, 30));
+//
+//            // Titre de bienvenue
+//            JLabel welcomeLabel = new JLabel(
+//                "<html><div style='text-align: center;'>" +
+//                "<h1>Bienvenue dans HFrame</h1>" +
+//                "<p>Une fenêtre moderne avec barre de titre personnalisée</p>" +
+//                "</div></html>",
+//                SwingConstants.CENTER
+//            );
+//            welcomeLabel.setFont(new Font("Segoe UI", Font.PLAIN, 16));
+//            content.add(welcomeLabel, BorderLayout.NORTH);
+//
+//            // Panel central avec features
+//            JPanel featuresPanel = new JPanel(new GridLayout(2, 2, 20, 20));
+//            featuresPanel.setOpaque(false);
+//
+//            featuresPanel.add(createFeatureCard("✓ Coins Arrondis", "Design moderne et élégant"));
+//            featuresPanel.add(createFeatureCard("✓ Draggable", "Déplacez la fenêtre par la barre de titre"));
+//            featuresPanel.add(createFeatureCard("✓ Boutons HButton", "Minimiser, Maximiser, Fermer stylés"));
+//            featuresPanel.add(createFeatureCard("✓ Styles Prédéfinis", "PRIMARY, DARK, LIGHT, etc."));
+//
+//            content.add(featuresPanel, BorderLayout.CENTER);
+//
+//            // Panel de boutons de test
+//            JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 0));
+//            buttonPanel.setOpaque(false);
+//
+//            HButton btnPrimary = HButton.withStyle("Style PRIMARY", HButtonStyle.PRIMARY);
+//            btnPrimary.addActionListener(e -> frame.setFrameStyle(HFrameStyle.PRIMARY));
+//
+//            HButton btnDark = HButton.withStyle("Style DARK", HButtonStyle.DARK);
+//            btnDark.addActionListener(e -> frame.setFrameStyle(HFrameStyle.DARK));
+//
+//            HButton btnSuccess = HButton.withStyle("Style SUCCESS", HButtonStyle.SUCCESS);
+//            btnSuccess.addActionListener(e -> frame.setFrameStyle(HFrameStyle.SUCCESS));
+//
+//            buttonPanel.add(btnPrimary);
+//            buttonPanel.add(btnDark);
+//            buttonPanel.add(btnSuccess);
+//
+//            content.add(buttonPanel, BorderLayout.SOUTH);
+//
+//            // Ajout du contenu au frame
+//            frame.setContent(content);
+//            frame.setVisible(true);
+//        });
+            
+            
+            // TEST HDIALOG ================================================================================
+            
+//            SwingUtilities.invokeLater(() -> {
+//            // Création de la fenêtre principale
+//            JFrame frame = new JFrame("Test HDialog");
+//            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+//            frame.setSize(800, 600);
+//            frame.setLocationRelativeTo(null);
+//            frame.setVisible(true);
+//
+//            // Création du dialog avec style PRIMARY
+//            HDialog dialog = new HDialog(frame, "Mon Premier Dialog");
+//            dialog.setDialogStyle(HDialogStyle.PRIMARY);
+//            dialog.setDialogSize(450, 300);
+//
+//            // Contenu du dialog
+//            JPanel content = new JPanel(new BorderLayout());
+//            content.setOpaque(false);
+//            content.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+//
+//            JLabel message = new JLabel(
+//                "<html><div style='text-align: center;'>" +
+//                "Bienvenue dans HDialog !<br><br>" +
+//                "Un composant moderne avec :<br>" +
+//                "✓ Coins arrondis<br>" +
+//                "✓ Animations fluides<br>" +
+//                "✓ Overlay semi-transparent<br>" +
+//                "✓ Styles personnalisables" +
+//                "</div></html>"
+//            );
+//            message.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+//            message.setForeground(Color.WHITE);
+//            message.setHorizontalAlignment(SwingConstants.CENTER);
+//            content.add(message, BorderLayout.CENTER);
+//
+//            dialog.setContent(content);
+//
+//            // Boutons du footer
+//            HButton btnOk = HButton.withStyle("OK", HButtonStyle.SUCCESS);
+//            btnOk.addActionListener(e -> {
+//                System.out.println("Bouton OK cliqué");
+//                dialog.closeWithAnimation();
+//            });
+//
+//            HButton btnCancel = HButton.withStyle("Annuler", HButtonStyle.SECONDARY);
+//            btnCancel.addActionListener(e -> {
+//                System.out.println("Bouton Annuler cliqué");
+//                dialog.closeWithAnimation();
+//            });
+//
+//            dialog.addFooterButton(btnCancel);
+//            dialog.addFooterButton(btnOk);
+//
+//            // Affichage avec animation
+//            dialog.showWithAnimation();
+//        });
             
             // TEST HSPINNER ===============================================================================
             
@@ -781,8 +1424,7 @@ public class Components {
             
             
             //  TEST HOPTIONPANE ============================================================
-//            
-//            
+           
 //             SwingUtilities.invokeLater(() -> {
 //            // Créer la fenêtre
 //            JFrame frame = new JFrame("Test HOptionPane - Dialogs Modernes");
@@ -1298,7 +1940,7 @@ public class Components {
 //            frame.setVisible(true);
 //        });
 
-        // TEST JTREE ============================================================================================
+        // TEST HTREE ============================================================================================
 //        SwingUtilities.invokeLater(() -> {
 //            // Créer la fenêtre
 //            JFrame frame = new JFrame("Test HTree");
@@ -1361,7 +2003,7 @@ public class Components {
 //            frame.add(mainPanel);
 //            frame.setVisible(true);
 //        });
-//        
+        
 
 
 //        Runnable maTache = ()->{
@@ -1799,20 +2441,8 @@ public class Components {
     private static void addComboBoxPanel(JPanel parent, String label, String[] items, HComboBoxStyle style) {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.X_AXIS));
-        panel.setBackground(Color.WHITE);
-        panel.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(220, 220, 220), 1, true),
-                BorderFactory.createEmptyBorder(15, 20, 15, 20)
-        ));
-        panel.setMaximumSize(new Dimension(800, 80));
-
-        // Label
-        JLabel titleLabel = new JLabel(label);
-        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        titleLabel.setPreferredSize(new Dimension(150, 30));
-        panel.add(titleLabel);
-        panel.add(Box.createHorizontalStrut(20));
-
+        panel.setBackground(Color.WHITE);        
+       
         // ComboBox
         HComboBox<String> combo = HComboBox.withStyle(items, style);
         combo.setPreferredSize(new Dimension(250, 40));
@@ -1827,16 +2457,7 @@ public class Components {
             }
         });
 
-        panel.add(combo);
-        panel.add(Box.createHorizontalStrut(20));
-
-        // Label de description
-        JLabel descLabel = new JLabel("← Sélectionnez un élément");
-        descLabel.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-        descLabel.setForeground(Color.GRAY);
-        panel.add(descLabel);
-
-        panel.add(Box.createHorizontalGlue());
+        panel.add(combo);        
 
         parent.add(panel);
     }
@@ -2365,5 +2986,32 @@ public class Components {
         panel.add(label);
         panel.add(Box.createVerticalStrut(8));
     }
+    
+     /**
+     * Crée une carte de feature stylée.
+     */
+    private static JPanel createFeatureCard(String title, String description) {
+        JPanel card = new JPanel(new BorderLayout(10, 10));
+        card.setBackground(new Color(248, 249, 250));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(222, 226, 230), 1, true),
+            BorderFactory.createEmptyBorder(20, 20, 20, 20)
+        ));
+
+        JLabel titleLabel = new JLabel(title);
+        titleLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        titleLabel.setForeground(new Color(13, 110, 253));
+
+        JLabel descLabel = new JLabel("<html>" + description + "</html>");
+        descLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        descLabel.setForeground(new Color(108, 117, 125));
+
+        card.add(titleLabel, BorderLayout.NORTH);
+        card.add(descLabel, BorderLayout.CENTER);
+
+        return card;
+    }
+    
+    
     
 }
