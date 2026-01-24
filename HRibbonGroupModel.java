@@ -15,21 +15,21 @@ public interface HRibbonGroupModel {
     
     public void addGroup(HRibbonGroup group);
     
-    public void addGroup(String groupName); 
+    public void addGroup(Object groupIdentifier); 
     
     public void removeGroup(HRibbonGroup group);
     
     public void removeGroup(int groupindex);
     
-    public void removeGroup(String groupName);
+    public void removeGroup(Object groupIdentifier);
     
     public void moveGroup(int oldIndex, int newIndex);
     
-    public void moveGroup(String groupName, int newIndex);
+    public void moveGroup(Object groupIdentifier, int newIndex);
     
     public void insertGroup(HRibbonGroup group, int index);
     
-    public void insertGroup(String groupName, int index);
+    public void insertGroup(Object groupIdentifier, int index);
     
     public void setGroupMargin(int margin);
     
@@ -43,7 +43,7 @@ public interface HRibbonGroupModel {
     
     public int getHRibbonGroupMarggin();
     
-    public int getHRibbonIndexAtX(int position);
+    public int getHRibbonGroupIndexAtX(int position);
     
     public int getTotalHRibbonGroupWidth();
     
@@ -59,9 +59,9 @@ public interface HRibbonGroupModel {
     
     public ListSelectionModel getSelectionModel();
     
-    public void addHRibbonGroupListener(HRibbonGroupModelListener l);
+    public void addHRibbonGroupModelListener(HRibbonGroupListener l);
     
-    public void removeHRibbonGroupModelListener(HRibbonGroupModelListener l);
+    public void removeHRibbonGroupModelListener(HRibbonGroupListener l);
         
     
 }

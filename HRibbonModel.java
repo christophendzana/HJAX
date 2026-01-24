@@ -10,7 +10,6 @@ package hcomponents.HRibbon;
  */
 public interface HRibbonModel {
 
-    
     /**
      * Returns the number of group in the model. A
      * <code>HRibbon</code> uses this method to determine how many groups it
@@ -30,7 +29,7 @@ public interface HRibbonModel {
      * @param   groupIndex     the index of the group
      * @return  the name of the group
      */
-    public String getGroupName(int groupIndex);
+    public Object getGroupIdentifier(int groupIndex);
 
     /**
      * Returns the Object at this <code>position</code> in the group at this
