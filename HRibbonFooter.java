@@ -14,7 +14,7 @@ import javax.swing.event.ListSelectionEvent;
  *
  * @author FIDELE
  */
-public class HRibbonFooter extends JComponent implements HRibbonGroupModelListener {
+public class HRibbonFooter extends JComponent implements HRibbonGroupListener {
 
         /** If editing, the <code>Component</code> that is handling the editing. */
     protected transient Component       editorComp;
@@ -27,17 +27,17 @@ public class HRibbonFooter extends JComponent implements HRibbonGroupModelListen
     }
     
      @Override
-    public void groupAdded(HRibbonGroupModelEvent e) {
+    public void groupAdded(HRibbonGroupEvent e) {
         throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
     @Override
-    public void groupRemoved(HRibbonGroupModelEvent e) {
+    public void groupRemoved(HRibbonGroupEvent e) {
         throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 
     @Override
-    public void groupMoved(HRibbonGroupModelEvent e) {
+    public void groupMoved(HRibbonGroupEvent e) {
         throw new UnsupportedOperationException("Not supported yet."); // Generated from nbfs://nbhost/SystemFileSystem/Templates/Classes/Code/GeneratedMethodBody
     }
 

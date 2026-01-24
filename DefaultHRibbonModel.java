@@ -4,11 +4,7 @@
  */
 package hcomponents.HRibbon;
 
-import hcomponents.HRibbon.HRibbonModelEvents.HRibbonEventBus;
-import hcomponents.HRibbon.HRibbonModelEvents.HRibbonModelEvent;
-import hcomponents.HRibbon.HRibbonModelEvents.HRibbonModelEventListener;
 import java.util.ArrayList;
-import javax.swing.event.EventListenerList;
 
 /**
  * Implémentation par défaut de HRibbonModel.
@@ -16,7 +12,7 @@ import javax.swing.event.EventListenerList;
  *
  * @author FIDELE
  */
-public class DefaultHRibbonModel implements HRibbonModel {
+public class DefaultHRibbonModel extends AbstractHRibbonModel {
 
     /**
      * Stockage des données par groupe (index parallèle à groupIdentifiers)
@@ -27,13 +23,6 @@ public class DefaultHRibbonModel implements HRibbonModel {
      * Noms des groupes (peut contenir des doublons)
      */
     private ArrayList<Object> groupIdentifiers;
-
-    private HRibbonEventBus eventBus = new HRibbonEventBus();
-
-    /**
-     * Liste des listeners
-     */
-    private EventListenerList listenerList = new EventListenerList();
 
     /**
      * Constructeur par défaut. Crée un modèle vide.
@@ -49,9 +38,9 @@ public class DefaultHRibbonModel implements HRibbonModel {
      *
      * @param groupIdentifiers liste des noms de groupes
      */
-    public DefaultHRibbonModel(ArrayList<String> groupIdentifiers) {
+    public DefaultHRibbonModel(ArrayList<Object> groupIdentifiers) {
         if (groupIdentifiers != null) {
-            for (String groupIdentifier : groupIdentifiers) {
+            for (Object groupIdentifier : groupIdentifiers) {
                 addGroup(groupIdentifier);
             }
         }
@@ -64,7 +53,7 @@ public class DefaultHRibbonModel implements HRibbonModel {
      * @param dataGroup données correspondantes
      * @throws IllegalArgumentException si les tailles ne correspondent pas
      */
-    public DefaultHRibbonModel(ArrayList<String> groupIdentifiers, ArrayList<ArrayList<Object>> dataGroup) {
+    public DefaultHRibbonModel(ArrayList<Object> groupIdentifiers, ArrayList<ArrayList<Object>> dataGroup) {
         if (groupIdentifiers == null || dataGroup == null) {
             throw new IllegalArgumentException("GroupNames and dataGroup cannot be null");
         }
@@ -169,7 +158,6 @@ public class DefaultHRibbonModel implements HRibbonModel {
                 e.initCause(new Throwable("position" + position + "doesn't exist"));
             }
         }
-
     }
 
     /**
@@ -185,18 +173,20 @@ public class DefaultHRibbonModel implements HRibbonModel {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (position >= 0 && position < group.size()) {
                 group.set(position, value);
+                fireValueUpdated(groupIndex, position);
             }
         }
     }
 
-    public void addValue(Object value, String groupIdentifier) {
+    public void addValue(Object value, Object groupIdentifier) {
         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
 
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
-            addValue(value, index);
+            ArrayList<Object> group = dataGroup.get(index);
+            addValue(value, group.size());
         }
     }
 
@@ -213,11 +203,11 @@ public class DefaultHRibbonModel implements HRibbonModel {
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             group.add(value);
-            eventBus.fireValueAdded(new HRibbonModelEvent.ValueAddedEvent(this, groupIndex, value, 1));
+            fireValueAdded(groupIndex, group.size() - 1);
         }
     }
 
-    public void insertValueAt(Object value, int position, String groupIdentifier) {
+    public void insertValueAt(Object value, int position, Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             insertValueAt(value, position, index);
@@ -241,10 +231,11 @@ public class DefaultHRibbonModel implements HRibbonModel {
                 throw new IndexOutOfBoundsException("Position: " + position + ", Size: " + group.size());
             }
             group.add(position, value);
+            fireValueAdded(groupIndex, position);
         }
     }
 
-    public void removeValueAt(int position, String groupIdentifier) {
+    public void removeValueAt(int position, Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             removeValueAt(position, index);
@@ -261,12 +252,32 @@ public class DefaultHRibbonModel implements HRibbonModel {
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (position >= 0 && position < group.size()) {
-                Object removedValue = group.remove(position);
+                group.remove(position);
+                fireValueRemoved(groupIndex, position);
             }
         }
     }
+    
+//    public void removeValueAt(Object value, Object groupIdentifier){
+//       int index = findFirstGroupIndex(groupIdentifier);
+//        if (index >= 0) {
+//            removeValue(value, index);
+//            eventBus.fireValueRemoved(new ValueRemovedEvent(this, groupIdentifier, value));
+//        }
+//    }
+//    
+//    public void removeValueAt(Object value, int groupIndex){
+//        if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
+//            ArrayList<Object> group = dataGroup.get(groupIndex);
+//            if (value == null) {
+//                throw new IllegalArgumentException("value cannot be null");
+//            }
+//            group.remove(value);
+//            eventBus.fireValueRemoved(new ValueRemovedEvent(this, groupIndex, value));
+//        }
+//    }
 
-    public void removeValue(Object value, String groupIdentifier) {
+    public void removeValue(Object value, Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             removeValue(value, index);
@@ -290,7 +301,7 @@ public class DefaultHRibbonModel implements HRibbonModel {
         }
     }
 
-    public void removeAllValues(String groupIdentifier) {
+    public void removeAllValues(Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             removeAllValues(index);
@@ -307,11 +318,12 @@ public class DefaultHRibbonModel implements HRibbonModel {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (!group.isEmpty()) {
                 group.clear();
+                fireGroupValuesChanged(groupIndex); 
             }
         }
     }
 
-    public void moveValue(int oldPosition, int newPosition, String groupIdentifier) {
+    public void moveValue(int oldPosition, int newPosition, Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             moveValue(oldPosition, newPosition, index);
@@ -332,15 +344,16 @@ public class DefaultHRibbonModel implements HRibbonModel {
                     && newPosition >= 0 && newPosition < group.size()) {
                 Object value = group.remove(oldPosition);
                 group.add(newPosition, value);
+                fireValueMoved(groupIndex, oldPosition, newPosition);
             }
         }
     }
 
-    public boolean containsGroup(String groupIdentifier) {
+    public boolean containsGroup(Object groupIdentifier) {
         return findFirstGroupIndex(groupIdentifier) >= 0;
     }
 
-    public boolean containsValue(Object value, String groupIdentifier) {
+    public boolean containsValue(Object value, Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             return dataGroup.get(index).contains(value);
@@ -362,21 +375,15 @@ public class DefaultHRibbonModel implements HRibbonModel {
         return false;
     }
 
-    public String getGroupName(String groupIdentifier) {
-        return containsGroup(groupIdentifier) ? groupIdentifier : null;
-    }
-
-    public String getGroupName(int groupIdentifier) {
-        return containsGroup(groupIdentifier) ? groupIdentifier : null;
-    }
-
+    
     /**
      * Retourne le nom du groupe à l'index donné.
      *
      * @param groupIndex index du groupe
      * @return nom du groupe ou null
      */
-    public Object getGroupIndex(int groupIndex) {
+    @Override
+    public Object getGroupIdentifier(int groupIndex) {
         if (groupIndex >= 0 && groupIndex < groupIdentifiers.size()) {
             return groupIdentifiers.get(groupIndex);
         }
@@ -388,12 +395,13 @@ public class DefaultHRibbonModel implements HRibbonModel {
      *
      * @param groupIdentifier nom du groupe
      */
-    public void addGroup(String groupIdentifier) {
+    public void addGroup(Object groupIdentifier) {
         if (groupIdentifier == null) {
             throw new IllegalArgumentException("Group name cannot be null");
         }
         groupIdentifiers.add(groupIdentifier);
         dataGroup.add(new ArrayList<>());
+        fireGroupAdded(groupIdentifiers.size() - 1);
     }
 
     /**
@@ -403,8 +411,9 @@ public class DefaultHRibbonModel implements HRibbonModel {
      */
     public void removeGroup(int groupIndex) {
         if (groupIndex >= 0 && groupIndex < groupIdentifiers.size()) {
-            String removedName = groupIdentifiers.remove(groupIndex);
+            groupIdentifiers.remove(groupIndex);
             dataGroup.remove(groupIndex);
+            fireGroupRemoved(groupIndex);
         }
     }
 
@@ -413,21 +422,11 @@ public class DefaultHRibbonModel implements HRibbonModel {
      *
      * @param groupIdentifier nom du groupe à supprimer
      */
-    public void removeGroup(String groupIdentifier) {
+    public void removeGroup(Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
             removeGroup(index);
         }
-    }
-
-    @Override
-    public void addRibbonModelListener(HRibbonModelListener l) {
-        listenerList.add(HRibbonModelListener.class, l);
-    }
-
-    @Override
-    public void removeModelListener(HRibbonModelListener l) {
-        listenerList.remove(HRibbonModelListener.class, l);
     }
 
     /**
@@ -436,7 +435,7 @@ public class DefaultHRibbonModel implements HRibbonModel {
      * @param groupIdentifier nom du groupe à chercher
      * @return index du groupe ou -1 si non trouvé
      */
-    private int findFirstGroupIndex(String groupIdentifier) {
+    private int findFirstGroupIndex(Object groupIdentifier) {
         if (groupIdentifier == null) {
             return -1;
         }
@@ -446,14 +445,6 @@ public class DefaultHRibbonModel implements HRibbonModel {
             }
         }
         return -1;
-    }
-
-    public void addRibbonEventListener(HRibbonModelEventListener listener) {
-        eventBus.addListener(listener);
-    }
-
-    public void removeRibbonEventListener(HRibbonModelEventListener listener) {
-        eventBus.removeListener(listener);
     }
 
 }

@@ -4,9 +4,11 @@
  */
 package hcomponents.HRibbon;
 
+import java.beans.PropertyChangeEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.EventListener;
 import javax.swing.DefaultListSelectionModel;
 import javax.swing.ListSelectionModel;
 import javax.swing.event.ChangeEvent;
@@ -30,8 +32,8 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     private int groupMargin;
 
     /**
-     * List of HRibbonGroupModelListener Classe utilitaire qui gère de manière
-     * thread-safe une liste d'écouteurs d'évènements(listeners)
+     * List of HRibbonGroupListener Classe utilitaire qui gère de manière
+ thread-safe une liste d'écouteurs d'évènements(listeners)
      */
     private EventListenerList listenerList = new EventListenerList();
 
@@ -55,9 +57,10 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
 
     public DefaultHRibbonGroupModel() {
         super();
-        hRibbonGroups = new ArrayList<>();
+        hRibbonGroups = new ArrayList<HRibbonGroup>();
         setSelectionModel(createSelectionModel());
         setGroupMargin(3);
+        invalidateWidthCache();
         groupSelectionAllowed = false;
     }
 
@@ -70,12 +73,12 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
         hRibbonGroups.add(group);
         group.setModelIndex(hRibbonGroups.size() - 1);
         recalculateWidthCache();
-        fireGroupAdded(new HRibbonGroupModelEvent(this, group, hRibbonGroups.size() - 1, -1));
+        fireGroupAdded(new HRibbonGroupEvent(this, -1, getGroupCount() - 1));
     }
     
     @Override
-    public void addGroup(String groupName) {
-        HRibbonGroup group = new HRibbonGroup(groupName);
+    public void addGroup(Object groupIdentifier) {
+        HRibbonGroup group = new HRibbonGroup(groupIdentifier);
         addGroup(group);
 
     }
@@ -98,25 +101,25 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
             throw new IndexOutOfBoundsException("Invalid group index: " + groupIndex);
         }
 
-        HRibbonGroup removedGroup = hRibbonGroups.remove(groupIndex);
-
+        hRibbonGroups.remove(groupIndex);
+        fireGroupRemoved(new HRibbonGroupEvent(this, groupIndex, -1));
+        
         // Réindexer les groupes suivants
         for (int i = groupIndex; i < hRibbonGroups.size(); i++) {
             hRibbonGroups.get(i).setModelIndex(i);
         }
-        recalculateWidthCache();
-        fireGroupRemoved(new HRibbonGroupModelEvent(this, removedGroup, groupIndex, -1));
+        recalculateWidthCache();        
     }
 
     @Override
-    public void removeGroup(String groupName) {
-        if (groupName == null) {
+    public void removeGroup(Object groupIdentifier) {
+        if (groupIdentifier == null) {
             return;
         }
 
         for (int i = 0; i < hRibbonGroups.size(); i++) {
             HRibbonGroup group = hRibbonGroups.get(i);
-            if (groupName.equals(group.getGroupName())) {
+            if (groupIdentifier.equals(group.getGroupIdentifier())) {
                 removeGroup(i);
                 return;
             }
@@ -124,40 +127,39 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     }
 
     @Override
-    public void moveGroup(int oldIndex, int newIndex) {
-        if (oldIndex < 0 || oldIndex >= hRibbonGroups.size()) {
-            throw new IndexOutOfBoundsException("Invalid old index: " + oldIndex);
+    public void moveGroup(int groupIndex, int newIndex) {
+        if (groupIndex < 0 || groupIndex >= hRibbonGroups.size()) {
+            throw new IndexOutOfBoundsException("Invalid old index: " + groupIndex);
         }
         if (newIndex < 0 || newIndex >= hRibbonGroups.size()) {
             throw new IndexOutOfBoundsException("Invalid new index: " + newIndex);
         }
 
-        if (oldIndex == newIndex) {
+        if (groupIndex == newIndex) {
             return;
         }
 
-        HRibbonGroup group = hRibbonGroups.remove(oldIndex);
+        HRibbonGroup group = hRibbonGroups.remove(groupIndex);
         hRibbonGroups.add(newIndex, group);
 
         // Réindexer les groupes affectés
-        int start = Math.min(oldIndex, newIndex);
-        int end = Math.max(oldIndex, newIndex);
+        int start = Math.min(groupIndex, newIndex);
+        int end = Math.max(groupIndex, newIndex);
         for (int i = start; i <= end; i++) {
             hRibbonGroups.get(i).setModelIndex(i);
         }
-
-        fireGroupMoved(new HRibbonGroupModelEvent(this, group, oldIndex, newIndex));
+        fireGroupMoved(new HRibbonGroupEvent(this, groupIndex, newIndex));
     }
 
     @Override
-    public void moveGroup(String groupName, int newIndex) {
-        if (groupName == null) {
+    public void moveGroup(Object groupIdentifier, int newIndex) {
+        if (groupIdentifier == null) {
             throw new IllegalArgumentException("Group name cannot be null");
         }
 
         for (int i = 0; i < hRibbonGroups.size(); i++) {
             HRibbonGroup group = hRibbonGroups.get(i);
-            if (groupName.equals(group.getGroupName())) {
+            if (groupIdentifier.equals(group.getGroupIdentifier())) {
                 moveGroup(i, newIndex);
                 return;
             }
@@ -180,12 +182,12 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
             hRibbonGroups.get(i).setModelIndex(i);
         }
         recalculateWidthCache();
-        fireGroupAdded(new HRibbonGroupModelEvent(this, group, index, -1));
+        fireGroupAdded(new HRibbonGroupEvent(this, -1, index));
     }
 
     @Override
-    public void insertGroup(String groupName, int index) {
-        HRibbonGroup group = new HRibbonGroup(groupName);
+    public void insertGroup(Object groupIdentifier, int index) {
+        HRibbonGroup group = new HRibbonGroup(groupIdentifier);
         insertGroup(group, index);
     }
 
@@ -238,7 +240,7 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     }
 
     @Override
-    public int getHRibbonIndexAtX(int xPosition) {
+    public int getHRibbonGroupIndexAtX(int xPosition) {
         if (xPosition < 0) {
             return -1;
         }
@@ -339,13 +341,13 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     }
 
     @Override
-    public void addHRibbonGroupListener(HRibbonGroupModelListener l) {
-                listenerList.add(HRibbonGroupModelListener.class, l);
+    public void addHRibbonGroupModelListener(HRibbonGroupListener l) {
+                listenerList.add(HRibbonGroupListener.class, l);
     }
 
     @Override
-    public void removeHRibbonGroupModelListener(HRibbonGroupModelListener l) {
-                listenerList.remove(HRibbonGroupModelListener.class, l);
+    public void removeHRibbonGroupModelListener(HRibbonGroupListener l) {
+                listenerList.remove(HRibbonGroupListener.class, l);
     }
 
     // implements javax.swing.table.TableColumnModel
@@ -374,7 +376,7 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     }
 
     /**
-     * Recalcule la largeur totale en cache.
+     * Recalcule la largeur totale de tous les groupes.
      */
     protected void recalculateWidthCache() {
         totalGroupWidth = 0;
@@ -386,14 +388,72 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
         }
     }
     
+    public HRibbonGroupListener[] getHRibbonGroupModelListeners() {
+        return listenerList.getListeners(HRibbonGroupListener.class);
+    }
+    
+    /**
+     * Returns an array of all the objects currently registered
+     * as <code><em>Foo</em>Listener</code>s
+     * upon this model.<code><em>Foo</em>Listener</code>s are registered using the
+    <code>add<em>Foo</em>Listener</code> method.<p>
+     *
+     * You can specify the <code>listenerType</code> argument
+     * with a class literal,
+     * such as
+     * <code><em>Foo</em>Listener.class</code>.
+     * For example, you can query a
+     * <code>DefaultHRibbonGroupModelModel</code> <code>m</code>
+     * for its group model listeners with the following code:
+     *
+     * <pre>HRibbonGroupListener[] cmls = (HRibbonGroupListener[])
+ (m.getListeners(HRibbonGroupListener.class));</pre>
+     *
+     * If no such listeners exist, this method returns an empty array.
+     *
+     * @param <T> the listener type
+     * @param listenerType the type of listeners requested
+     * @return an array of all objects registered as
+     *          <code><em>Foo</em>Listener</code>s on this model,
+     *          or an empty array if no such
+     *          listeners have been added
+     * @throws ClassCastException if <code>listenerType</code>
+     *          doesn't specify a class or interface that implements
+     *          <code>java.util.EventListener</code>
+     *
+     * @see #getColumnModelListeners
+     * @since 1.3
+     */
+    public <T extends EventListener> T[] getListeners(Class<T> listenerType) {
+        return listenerList.getListeners(listenerType);
+    }
+    
+    
+    // PENDING(alan)
+    // implements java.beans.PropertyChangeListener
+    /**
+     * Property Change Listener change method.  Used to track changes
+     * to the column width or preferred column width.
+     *
+     * @param  evt  <code>PropertyChangeEvent</code>
+     */
+    public void propertyChange(PropertyChangeEvent evt) {
+        String name = evt.getPropertyName();
+
+        if ("width".equals(name) || "preferredWidth".equals(name)) {
+            invalidateWidthCache();            
+            fireGroupMarginChanged();
+        }
+    }
+    
     /**
      * Notifie les listeners qu'un groupe a été ajouté.
      */
-    protected void fireGroupAdded(HRibbonGroupModelEvent e) {
+    protected void fireGroupAdded(HRibbonGroupEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i -= 2) {
-            if (listeners[i] == HRibbonGroupModelListener.class) {
-                ((HRibbonGroupModelListener) listeners[i + 1]).groupAdded(e);
+            if (listeners[i] == HRibbonGroupListener.class) {
+                ((HRibbonGroupListener) listeners[i + 1]).groupAdded(e);
             }
         }
     }
@@ -401,11 +461,11 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     /**
      * Notifie les listeners qu'un groupe a été supprimé.
      */
-    protected void fireGroupRemoved(HRibbonGroupModelEvent e) {
+    protected void fireGroupRemoved(HRibbonGroupEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i -= 2) {
-            if (listeners[i] == HRibbonGroupModelListener.class) {
-                ((HRibbonGroupModelListener) listeners[i + 1]).groupRemoved(e);
+            if (listeners[i] == HRibbonGroupListener.class) {
+                ((HRibbonGroupListener) listeners[i + 1]).groupRemoved(e);
             }
         }
     }
@@ -413,11 +473,11 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     /**
      * Notifie les listeners qu'un groupe a été déplacé.
      */
-    protected void fireGroupMoved(HRibbonGroupModelEvent e) {
+    protected void fireGroupMoved(HRibbonGroupEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i -= 2) {
-            if (listeners[i] == HRibbonGroupModelListener.class) {
-                ((HRibbonGroupModelListener) listeners[i + 1]).groupMoved(e);
+            if (listeners[i] == HRibbonGroupListener.class) {
+                ((HRibbonGroupListener) listeners[i + 1]).groupMoved(e);
             }
         }
     }
@@ -428,8 +488,8 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     protected void fireGroupSelectionChanged(ListSelectionEvent e) {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i -= 2) {
-            if (listeners[i] == HRibbonGroupModelListener.class) {
-                ((HRibbonGroupModelListener) listeners[i + 1]).groupSelectionChanged(e);
+            if (listeners[i] == HRibbonGroupListener.class) {
+                ((HRibbonGroupListener) listeners[i + 1]).groupSelectionChanged(e);
             }
         }
     }
@@ -440,12 +500,17 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     protected void fireGroupMarginChanged() {
         Object[] listeners = listenerList.getListenerList();
         for (int i = listeners.length - 2; i >= 0; i -= 2) {
-            if (listeners[i] == HRibbonGroupModelListener.class) {
+            if (listeners[i] == HRibbonGroupListener.class) {
                 if (changeEvent == null) {
                     changeEvent = new ChangeEvent(this);
                 }
-                ((HRibbonGroupModelListener) listeners[i + 1]).groupMarginChanged(changeEvent);
+                ((HRibbonGroupListener) listeners[i + 1]).groupMarginChanged(changeEvent);
             }
         }
     }
+    
+    private void invalidateWidthCache() {
+        totalGroupWidth = -1;
+    }
+    
 }
