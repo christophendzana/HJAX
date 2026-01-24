@@ -1,181 +1,93 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
-package hcomponents.HRibbon.HRibbonModelEvents;
+package hcomponents.HRibbon;
 
-import hcomponents.HRibbon.DefaultHRibbonModel;
+import java.util.EventObject;
 
 /**
- *
- * @author FIDELE
+ * Événement décrivant un changement dans le modèle du ruban.
+ * Analogie : similaire à TableModelEvent pour JTable.
  */
-public class HRibbonModelEvent extends java.util.EventObject {
-
-    private Object groupIdentifier;
+public class HRibbonModelEvent extends EventObject {
     
+    /** Type de changement : insertion */
+    public static final int INSERT = 1;
+    
+    /** Type de changement : mise à jour */
+    public static final int UPDATE = 0;
+    
+    /** Type de changement : suppression */
+    public static final int DELETE = -1;
+    
+    /** Type de changement : déplacement */
+    public static final int MOVE = 2;
+    
+    private final int type;
+    private final int groupIndex;
+    private final int position;
+    private final int toPosition; // Pour MOVE
+    
+    /**
+     * Constructeur pour changement global (toutes données).
+     */
     public HRibbonModelEvent(Object source) {
+        this(source, -1, -1, -1, UPDATE);
+    }
+    
+    /**
+     * Constructeur pour changement sur un groupe spécifique.
+     */
+    public HRibbonModelEvent(Object source, int groupIndex) {
+        this(source, groupIndex, -1, -1, UPDATE);
+    }
+    
+    /**
+     * Constructeur pour changement sur une valeur spécifique.
+     */
+    public HRibbonModelEvent(Object source, int groupIndex, int position) {
+        this(source, groupIndex, position, -1, UPDATE);
+    }
+    
+    /**
+     * Constructeur complet.
+     */
+    public HRibbonModelEvent(Object source, int groupIndex, int position, int toPosition, int type) {
         super(source);
-        this.groupIdentifier = groupIdentifier;
-    }
-
-    public Object getGroupIdentifier() {
-        return groupIdentifier;
-    }
-
-    
-    public class GroupAddedEvent extends HRibbonModelEvent {
-    private int position;
-    private int groupIndex;
-    private DefaultHRibbonModel model;
-    private Object groupIdentifier;
-
-    public GroupAddedEvent(DefaultHRibbonModel model, Object groupIdentifier, int position) {
-        super(model);
+        this.groupIndex = groupIndex;
         this.position = position;
-        this.model = model;
-        this.groupIdentifier = groupIdentifier;
+        this.toPosition = toPosition;
+        this.type = type;
     }
     
-    public GroupAddedEvent(DefaultHRibbonModel model, int groupIndex, int position) {
-        super(model);
-        this.position = position;
-        this.groupIndex = groupIndex;        
-    }
-
-    public int getPosition() {
-        return position;
-    }
-    
-    public DefaultHRibbonModel getModel(){
-        return model;
-    }
-    
-    public int getGroupIndex(){
-        return groupIndex;
-    }
-    
-    public Object getGroupIdentifier(){
-        return groupIdentifier;
-    }
-}
-
-public class GroupRemovedEvent extends HRibbonModelEvent {
-    private int positionBeforeRemoval;  
-    private Object groupIdentifier;
-    private int groupIndex;
-    
-    public GroupRemovedEvent(DefaultHRibbonModel model, Object groupIdentifier, int positionBeforeRemoval) {
-        super(model);
-        this.positionBeforeRemoval = positionBeforeRemoval;
-    }
-    
-    public GroupRemovedEvent(DefaultHRibbonModel model, int groupIndex, int positionBeforeRemoval) {
-        super(model);
-        this.positionBeforeRemoval = positionBeforeRemoval;
-    }
-
-    public int getPositionBeforeRemoval() {
-        return positionBeforeRemoval;
-    }
-    
-    public Object groupIdentifier(){
-        return groupIdentifier;
-    }
-    
-    public int getGroupIndex(){
-        return groupIndex;
-    }
-}
-
-public class GroupsReorderedEvent extends HRibbonModelEvent {
-    private final int[] oldOrder;
-    private final int[] newOrder;
-
-    public GroupsReorderedEvent(DefaultHRibbonModel model ,int[] oldOrder, int[] newOrder) {
-        super(model);
-        this.oldOrder = oldOrder;
-        this.newOrder = newOrder;
-    }
-
-    public int[] getOldOrder() { return oldOrder; }
-    public int[] getNewOrder() { return newOrder; }
-}
-
-public class RibbonClearedEvent extends HRibbonModelEvent {
-    public RibbonClearedEvent(DefaultHRibbonModel model) { super(model); }
-}
-    
-    public class ValueAddedEvent extends HRibbonModelEvent {
-    private final Object value;
-    private final int position;
-
-    public ValueAddedEvent(DefaultHRibbonModel model, Object groupIdentifier, Object value, int position) {
-        super(model);
-        this.value = value;
-        this.position = position;
-    }
-
-    public Object getValue() { return value; }
+    // Getters
+    public int getType() { return type; }
+    public int getGroupIndex() { return groupIndex; }
     public int getPosition() { return position; }
-}
-
-public class ValueRemovedEvent extends HRibbonModelEvent {
-    private final Object value;
-    private final int positionBeforeRemoval;
-
-    public ValueRemovedEvent(DefaultHRibbonModel model ,Object groupIdentifier, Object value, int positionBeforeRemoval) {
-        super(model);
-        this.value = value;
-        this.positionBeforeRemoval = positionBeforeRemoval;
+    public int getToPosition() { return toPosition; }
+    
+    /**
+     * Vérifie si l'événement concerne toutes les données.
+     */
+    public boolean isGlobalChange() {
+        return groupIndex == -1;
     }
-
-    public Object getValue() { return value; }
-    public int getPositionBeforeRemoval() { return positionBeforeRemoval; }
-}
-
-public class ValueMovedEvent extends HRibbonModelEvent {
-    private final Object value;
-    private final int oldPosition;
-    private final int newPosition;
-
-    public ValueMovedEvent(DefaultHRibbonModel model, Object groupIdentifier, Object value, int oldPosition, int newPosition) {
-        super(model);
-        this.value = value;
-        this.oldPosition = oldPosition;
-        this.newPosition = newPosition;
+    
+    /**
+     * Vérifie si l'événement concerne un groupe entier.
+     */
+    public boolean isGroupChange() {
+        return groupIndex >= 0 && position == -1;
     }
-
-    public Object getValue() { return value; }
-    public int getOldPosition() { return oldPosition; }
-    public int getNewPosition() { return newPosition; }
-}
-
-public class ValueReplacedEvent extends HRibbonModelEvent {
-    private final Object oldValue;
-    private final Object newValue;
-    private final int position;
-
-    public ValueReplacedEvent(DefaultHRibbonModel model, Object groupIdentifier, Object oldValue, Object newValue, int position) {
-        super(model);
-        this.oldValue = oldValue;
-        this.newValue = newValue;
-        this.position = position;
+    
+    /**
+     * Vérifie si l'événement concerne une valeur spécifique.
+     */
+    public boolean isValueChange() {
+        return groupIndex >= 0 && position >= 0;
     }
-
-    public Object getOldValue() { return oldValue; }
-    public Object getNewValue() { return newValue; }
-    public int getPosition() { return position; }
-}
-
-public class GroupValuesClearedEvent extends HRibbonModelEvent {
-    private final int clearedCount;
-
-    public GroupValuesClearedEvent(DefaultHRibbonModel model, Object groupIdentifier, int clearedCount) {
-        super(model);
-        this.clearedCount = clearedCount;
+    
+    /**
+     * Vérifie si l'événement est un déplacement.
+     */
+    public boolean isMove() {
+        return type == MOVE;
     }
-
-    public int getClearedCount() { return clearedCount; }
-}
 }

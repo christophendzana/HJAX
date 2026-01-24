@@ -4,17 +4,20 @@
  */
 package hcomponents.HRibbon;
 
-import hcomponents.HRibbon.HRibbonModelEvents.HRibbonModelEvent;
+import java.util.EventListener;
 
 /**
- *HRibbonModelListener Définit l'interface d'un objet qui écoute les modifications
- dans un HTableModel 
- * 
- * @author FIDELE
+ * Interface pour écouter les changements dans un HRibbonModel.
+ * Analogie : similaire à TableModelListener pour JTable.
+ * @author Banlock
  */
-
-public interface HRibbonModelListener extends java.util.EventListener {
-        
-    public void modelChanged(HRibbonModelEvent e);
+public interface HRibbonModelListener extends EventListener {
     
+    /**
+     * Notifie que la structure du ruban a changé.
+     * Équivalent à tableChanged() dans TableModelListener.
+     * 
+     * @param e l'événement décrivant le changement
+     */
+    void ribbonChanged(HRibbonModelEvent e);
 }
