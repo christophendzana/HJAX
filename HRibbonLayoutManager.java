@@ -198,17 +198,30 @@ public class HRibbonLayoutManager implements LayoutManager2 {
      * Récupère les composants d'un groupe.
      */
     private List<Component> getComponentsForGroup(HRibbon ribbon, int groupIndex) {
-    List<Component> components = new ArrayList<>();
-          
-    Component[] allComponents = ribbon.getComponents();
-     
-    
-    for (Component comp : allComponents) {
-        components.add(comp);
+        List<Component> components = new ArrayList<>();
+        
+        // Récupère le modèle de données
+        HRibbonModel model = ribbon.getModel();
+        if (model == null) {
+            return components; // Liste vide
+        }
+        
+        // Nombre de composants dans ce groupe
+        int componentCount = model.getValueCount(groupIndex);
+        
+        // Pour chaque position dans le groupe
+        for (int i = 0; i < componentCount; i++) {
+            // Récupère la valeur (qui devrait être un Component)
+            Object value = model.getValueAt(i, groupIndex);
+            
+            // Vérifie que c'est bien un Component Swing
+            if (value instanceof Component) {
+                components.add((Component) value);
+            }
+        }
+        
+        return components;
     }
-    
-    return components;
-}
     
     /**
      * Positionne les composants à l'intérieur d'un groupe.
