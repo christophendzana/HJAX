@@ -207,6 +207,7 @@ public class HRibbon extends JComponent implements HRibbonModelListener, HRibbon
         // S'inscrit comme listener des modèles
         this.model.addRibbonModelListener(this);
         this.groupModel.addHRibbonGroupModelListener(this);
+        syncComponentsFromModel();
     }
 
     /**
@@ -619,6 +620,7 @@ public class HRibbon extends JComponent implements HRibbonModelListener, HRibbon
      */
     @Override
     public void ribbonChanged(HRibbonModelEvent e) {
+        syncComponentsFromModel(); 
         if (e.isGlobalChange()) {
             if (autoCreateGroupsFromModel && groupModel != null) {
                 createGroupsFromModel();
@@ -788,20 +790,18 @@ public class HRibbon extends JComponent implements HRibbonModelListener, HRibbon
      * @param groupIdentifier l'identifiant du groupe
      */
     public void addComponent(Component component, Object groupIdentifier) {
-        if (component == null || groupIdentifier == null) {
-            throw new IllegalArgumentException("Arguments cannot be null");
-        }
-
-        if (model instanceof DefaultHRibbonModel) {
-            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-            defaultModel.addValue(component, groupIdentifier);
-        } else {
-            throw new UnsupportedOperationException(
-                    "Model does not support adding components directly");
-        }
+    // 1. Ajoute au modèle
+    if (model instanceof DefaultHRibbonModel) {
+        ((DefaultHRibbonModel) model).addValue(component, groupIdentifier);
     }
-
-
+    
+    // 2. Ajoute DIRECTEMENT au conteneur Swing
+    add(component);
+    
+    // 3. Force le re-layout
+    revalidate();
+    repaint();
+}
 
     /**
      * Déplace un composant dans un groupe.
@@ -1220,4 +1220,32 @@ public class HRibbon extends JComponent implements HRibbonModelListener, HRibbon
         }
     }
 
+     /**
+     * Synchronise les composants du modèle vers le conteneur Swing.
+     * À appeler quand le modèle change.
+     */
+    private void syncComponentsFromModel() {
+        // 1. Retire tous les composants existants
+        removeAll();
+        
+        // 2. Parcours tous les groupes et valeurs
+        if (model != null) {
+            for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
+                for (int valueIndex = 0; valueIndex < model.getValueCount(groupIndex); valueIndex++) {
+                    Object value = model.getValueAt(valueIndex, groupIndex);
+                    
+                    // 3. Ajoute les Component au conteneur Swing
+                    if (value instanceof Component) {
+                        add((Component) value);
+                    }
+                }
+            }
+        }
+        
+        // 4. Force le re-layout
+        revalidate();
+        repaint();
+    }
+    
+    
 }
