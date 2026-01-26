@@ -10,78 +10,143 @@ import javax.swing.plaf.basic.BasicPanelUI;
 
 /**
  * Implémentation basique de l'interface utilisateur pour HRibbon.
+ * Fournit le rendu visuel de base avec séparateurs de groupes.
  */
 public class BasicHRibbonUI extends BasicPanelUI {
     
     private static final BasicHRibbonUI instance = new BasicHRibbonUI();
     
-    // Couleurs par défaut (peuvent être surchargées par le L&F)
+    // Référence vers le ruban actuel
+    protected HRibbon ribbon;
+    
+    // Couleurs dérivées du Look and Feel
     protected Color ribbonBackground;
     protected Color groupDividerColor;
+    protected Color groupBorderColor;
     protected Color groupBackground;
     
     /**
      * Retourne une instance partagée (singleton pattern).
+     * 
+     * @param c le composant HRibbon
+     * @return l'instance BasicHRibbonUI
      */
     public static BasicHRibbonUI createUI(JComponent c) {
         return instance;
     }
     
+    /**
+     * Constructeur. Initialise les couleurs depuis le Look and Feel.
+     */
     public BasicHRibbonUI() {
-        // Initialise les couleurs avec des valeurs par défaut
-        ribbonBackground = UIManager.getColor("Panel.background");
-        if (ribbonBackground == null) {
-            ribbonBackground = new Color(250, 20, 4);
-        }
-        
-        groupDividerColor = UIManager.getColor("Separator.foreground");
-        if (groupDividerColor == null) {
-            groupDividerColor = new Color(200, 200, 200);
-        }
-        
-        groupBackground = UIManager.getColor("Panel.background");
+        initializeColors();
     }
     
+    /**
+     * Initialise les couleurs depuis le Look and Feel.
+     * Utilise des couleurs système pour une meilleure intégration.
+     */
+    protected void initializeColors() {
+        // Fond du ruban
+        ribbonBackground = UIManager.getColor("Panel.background");
+        if (ribbonBackground == null) {
+            ribbonBackground = UIManager.getColor("control");
+        }
+        if (ribbonBackground == null) {
+            ribbonBackground = new Color(240, 240, 240); // Gris clair par défaut
+        }
+        
+        // Couleur des séparateurs entre groupes
+        groupDividerColor = UIManager.getColor("Separator.foreground");
+        if (groupDividerColor == null) {
+            groupDividerColor = UIManager.getColor("controlShadow");
+        }
+        if (groupDividerColor == null) {
+            groupDividerColor = new Color(200, 200, 200); // Gris moyen
+        }
+        
+        // Couleur des bordures de groupe
+        groupBorderColor = UIManager.getColor("InternalFrame.borderShadow");
+        if (groupBorderColor == null) {
+            groupBorderColor = groupDividerColor;
+        }
+        
+        // Fond des groupes
+        groupBackground = UIManager.getColor("Panel.background");
+        if (groupBackground == null) {
+            groupBackground = Color.WHITE;
+        }
+    }
+    
+    /**
+     * Installe l'UI sur le composant.
+     * 
+     * @param c le composant HRibbon
+     */
     @Override
     public void installUI(JComponent c) {
         super.installUI(c);
-        HRibbon ribbon = (HRibbon) c;
+        
+        if (!(c instanceof HRibbon)) {
+            throw new IllegalArgumentException("BasicHRibbonUI can only be installed on HRibbon");
+        }
+        
+        ribbon = (HRibbon) c;
         
         // Configure les propriétés par défaut du ruban
         ribbon.setOpaque(true);
         ribbon.setBackground(ribbonBackground);
         ribbon.setFocusable(true);
         
-        // Installe les listeners spécifiques (à compléter selon besoin)
+        // Installe les listeners spécifiques
         installListeners(ribbon);
     }
     
+    /**
+     * Désinstalle l'UI du composant.
+     * 
+     * @param c le composant HRibbon
+     */
     @Override
     public void uninstallUI(JComponent c) {
-        HRibbon ribbon = (HRibbon) c;
-        uninstallListeners(ribbon);
+        if (ribbon != null) {
+            uninstallListeners(ribbon);
+            ribbon = null;
+        }
         super.uninstallUI(c);
     }
     
+    /**
+     * Peint le composant HRibbon.
+     * 
+     * @param g le contexte graphique
+     * @param c le composant HRibbon
+     */
     @Override
     public void paint(Graphics g, JComponent c) {
-        HRibbon ribbon = (HRibbon) c;
-        
-        // 1. Peint l'arrière-plan
-        paintBackground(g, ribbon);
-        
-        // 2. Récupère les positions des groupes (délégué au LayoutManager)
-        Rectangle[] groupBounds = getGroupBounds(ribbon);
-        
-        // 3. Peint les séparateurs entre groupes
-        if (groupBounds != null) {
-            paintGroupDividers(g, ribbon, groupBounds);
+        if (!(c instanceof HRibbon)) {
+            super.paint(g, c);
+            return;
         }
         
-        // 4. La peinture des composants est gérée par Swing
-        super.paint(g, c); // IMPORTANT: Appel parent pour peindre les enfants
+        HRibbon hRibbon = (HRibbon) c;
+        
+        // 1. Peint l'arrière-plan
+        paintBackground(g, hRibbon);
+        
+        // 2. Peint les groupes et leurs bordures
+        paintGroups(g, hRibbon);
+        
+        // 3. La peinture des composants enfants est gérée par Swing
+        super.paint(g, c);
     }
     
+    /**
+     * Peint l'arrière-plan du ruban.
+     * 
+     * @param g le contexte graphique
+     * @param ribbon le ruban à peindre
+     */
     public void paintBackground(Graphics g, HRibbon ribbon) {
         if (ribbon.isOpaque()) {
             g.setColor(ribbon.getBackground());
@@ -89,85 +154,169 @@ public class BasicHRibbonUI extends BasicPanelUI {
         }
     }
     
+    /**
+     * Peint les groupes et leurs bordures.
+     * 
+     * @param g le contexte graphique
+     * @param ribbon le ruban à peindre
+     */
+    public void paintGroups(Graphics g, HRibbon ribbon) {
+        HRibbonLayoutManager layout = ribbon.getRubanLayout();
+        if (layout == null) {
+            return;
+        }
+        
+        // Récupère les limites des groupes depuis le LayoutManager
+        Rectangle[] groupBounds = layout.getGroupBounds();
+        if (groupBounds == null || groupBounds.length == 0) {
+            return;
+        }
+        
+        // Peint les séparateurs entre groupes
+        paintGroupDividers(g, ribbon, groupBounds);
+        
+        // Optionnel: peint les fonds des groupes
+        paintGroupBackgrounds(g, ribbon, groupBounds);
+    }
+    
+    /**
+     * Peint les séparateurs entre les groupes.
+     * 
+     * @param g le contexte graphique
+     * @param ribbon le ruban
+     * @param groupBounds les limites de chaque groupe
+     */
     public void paintGroupDividers(Graphics g, HRibbon ribbon, Rectangle[] groupBounds) {
         g.setColor(groupDividerColor);
         
-        // Peint des séparateurs entre les groupes (sauf après le dernier)
+        // Peint des séparateurs verticaux entre les groupes
         for (int i = 0; i < groupBounds.length - 1; i++) {
             Rectangle bounds = groupBounds[i];
-            int x = bounds.x + bounds.width;
-            g.drawLine(x, bounds.y + 2, x, bounds.y + bounds.height - 4);
+            if (bounds != null) {
+                int x = bounds.x + bounds.width;
+                int top = bounds.y + 4;          // Marge en haut
+                int bottom = bounds.y + bounds.height - 4; // Marge en bas
+                
+                // Ligne verticale fine
+                g.drawLine(x, top, x, bottom);
+                
+                // Optionnel: ajoute un petit effet d'ombre
+                g.setColor(new Color(255, 255, 255, 100));
+                g.drawLine(x + 1, top, x + 1, bottom);
+                g.setColor(groupDividerColor);
+            }
         }
     }
     
+    /**
+     * Peint les fonds des groupes (optionnel).
+     * 
+     * @param g le contexte graphique
+     * @param ribbon le ruban
+     * @param groupBounds les limites de chaque groupe
+     */
+    public void paintGroupBackgrounds(Graphics g, HRibbon ribbon, Rectangle[] groupBounds) {
+        g.setColor(groupBackground);
+        
+        for (Rectangle bounds : groupBounds) {
+            if (bounds != null) {
+                // Peint un fond légèrement différent pour chaque groupe
+                g.fillRect(bounds.x + 1, bounds.y + 1, bounds.width - 2, bounds.height - 2);
+                
+                // Bordures légères autour du groupe
+                g.setColor(groupBorderColor);
+                g.drawRect(bounds.x, bounds.y, bounds.width - 1, bounds.height - 1);
+                g.setColor(groupBackground);
+            }
+        }
+    }
+    
+    /**
+     * Retourne les marges préférées autour du ruban.
+     * 
+     * @param ribbon le ruban
+     * @return les marges (insets)
+     */
     public Insets getPreferredMargins(HRibbon ribbon) {
-        // Marges internes du ruban
-        return new Insets(4, 4, 4, 4);
+        // Marges internes standard
+        return new Insets(4, 8, 4, 8);
     }
     
+    /**
+     * Retourne la hauteur préférée du ruban.
+     * Calcule dynamiquement basé sur le contenu.
+     * 
+     * @param ribbon le ruban
+     * @return la hauteur préférée en pixels
+     */
     public int getPreferredHeight(HRibbon ribbon) {
-        // Logique de calcul de hauteur
+        if (ribbon == null || ribbon.getGroupModel() == null) {
+            return 80; // Hauteur par défaut
+        }
+        
         int maxComponentHeight = 0;
+        HRibbonModel model = ribbon.getModel();
         
-        if (ribbon.getGroupModel() != null) {
-            for (int i = 0; i < ribbon.getGroupModel().getGroupCount(); i++) {
-                HRibbonGroup group = ribbon.getGroupModel().getHRibbonGroup(i);
-                // Calcule la hauteur maximale des composants dans ce groupe
-                maxComponentHeight = Math.max(maxComponentHeight, calculateGroupHeight(group));
+        if (model != null) {
+            // Parcourt tous les composants pour trouver la hauteur maximale
+            for (int i = 0; i < model.getGroupCount(); i++) {
+                int valueCount = model.getValueCount(i);
+                for (int j = 0; j < valueCount; j++) {
+                    Object value = model.getValueAt(j, i);
+                    if (value instanceof java.awt.Component) {
+                        java.awt.Component comp = (java.awt.Component) value;
+                        maxComponentHeight = Math.max(maxComponentHeight, comp.getPreferredSize().height);
+                    }
+                }
             }
         }
         
+        // Ajoute le padding des groupes
+        if (ribbon.getGroupModel().getGroupCount() > 0) {
+            HRibbonGroup firstGroup = ribbon.getGroupModel().getHRibbonGroup(0);
+            if (firstGroup != null) {
+                maxComponentHeight += firstGroup.getPadding() * 2;
+            }
+        }
+        
+        // Ajoute les marges du ruban
         Insets margins = getPreferredMargins(ribbon);
-        return maxComponentHeight + margins.top + margins.bottom;
-    }
-    
-    /**
-     * Calcule la hauteur d'un groupe basée sur ses composants.
-     */
-    private int calculateGroupHeight(HRibbonGroup group) {
-        // Pour l'instant, hauteur fixe
-        // À améliorer : calculer basé sur les composants réels
-        return 80; // Hauteur par défaut pour un groupe
-    }
-    
-    /**
-     * Calcule les limites de chaque groupe pour le peinture.
-     */
-    protected Rectangle[] getGroupBounds(HRibbon ribbon) {
-        if (ribbon.getGroupModel() == null) {
-            return null;
-        }
+        int totalHeight = maxComponentHeight + margins.top + margins.bottom;
         
-        int groupCount = ribbon.getGroupModel().getGroupCount();
-        Rectangle[] bounds = new Rectangle[groupCount];
-        
-        // Cette logique devrait idéalement venir du LayoutManager
-        int x = 0;
-        int margin = ribbon.getGroupModel().getHRibbonGroupMarggin();
-        
-        for (int i = 0; i < groupCount; i++) {
-            HRibbonGroup group = ribbon.getGroupModel().getHRibbonGroup(i);
-            if (group != null) {
-                bounds[i] = new Rectangle(x, 0, group.getWidth(), ribbon.getHeight());
-                x += group.getWidth() + margin;
-            }
-        }
-        
-        return bounds;
+        // Hauteur minimale garantie
+        return Math.max(totalHeight, 60);
     }
     
     /**
      * Installe les listeners spécifiques au ruban.
+     * 
+     * @param ribbon le ruban
      */
     protected void installListeners(HRibbon ribbon) {
-        // À compléter avec les listeners spécifiques
-        // (gestion souris, focus, etc.)
+        // À compléter selon les besoins :
+        // - Listeners de souris pour la sélection
+        // - Listeners de focus
+        // - Listeners de propriétés
     }
     
     /**
      * Désinstalle les listeners.
+     * 
+     * @param ribbon le ruban
      */
     protected void uninstallListeners(HRibbon ribbon) {
-        // À compléter
+        // À compléter pour nettoyer les listeners installés
+    }
+    
+    /**
+     * Met à jour les couleurs depuis le Look and Feel.
+     * Utile quand le Look and Feel change dynamiquement.
+     */
+    public void updateColors() {
+        initializeColors();
+        if (ribbon != null) {
+            ribbon.setBackground(ribbonBackground);
+            ribbon.repaint();
+        }
     }
 }
