@@ -197,7 +197,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
      * @param groupIndex index du groupe
      */
     public void addValue(Object value, int groupIndex) {
-        if (value == null) {
+         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
@@ -222,13 +222,14 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
      * @param groupIndex index du groupe
      */
     public void insertValueAt(Object value, int position, int groupIndex) {
-        if (value == null) {
+         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (position < 0 || position > group.size()) {
-                throw new IndexOutOfBoundsException("Position: " + position + ", Size: " + group.size());
+                throw new IndexOutOfBoundsException(
+                    "Position: " + position + ", Size: " + group.size());
             }
             group.add(position, value);
             fireValueAdded(groupIndex, position);

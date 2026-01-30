@@ -9,8 +9,11 @@ import java.awt.LayoutManager;
 import java.awt.Point;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Vector;
 import javax.swing.DefaultListSelectionModel;
@@ -129,21 +132,29 @@ public class HRibbon extends JComponent implements HRibbonModelListener, HRibbon
     private boolean groupSelectionAdjusting;
 
     /**
- * Ensemble des composants actuellement affichés dans le ruban.
- * Utilisé pour synchroniser l'affichage avec le modèle.
- */
-private Set<Component> displayedComponents = new HashSet<>();
+     * Ensemble des composants actuellement affichés dans le ruban. Utilisé pour
+     * synchroniser l'affichage avec le modèle.
+     */
+    private Set<Component> displayedComponents = new HashSet<>();
 
-/**
- * Indique si une synchronisation avec le modèle est en cours.
- * Empêche les boucles de notification récursives.
- */
-private boolean syncingWithModel = false;
+    /**
+     * Indique si une synchronisation avec le modèle est en cours. Empêche les
+     * boucles de notification récursives.
+     */
+    private boolean syncingWithModel = false;
+
+    private GroupRenderer groupRenderer;
     
     /**
      * Listener pour la suppression des éditeurs.
      */
     private PropertyChangeListener editorRemover = null;
+    
+     /**
+     * Cache des informations des components créés par le renderer.
+     * Map : Component -> (groupIndex, position, value)
+     */
+    private Map<Component, ComponentInfo> componentInfoMap = new HashMap<>();
 
     // =========================================================================
     // CONSTRUCTEURS
@@ -221,6 +232,10 @@ private boolean syncingWithModel = false;
         // S'inscrit comme listener des modèles
         this.model.addRibbonModelListener(this);
         this.groupModel.addHRibbonGroupModelListener(this);
+
+        this.autoCreateGroupsFromModel = true;
+        
+        this.groupRenderer = createDefaultGroupRenderer();
     }
 
     /**
@@ -286,6 +301,10 @@ private boolean syncingWithModel = false;
         return new DefaultListSelectionModel();
     }
 
+    protected GroupRenderer createDefaultGroupRenderer() {
+        return new DefaultGroupRenderer();
+    }
+    
     // =========================================================================
     // GESTION DE L'UI (Look and Feel)
     // =========================================================================
@@ -349,6 +368,21 @@ private boolean syncingWithModel = false;
         // À compléter quand un système de renderers sera implémenté
     }
 
+     public GroupRenderer getGroupRenderer() {
+        return groupRenderer;
+    }
+    
+    public void setGroupRenderer(GroupRenderer renderer) {
+        if (renderer == null) {
+            throw new IllegalArgumentException("GroupRenderer cannot be null");
+        }
+        this.groupRenderer = renderer;
+        // Force une mise à jour de l'affichage
+        syncComponentsWithModel();
+        revalidate();
+        repaint();
+    }
+    
 //    /**
 //     * Supprime un groupe du ruban.
 //     */
@@ -378,7 +412,6 @@ private boolean syncingWithModel = false;
 
         return groupModel.getHRibbonGroupIndexAtX(x);
     }
-  
 
     /**
      * Définit le mode de répartition des groupes.
@@ -609,270 +642,315 @@ private boolean syncingWithModel = false;
     // =========================================================================
     // IMPLÉMENTATION DE HRibbonModelListener
     // =========================================================================
-    
-    
     /**
- * Synchronise les composants affichés avec le modèle de données.
- * Cette méthode est appelée lorsqu'un changement est détecté dans le modèle.
- */
-private void syncComponentsWithModel() {
-    if (syncingWithModel || model == null) {
+     * Synchronise les composants affichés avec le modèle de données. Cette
+     * méthode est appelée lorsqu'un changement est détecté dans le modèle.
+     */
+    private void syncComponentsWithModel() {
+         if (syncingWithModel || model == null || groupRenderer == null) {
         return;
     }
     
     syncingWithModel = true;
     
     try {
-        // 1. Créer un ensemble des composants qui DEVRAIENT être affichés
+        // VIDER LE CACHE ANCIEN
+        Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
         Set<Component> expectedComponents = new HashSet<>();
         
+        // 1. PARCOURIR TOUT LE MODÈLE
         for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
             int valueCount = model.getValueCount(groupIndex);
             for (int position = 0; position < valueCount; position++) {
                 Object value = model.getValueAt(position, groupIndex);
-                if (value instanceof Component) {
-                    expectedComponents.add((Component) value);
+                
+                // 2. CRÉER OU RÉCUPÉRER LE COMPONENT
+                Component component = createComponentForValue(value, groupIndex, position);
+                
+                if (component != null) {
+                    // 3. AJOUTER AU CACHE
+                    newComponentInfoMap.put(component, 
+                        new ComponentInfo(groupIndex, position, value));
+                    expectedComponents.add(component);
                 }
             }
         }
         
-        // 2. Retirer les composants qui ne devraient PLUS être affichés
+        // 4. IDENTIFIER LES CHANGEMENTS
         Set<Component> toRemove = new HashSet<>(displayedComponents);
         toRemove.removeAll(expectedComponents);
         
+        Set<Component> toAdd = new HashSet<>(expectedComponents);
+        toAdd.removeAll(displayedComponents);
+        
+        // 5. APPLIQUER LES CHANGEMENTS
         for (Component comp : toRemove) {
             removeComponentFromContainer(comp);
         }
-        
-        // 3. Ajouter les composants qui devraient être affichés mais ne le sont PAS
-        Set<Component> toAdd = new HashSet<>(expectedComponents);
-        toAdd.removeAll(displayedComponents);
         
         for (Component comp : toAdd) {
             addComponentToContainer(comp);
         }
         
-        // 4. Mettre à jour la liste des composants affichés
-        displayedComponents.clear();
-        displayedComponents.addAll(expectedComponents);
+        // 6. METTRE À JOUR LES CACHES
+        displayedComponents = expectedComponents;
+        componentInfoMap = newComponentInfoMap; // ← METTRE À JOUR LE CACHE
         
     } finally {
         syncingWithModel = false;
     }
-}
+    }
 
+    /**
+     * Crée un Component pour une valeur en utilisant le GroupRenderer.
+     */
+    private Component createComponentForValue(Object value, int groupIndex, int position) {
+        if (value == null) {
+            return null;
+        }
+        
+        // Si la valeur est déjà un Component, on le retourne tel quel
+        if (value instanceof Component) {
+            return (Component) value;
+        }
+        
+        // Sinon, on utilise le renderer
+        return groupRenderer.getGroupComponent(
+            this,           // HRibbon
+            value,          // Objet à rendre
+            groupIndex,     // Index du groupe
+            position,       // Position dans le groupe
+            false,          // isSelected (à implémenter plus tard)
+            false           // hasFocus (à implémenter plus tard)
+        );
+    }
     
+    /**
+     * Classe interne pour stocker les infos d'un component.
+     */
+    private static class ComponentInfo {
+        final int groupIndex;
+        final int position;
+        final Object value;
+        
+        ComponentInfo(int groupIndex, int position, Object value) {
+            this.groupIndex = groupIndex;
+            this.position = position;
+            this.value = value;
+        }
+    }
     
+   
     /**
      * Reçoit les notifications de changement du modèle de données.
      */
-   @Override
-public void ribbonChanged(HRibbonModelEvent e) {
-    // Synchronise d'abord les composants avec le modèle
-    syncComponentsWithModel();
-    
-    // Ensuite, gère les changements spécifiques
-    if (e.isGlobalChange()) {
-        handleGlobalChange();
-    } else if (e.isGroupChange()) {
-        handleGroupChange(e);
-    } else if (e.isValueChange()) {
-        handleValueChange(e);
+    @Override
+    public void ribbonChanged(HRibbonModelEvent e) {
+        // Synchronise d'abord les composants avec le modèle
+        syncComponentsWithModel();
+
+        // Ensuite, gère les changements spécifiques
+        if (e.isGlobalChange()) {
+            handleGlobalChange();
+        } else if (e.isGroupChange()) {
+            handleGroupChange(e);
+        } else if (e.isValueChange()) {
+            handleValueChange(e);
+        }
+
+        // Force le layout à recalculer
+        if (layout != null) {
+            layout.invalidateLayout(this);
+        }
+
+        revalidate();
+        repaint();
     }
-    
-    // Force le layout à recalculer
-    if (layout != null) {
-        layout.invalidateLayout(this);
-    }
-    
-    revalidate();
-    repaint();
-}
 
     /**
- * Gère un changement global (toutes données).
- */
-private void handleGlobalChange() {
-     // La synchronisation a déjà été faite par syncComponentsWithModel()
-    // Il ne reste qu'à gérer la création des groupes si nécessaire
-    if (autoCreateGroupsFromModel && groupModel != null) {
-        createGroupsFromModel();
-    }
-}
-
-/**
- * Gère les changements au niveau groupe (ajout/suppression/déplacement).
- */
-private void handleGroupChange(HRibbonModelEvent e) {
-    // La synchronisation a déjà été faite par syncComponentsWithModel()
-    // Gestion spécifique des groupes pour l'auto-création
-    if (autoCreateGroupsFromModel && groupModel != null) {
-        int groupIndex = e.getGroupIndex();
-        
-        switch (e.getType()) {
-            case HRibbonModelEvent.INSERT:
-                Object groupIdentifier = model.getGroupIdentifier(groupIndex);
-                groupModel.addGroup(groupIdentifier);
-                break;
-                
-            case HRibbonModelEvent.DELETE:
-                groupModel.removeGroup(groupIndex);
-                break;
-                
-            case HRibbonModelEvent.MOVE:
-                groupModel.moveGroup(e.getPosition(), e.getToPosition());
-                break;
+     * Gère un changement global (toutes données).
+     */
+    private void handleGlobalChange() {
+        // La synchronisation a déjà été faite par syncComponentsWithModel()
+        // Il ne reste qu'à gérer la création des groupes si nécessaire
+        if (autoCreateGroupsFromModel && groupModel != null) {
+            createGroupsFromModel();
         }
     }
-}
 
-/**
- * Gère les changements au niveau valeur (composant).
- */
-private void handleValueChange(HRibbonModelEvent e) {
-    // La synchronisation a déjà été faite par syncComponentsWithModel()
-    // Pas d'action supplémentaire nécessaire
-    // Les composants ont déjà été ajoutés/retirés
-}
+    /**
+     * Gère les changements au niveau groupe (ajout/suppression/déplacement).
+     */
+    private void handleGroupChange(HRibbonModelEvent e) {
+        // La synchronisation a déjà été faite par syncComponentsWithModel()
+        // Gestion spécifique des groupes pour l'auto-création
+        if (autoCreateGroupsFromModel && groupModel != null) {
+            int groupIndex = e.getGroupIndex();
+
+            switch (e.getType()) {
+                case HRibbonModelEvent.INSERT:
+                    Object groupIdentifier = model.getGroupIdentifier(groupIndex);
+                    groupModel.addGroup(groupIdentifier);
+                    break;
+
+                case HRibbonModelEvent.DELETE:
+                    groupModel.removeGroup(groupIndex);
+                    break;
+
+                case HRibbonModelEvent.MOVE:
+                    groupModel.moveGroup(e.getPosition(), e.getToPosition());
+                    break;
+            }
+        }
+    }
+
+    /**
+     * Gère les changements au niveau valeur (composant).
+     */
+    private void handleValueChange(HRibbonModelEvent e) {
+        // La synchronisation a déjà été faite par syncComponentsWithModel()
+        // Pas d'action supplémentaire nécessaire
+        // Les composants ont déjà été ajoutés/retirés
+    }
 
 // =========================================================================
 // MÉTHODES PRIVÉES POUR LA GESTION DES COMPOSANTS
 // =========================================================================
-
-/**
- * Ajoute un composant physique au conteneur HRibbon.
- * Méthode package-private pour usage interne.
- */
-void addComponentToContainer(Component component) {
-    if (component != null && component.getParent() != this) {
-        super.add(component); // Appel à JComponent.add()
-        displayedComponents.add(component);
-    }
-}
-
-/**
- * Retire un composant physique du conteneur HRibbon.
- */
-private void removeComponentFromContainer(Component component) {
-    if (component != null && component.getParent() == this) {
-        super.remove(component); // Appel à JComponent.remove()
-        displayedComponents.remove(component);
-    }
-}
-
-/**
- * Retire tous les composants du conteneur HRibbon.
- */
-private void removeAllComponents() {
-    Component[] components = getComponents();
-    for (Component comp : components) {
-        super.remove(comp);
-    }
-    displayedComponents.clear();
-}
-
-/**
- * Ajoute tous les composants d'un groupe depuis le modèle.
- */
-private void addAllComponentsFromGroup(int groupIndex) {
-    if (model == null) return;
-    
-    int valueCount = model.getValueCount(groupIndex);
-    for (int position = 0; position < valueCount; position++) {
-        Object value = model.getValueAt(position, groupIndex);
-        if (value instanceof Component) {
-            addComponentToContainer((Component) value);
+    /**
+     * Ajoute un composant physique au conteneur HRibbon. Méthode
+     * package-private pour usage interne.
+     */
+    void addComponentToContainer(Component component) {
+        if (component != null && component.getParent() != this) {
+            super.add(component); // Appel à JComponent.add()
+            displayedComponents.add(component);
         }
     }
-}
 
-/**
- * Retire tous les composants d'un groupe.
- */
-private void removeAllComponentsFromGroup(int groupIndex) {
-    // Trouve tous les composants de ce groupe et les retire
-    // Note: Cette implémentation nécessite de savoir quel composant appartient à quel groupe
-    // Pour l'instant, nous allons simplifier et rafraîchir tout
-    // Une optimisation serait d'ajouter un mapping groupe->composants
-    handleGlobalChange(); // Solution temporaire
-}
-
-/**
- * Retire un composant spécifique à une position dans un groupe.
- */
-private void removeComponentAt(int position, int groupIndex) {
-    // Pour trouver le bon composant, nous devons parcourir tous les composants
-    // et vérifier s'ils correspondent à cette position/groupe
-    // Solution temporaire : rafraîchir tout
-    handleGlobalChange();
-}
-
-/**
- * Rafraîchit l'affichage d'un composant.
- */
-private void refreshComponentAt(int position, int groupIndex) {
-    // Invalide le composant pour forcer un repaint
-    Object value = model.getValueAt(position, groupIndex);
-    if (value instanceof Component) {
-        Component comp = (Component) value;
-        comp.revalidate();
-        comp.repaint();
+    /**
+     * Retire un composant physique du conteneur HRibbon.
+     */
+    private void removeComponentFromContainer(Component component) {
+        if (component != null && component.getParent() == this) {
+            super.remove(component); // Appel à JComponent.remove()
+            displayedComponents.remove(component);
+        }
     }
-}
 
-/**
- * Gère le déplacement d'un groupe (réindexation des composants).
- */
-private void handleGroupMove(int fromIndex, int toIndex) {
-    // Pour l'instant, rafraîchir tout
-    // Une optimisation consisterait à déplacer seulement les composants concernés
-    handleGlobalChange();
-}
+    /**
+     * Retire tous les composants du conteneur HRibbon.
+     */
+    private void removeAllComponents() {
+        Component[] components = getComponents();
+        for (Component comp : components) {
+            super.remove(comp);
+        }
+        displayedComponents.clear();
+    }
+
+    /**
+     * Ajoute tous les composants d'un groupe depuis le modèle.
+     */
+    private void addAllComponentsFromGroup(int groupIndex) {
+        if (model == null) {
+            return;
+        }
+
+        int valueCount = model.getValueCount(groupIndex);
+        for (int position = 0; position < valueCount; position++) {
+            Object value = model.getValueAt(position, groupIndex);
+            if (value instanceof Component) {
+                addComponentToContainer((Component) value);
+            }
+        }
+    }
+
+    /**
+     * Retire tous les composants d'un groupe.
+     */
+    private void removeAllComponentsFromGroup(int groupIndex) {
+        // Trouve tous les composants de ce groupe et les retire
+        // Note: Cette implémentation nécessite de savoir quel composant appartient à quel groupe
+        // Pour l'instant, nous allons simplifier et rafraîchir tout
+        // Une optimisation serait d'ajouter un mapping groupe->composants
+        handleGlobalChange(); // Solution temporaire
+    }
+
+    /**
+     * Retire un composant spécifique à une position dans un groupe.
+     */
+    private void removeComponentAt(int position, int groupIndex) {
+        // Pour trouver le bon composant, nous devons parcourir tous les composants
+        // et vérifier s'ils correspondent à cette position/groupe
+        // Solution temporaire : rafraîchir tout
+        handleGlobalChange();
+    }
+
+    /**
+     * Rafraîchit l'affichage d'un composant.
+     */
+    private void refreshComponentAt(int position, int groupIndex) {
+        // Invalide le composant pour forcer un repaint
+        Object value = model.getValueAt(position, groupIndex);
+        if (value instanceof Component) {
+            Component comp = (Component) value;
+            comp.revalidate();
+            comp.repaint();
+        }
+    }
+
+    /**
+     * Gère le déplacement d'un groupe (réindexation des composants).
+     */
+    private void handleGroupMove(int fromIndex, int toIndex) {
+        // Pour l'instant, rafraîchir tout
+        // Une optimisation consisterait à déplacer seulement les composants concernés
+        handleGlobalChange();
+    }
 
 // =========================================================================
 // REDÉFINITION DES MÉTHODES D'AJOUT DE COMPOSANT
 // =========================================================================
+    /**
+     * Empêche l'ajout direct de composants au HRibbon. Les composants doivent
+     * passer par le modèle.
+     */
+    @Override
+    public Component add(Component comp) {
+        throw new UnsupportedOperationException(
+                "Use addComponent() or modify the HRibbonModel to add components"
+        );
+    }
 
-/**
- * Empêche l'ajout direct de composants au HRibbon.
- * Les composants doivent passer par le modèle.
- */
-@Override
-public Component add(Component comp) {
-    throw new UnsupportedOperationException(
-        "Use addComponent() or modify the HRibbonModel to add components"
-    );
-}
+    /**
+     * Empêche l'ajout direct de composants au HRibbon.
+     */
+    @Override
+    public Component add(Component comp, int index) {
+        throw new UnsupportedOperationException(
+                "Use insertComponent() or modify the HRibbonModel to add components"
+        );
+    }
 
-/**
- * Empêche l'ajout direct de composants au HRibbon.
- */
-@Override
-public Component add(Component comp, int index) {
-    throw new UnsupportedOperationException(
-        "Use insertComponent() or modify the HRibbonModel to add components"
-    );
-}
+    /**
+     * Empêche l'ajout direct de composants au HRibbon.
+     */
+    @Override
+    public void add(Component comp, Object constraints) {
+        throw new UnsupportedOperationException(
+                "Components must be added through the HRibbonModel"
+        );
+    }
 
-/**
- * Empêche l'ajout direct de composants au HRibbon.
- */
-@Override
-public void add(Component comp, Object constraints) {
-    throw new UnsupportedOperationException(
-        "Components must be added through the HRibbonModel"
-    );
-}
-
-/**
- * Empêche l'ajout direct de composants au HRibbon.
- */
-@Override
-public void add(Component comp, Object constraints, int index) {
-    throw new UnsupportedOperationException(
-        "Components must be added through the HRibbonModel"
-    );
-}
+    /**
+     * Empêche l'ajout direct de composants au HRibbon.
+     */
+    @Override
+    public void add(Component comp, Object constraints, int index) {
+        throw new UnsupportedOperationException(
+                "Components must be added through the HRibbonModel"
+        );
+    }
 
     // =========================================================================
     // IMPLÉMENTATION DE HRibbonGroupListener
@@ -964,18 +1042,18 @@ public void add(Component comp, Object constraints, int index) {
      */
     public void addComponent(Component component, int groupIndex) {
         if (component == null) {
-        throw new IllegalArgumentException("Component cannot be null");
-    }
-    
-    if (model instanceof DefaultHRibbonModel) {
-        DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-        defaultModel.addValue(component, groupIndex);
-        // Le modèle notifiera HRibbon via ribbonChanged()
-        // qui appellera syncComponentsWithModel()
-    } else {
-        throw new UnsupportedOperationException(
-                "Model does not support adding components directly");
-    }
+            throw new IllegalArgumentException("Component cannot be null");
+        }
+
+        if (model instanceof DefaultHRibbonModel) {
+            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
+            defaultModel.addValue(component, groupIndex); // Component est un Object
+            // Le modèle notifiera HRibbon via ribbonChanged()
+            // qui appellera syncComponentsWithModel()
+        } else {
+            throw new UnsupportedOperationException(
+                    "Model does not support adding components directly");
+        }
     }
 
     /**
@@ -986,20 +1064,50 @@ public void add(Component comp, Object constraints, int index) {
      */
     public void addComponent(Component component, Object groupIdentifier) {
         if (component == null) {
-        throw new IllegalArgumentException("Component cannot be null");
-    }
-    
-    if (model instanceof DefaultHRibbonModel) {
-        DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-        defaultModel.addValue(component, groupIdentifier);
-        // Le modèle notifiera HRibbon via ribbonChanged()
-        // qui appellera syncComponentsWithModel()
-    } else {
-        throw new UnsupportedOperationException(
-                "Model does not support adding components directly");
-    }
+            throw new IllegalArgumentException("Component cannot be null");
+        }
+
+        if (model instanceof DefaultHRibbonModel) {
+            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
+            defaultModel.addValue(component, groupIdentifier);
+            // Le modèle notifiera HRibbon via ribbonChanged()
+            // qui appellera syncComponentsWithModel()
+        } else {
+            throw new UnsupportedOperationException(
+                    "Model does not support adding components directly");
+        }
     }
 
+    public void addValue(Object value, int groupIndex) {
+        if (value == null) {
+            throw new IllegalArgumentException("Value cannot be null");
+        }
+        
+        if (model instanceof DefaultHRibbonModel) {
+            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
+            defaultModel.addValue(value, groupIndex);
+        } else {
+            throw new UnsupportedOperationException(
+                "Model does not support adding values");
+        }
+    }
+    
+    public void insertValue(Object value, int position, int groupIndex) {
+        if (value == null) {
+            throw new IllegalArgumentException("Value cannot be null");
+        }
+        
+        if (model instanceof DefaultHRibbonModel) {
+            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
+            defaultModel.insertValueAt(value, position, groupIndex);
+        } else {
+            throw new UnsupportedOperationException(
+                "Model does not support inserting values");
+        }
+    }
+    
+    
+    
     /**
      * Déplace un composant dans un groupe.
      *
@@ -1017,6 +1125,8 @@ public void add(Component comp, Object constraints, int index) {
         }
     }
 
+    
+    
     /**
      * Supprime un composant d'un groupe.
      *
@@ -1095,8 +1205,10 @@ public void add(Component comp, Object constraints, int index) {
             throw new IllegalArgumentException("Group identifier cannot be null");
         }
 
-        if (groupModel != null) {
-            groupModel.addGroup(groupIdentifier);
+        if (model instanceof DefaultHRibbonModel) {
+            ((DefaultHRibbonModel) model).addGroup(groupIdentifier);
+            // Le reste est géré automatiquement par les listeners
+            return;
         }
     }
 
@@ -1112,7 +1224,7 @@ public void add(Component comp, Object constraints, int index) {
         }
 
         if (groupModel != null) {
-            groupModel.addGroup(group);
+            addGroup(group.getGroupIdentifier());
         }
     }
 
@@ -1334,16 +1446,16 @@ public void add(Component comp, Object constraints, int index) {
      */
     public void insertComponent(Component component, int position, int groupIndex) {
         if (component == null) {
-        throw new IllegalArgumentException("Component cannot be null");
-    }
-    
-    if (model instanceof DefaultHRibbonModel) {
-        DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-        defaultModel.insertValueAt(component, position, groupIndex);
-    } else {
-        throw new UnsupportedOperationException(
-                "Model does not support inserting components");
-    }
+            throw new IllegalArgumentException("Component cannot be null");
+        }
+
+        if (model instanceof DefaultHRibbonModel) {
+            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
+            defaultModel.insertValueAt(component, position, groupIndex);
+        } else {
+            throw new UnsupportedOperationException(
+                    "Model does not support inserting components");
+        }
     }
 
     /**
@@ -1414,6 +1526,52 @@ public void add(Component comp, Object constraints, int index) {
         } else {
             throw new UnsupportedOperationException(
                     "Model does not support clearing groups");
+        }
+    }
+
+    /**
+ * Retourne le Component correspondant à une valeur spécifique dans le modèle.
+ * Utilisé par le LayoutManager pour obtenir les Components à positionner.
+ * 
+ * @param value la valeur dans le modèle
+ * @param groupIndex l'index du groupe
+ * @param position la position dans le groupe
+ * @return le Component associé, ou null si non trouvé
+ */
+public Component getComponentForValue(Object value, int groupIndex, int position) {
+    // 1. Vérifie les paramètres
+    if (value == null) {
+        return null;
+    }
+    
+    // 2. Parcourt le cache componentInfoMap
+    for (Map.Entry<Component, ComponentInfo> entry : componentInfoMap.entrySet()) {
+        ComponentInfo info = entry.getValue();
+        
+        // Compare les indices ET les valeurs (avec equals() pour les objets)
+        if (info.groupIndex == groupIndex && 
+            info.position == position && 
+            Objects.equals(info.value, value)) {
+            return entry.getKey();
+        }
+    }
+    
+    // 3. Si non trouvé dans le cache, essaie de le créer via le renderer
+    return createComponentForValue(value, groupIndex, position);
+}
+    
+/**
+     * Classe interne pour stocker les informations d'un component.
+     */
+    private static class ComponentInfo {
+        final int groupIndex;
+        final int position;
+        final Object value;
+        
+        ComponentInfo(int groupIndex, int position, Object value) {
+            this.groupIndex = groupIndex;
+            this.position = position;
+            this.value = value;
         }
     }
 
