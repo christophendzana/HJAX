@@ -236,31 +236,32 @@ public class HRibbonLayoutManager implements LayoutManager2 {
      * @return map groupIndex -> liste des composants dans ce groupe
      */
     private Map<Integer, List<Component>> organizeComponentsByGroup(HRibbon hRibbon, HRibbonModel model) {
-        Map<Integer, List<Component>> componentsByGroup = new HashMap<>();
+       Map<Integer, List<Component>> componentsByGroup = new HashMap<>();
+    
+    // Parcourt tous les groupes du modèle
+    for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
+        List<Component> groupComponents = new ArrayList<>();
         
-        // Parcourt tous les groupes du modèle
-        for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
-            List<Component> groupComponents = new ArrayList<>();
+        // Parcourt toutes les valeurs dans ce groupe
+        int valueCount = model.getValueCount(groupIndex);
+        for (int position = 0; position < valueCount; position++) {
+            // 1. Récupère la valeur du modèle
+            Object value = model.getValueAt(position, groupIndex);
             
-            // Parcourt toutes les positions dans ce groupe
-            int valueCount = model.getValueCount(groupIndex);
-            for (int position = 0; position < valueCount; position++) {
-                Object value = model.getValueAt(position, groupIndex);
-                if (value instanceof Component) {
-                    Component comp = (Component) value;
-                    
-                    // Vérifie que le composant est bien un enfant du HRibbon
-                    if (comp.getParent() == hRibbon) {
-                        groupComponents.add(comp);
-                    }
-                }
+            // 2. DEMANDE AU HRibbon LE COMPONENT CORRESPONDANT
+            Component comp = hRibbon.getComponentForValue(value, groupIndex, position);
+            
+            // 3. Vérifie que le composant existe et est bien dans le HRibbon
+            if (comp != null && comp.getParent() == hRibbon) {
+                groupComponents.add(comp);
             }
-            
-            // Ajoute la liste au map (même si vide)
-            componentsByGroup.put(groupIndex, groupComponents);
         }
         
-        return componentsByGroup;
+        // Ajoute la liste au map (même si vide)
+        componentsByGroup.put(groupIndex, groupComponents);
+    }
+    
+    return componentsByGroup;
     }
     
     /**
@@ -304,64 +305,118 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     private void layoutComponentsInGroup(List<Component> components,
                                         Rectangle groupRect,
                                         HRibbonGroup group) {
-        if (components.isEmpty()) {
-            return; // Rien à positionner
+       if (components.isEmpty()) {
+        return;
+    }
+    
+    // Récupère les paramètres du groupe
+    int padding = group.getPadding();
+    int spacing = group.getComponentSpacing();
+    
+    // Zone intérieure disponible
+    int innerX = groupRect.x + padding;
+    int innerY = groupRect.y + padding;
+    int innerWidth = groupRect.width - (2 * padding);
+    int innerHeight = groupRect.height - (2 * padding);
+    
+    // 1. ORGANISATION EN LIGNES OPTIMISÉES
+    List<List<Component>> lines = organizeComponentsIntoLines(components, innerWidth, spacing);
+    
+    // 2. POSITIONNEMENT DE CHAQUE LIGNE
+    int currentY = innerY;
+    
+    for (List<Component> line : lines) {
+        // Calcule la hauteur de la ligne
+        int lineHeight = calculateLineHeight(line);
+        
+        // Vérifie qu'il reste de la place verticale
+        if (currentY + lineHeight > innerY + innerHeight) {
+            break;
         }
         
-        // Récupère les paramètres du groupe
-        int padding = group.getPadding();
-        int spacing = group.getComponentSpacing();
+        // Positionne la ligne
+        positionLine(line, innerX, currentY, spacing, lineHeight);
         
-        // Limites intérieures du groupe (avec padding)
-        int innerX = groupRect.x + padding;
-        int innerY = groupRect.y + padding;
-        int innerWidth = groupRect.width - (2 * padding);
-        int innerHeight = groupRect.height - (2 * padding);
+        // Passe à la ligne suivante
+        currentY += lineHeight + spacing;
+    }
+    }
+    
+    /**
+ * Organise les composants en lignes optimisées.
+ */
+private List<List<Component>> organizeComponentsIntoLines(List<Component> components,
+                                                         int maxLineWidth,
+                                                         int spacing) {
+    List<List<Component>> lines = new ArrayList<>();
+    List<Component> currentLine = new ArrayList<>();
+    int currentLineWidth = 0;
+    
+    for (Component comp : components) {
+        int compWidth = comp.getPreferredSize().width;
+        int requiredWidth = compWidth;
         
-        // Position courante à l'intérieur du groupe
-        int currentX = innerX;
-        int currentY = innerY;
+        // Ajoute l'espacement si ce n'est pas le premier de la ligne
+        if (!currentLine.isEmpty()) {
+            requiredWidth += spacing;
+        }
         
-        // Hauteur de la ligne courante
-        int lineHeight = 0;
-        
-        for (Component comp : components) {
-            // Taille préférée du composant
-            Dimension prefSize = comp.getPreferredSize();
-            int compWidth = prefSize.width;
-            int compHeight = prefSize.height;
-            
-            // Vérifie si le composant rentre sur la ligne actuelle
-            boolean fitsOnCurrentLine = (currentX + compWidth) <= (innerX + innerWidth);
-            
-            if (!fitsOnCurrentLine && currentX > innerX) {
-                // Le composant ne rentre pas : passe à la ligne suivante
-                currentX = innerX;
-                currentY += lineHeight + spacing;
-                lineHeight = 0;
+        // Vérifie si le composant rentre dans la ligne actuelle
+        if (currentLineWidth + requiredWidth <= maxLineWidth) {
+            // Ajoute à la ligne actuelle
+            currentLine.add(comp);
+            currentLineWidth += requiredWidth;
+        } else {
+            // Nouvelle ligne
+            if (!currentLine.isEmpty()) {
+                lines.add(currentLine);
             }
-            
-            // Ajuste la largeur si nécessaire (composant trop large)
-            if (compWidth > innerWidth) {
-                compWidth = innerWidth;
-            }
-            
-            // Positionne le composant
-            comp.setBounds(currentX, currentY, compWidth, compHeight);
-            
-            // Avance la position X
-            currentX += compWidth + spacing;
-            
-            // Met à jour la hauteur de ligne
-            lineHeight = Math.max(lineHeight, compHeight);
-            
-            // Vérifie si on dépasse la hauteur du groupe
-            if (currentY + lineHeight > innerY + innerHeight) {
-                // Pas assez de place verticale, on arrête
-                break;
-            }
+            currentLine = new ArrayList<>();
+            currentLine.add(comp);
+            currentLineWidth = compWidth;
         }
     }
+    
+    // Ajoute la dernière ligne
+    if (!currentLine.isEmpty()) {
+        lines.add(currentLine);
+    }
+    
+    return lines;
+}
+
+/**
+ * Positionne une ligne de composants horizontalement.
+ */
+private void positionLine(List<Component> line,
+                         int startX,
+                         int lineY,
+                         int spacing,
+                         int lineHeight) {
+    int currentX = startX;
+    
+    for (Component comp : line) {
+        Dimension prefSize = comp.getPreferredSize();
+        int compHeight = Math.min(prefSize.height, lineHeight);
+        
+        // Centre verticalement dans la ligne
+        int compY = lineY + (lineHeight - compHeight) / 2;
+        
+        comp.setBounds(currentX, compY, prefSize.width, compHeight);
+        currentX += prefSize.width + spacing;
+    }
+}
+
+/**
+ * Calcule la hauteur maximale d'une ligne.
+ */
+private int calculateLineHeight(List<Component> line) {
+    int maxHeight = 0;
+    for (Component comp : line) {
+        maxHeight = Math.max(maxHeight, comp.getPreferredSize().height);
+    }
+    return maxHeight;
+}
     
     // =========================================================================
     // CALCUL DES TAILLES PRÉFÉRÉES, MINIMALES ET MAXIMALES

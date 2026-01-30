@@ -1,84 +1,93 @@
 /*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
+ * HRibbonGroup.java
+ * Représente un groupe dans le ruban, décrivant uniquement la présentation d'un groupe de données.
+ * Analogie stricte avec TableColumn dans JTable : cette classe ne stocke PAS les données, 
+ * seulement la configuration d'affichage (largeur, padding, marges, etc.).
+ * 
+ * @see javax.swing.table.TableColumn
+ * @see hcomponents.HRibbon.HRibbonModel
  */
+
 package hcomponents.HRibbon;
 
-import javax.swing.JComponent;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 import javax.swing.event.SwingPropertyChangeSupport;
 
-/**
- * Représente un groupe dans le ruban, contenant plusieurs composants.
- * Analogie : similaire à TableColumn dans JTable, mais adapté pour un ruban. 
- * 
- * @see javax.swing.table.TableColumn
- */
 public class HRibbonGroup {
-
+    
     // =========================================================================
     // PROPRIÉTÉS D'IDENTIFICATION
     // =========================================================================
     
-    /** Identifiant unique du groupe (peut être utilisé comme nom). */
+    /**
+     * Identifiant unique du groupe, utilisé pour le lier à une colonne de données
+     * dans le HRibbonModel. Correspond au groupIdentifier du modèle.
+     */
     private Object groupIdentifier;
     
-    /** Valeur affichée dans l'en-tête du groupe (si différent de l'identifiant). */
+    /**
+     * Texte affiché dans l'en-tête du groupe. Peut être différent de groupIdentifier
+     * pour l'internationalisation ou l'affichage.
+     */
     private Object headerValue;
     
-    /** Index de ce groupe dans le modèle de données. */
+    /**
+     * Index de ce groupe dans le HRibbonModel. Permet de savoir quelle colonne
+     * de données ce groupe représente.
+     */
     private int modelIndex;
-    
-    /** Index de ce groupe dans la vue (peut différer si les groupes sont réorganisés). */
-    private int viewIndex = -1;
     
     // =========================================================================
     // PROPRIÉTÉS DE DIMENSIONNEMENT
     // =========================================================================
     
-    /** Largeur actuelle du groupe en pixels. */
+    /**
+     * Largeur actuelle du groupe en pixels, telle affichée à l'écran.
+     */
     private int width;
     
-    /** Largeur préférée du groupe en pixels. */
+    /**
+     * Largeur préférée du groupe en pixels, utilisée pour le calcul du layout.
+     */
     private int preferredWidth;
     
-    /** Largeur minimale autorisée pour ce groupe. */
-    private int minWidth;
+    /**
+     * Largeur minimale autorisée pour ce groupe. 0 = pas de minimum imposé.
+     */
+    private int minWidth = 50;
     
-    /** Largeur maximale autorisée pour ce groupe. */
-    private int maxWidth;
+    /**
+     * Largeur maximale autorisée pour ce groupe. 0 = pas de maximum imposé.
+     */
+    private int maxWidth = 0;
     
-    /** Largeur par défaut du groupe (utilisée pour l'initialisation). */
-    private int defaultWidth = 75;
-    
-    /** Indique si l'utilisateur peut redimensionner ce groupe. */
+    /**
+     * Indique si l'utilisateur peut redimensionner ce groupe via l'interface.
+     */
     private boolean isResizable = true;
     
     // =========================================================================
-    // PROPRIÉTÉS DE MISE EN PAGE
+    // PROPRIÉTÉS DE MISE EN PAGE INTERNE
     // =========================================================================
     
-    /** Espacement entre les composants à l'intérieur du groupe. */
+    /**
+     * Espacement horizontal entre les composants Swing à l'intérieur du groupe.
+     */
     private int componentSpacing = 2;
     
-    /** Marge interne (padding) du groupe. */
+    /**
+     * Marge interne (padding) du groupe, entre la bordure et les composants.
+     */
     private int padding = 6;
     
     // =========================================================================
-    // DONNÉES
+    // SUPPORT POUR LES NOTIFICATIONS (PATTERN OBSERVER)
     // =========================================================================
     
-    /** Liste des composants contenus dans ce groupe. */
-    private ArrayList<Object> components;
-    
-    // =========================================================================
-    // SUPPORT POUR LES NOTIFICATIONS
-    // =========================================================================
-    
-    /** Gestionnaire des écouteurs de changement de propriétés. */
+    /**
+     * Gestionnaire des écouteurs PropertyChangeListener, notifie les changements
+     * de propriétés (largeur, padding, etc.) aux composants intéressés.
+     */
     private SwingPropertyChangeSupport changeSupport;
     
     // =========================================================================
@@ -86,67 +95,60 @@ public class HRibbonGroup {
     // =========================================================================
     
     /**
-     * Constructeur par défaut. Crée un groupe vide sans identifiant.
+     * Constructeur par défaut. Crée un groupe sans identifiant avec index -1.
+     * Utile pour les groupes temporaires ou à initialiser ultérieurement.
      */
     public HRibbonGroup() {
-        this(null, new ArrayList<>(), 0);
+        this(null, -1);
     }
     
     /**
-     * Constructeur avec identifiant.
+     * Constructeur avec identifiant de groupe.
      * 
-     * @param groupIdentifier l'identifiant du groupe
+     * @param groupIdentifier l'identifiant liant ce groupe à une colonne du modèle
+     * @throws IllegalArgumentException si groupIdentifier est null
      */
     public HRibbonGroup(Object groupIdentifier) {
-        this(groupIdentifier, new ArrayList<>(), 0);
+        this(groupIdentifier, -1);
     }
     
     /**
-     * Constructeur avec liste de composants.
+     * Constructeur complet avec identifiant et index modèle.
      * 
-     * @param components la liste initiale des composants
+     * @param groupIdentifier l'identifiant du groupe dans le modèle
+     * @param modelIndex l'index de la colonne dans HRibbonModel
      */
-    public HRibbonGroup(ArrayList<Object> components) {
-        this(null, components, 0);
-    }
-    
-    /**
-     * Constructeur complet.
-     * 
-     * @param groupIdentifier l'identifiant du groupe
-     * @param components la liste initiale des composants
-     * @param modelIndex l'index de ce groupe dans le modèle
-     */
-    public HRibbonGroup(Object groupIdentifier, ArrayList<Object> components, int modelIndex) {
+    public HRibbonGroup(Object groupIdentifier, int modelIndex) {
         this.groupIdentifier = groupIdentifier;
-        this.components = (components != null) ? components : new ArrayList<>();
         this.modelIndex = modelIndex;
-        this.viewIndex = modelIndex; // Par défaut, vue = modèle
-        
-        // Initialise les largeurs
-        this.width = calculatePreferredWidth();
-        this.preferredWidth = this.width;
+        this.preferredWidth = 180; // Largeur par défaut raisonnable
+        this.width = this.preferredWidth; // Initialise la largeur actuelle
+        this.minWidth = 80;
     }
     
     // =========================================================================
-    // MÉTHODES D'ACCÈS AUX PROPRIÉTÉS D'IDENTIFICATION
+    // GETTERS ET SETTERS - PROPRIÉTÉS D'IDENTIFICATION
     // =========================================================================
     
     /**
-     * Retourne l'identifiant du groupe.
+     * Retourne l'identifiant du groupe, utilisé pour le lier au HRibbonModel.
      * 
-     * @return l'identifiant du groupe
+     * @return l'identifiant du groupe, peut être null pour les groupes non liés
      */
     public Object getGroupIdentifier() {
         return groupIdentifier;
     }
     
     /**
-     * Définit l'identifiant du groupe.
+     * Définit l'identifiant du groupe et notifie les écouteurs du changement.
      * 
-     * @param newIdentifier le nouvel identifiant
+     * @param newIdentifier le nouvel identifiant du groupe
+     * @throws IllegalArgumentException si newIdentifier est null
      */
     public void setGroupIdentifier(Object newIdentifier) {
+        if (newIdentifier == null) {
+            throw new IllegalArgumentException("Group identifier cannot be null");
+        }
         if (!Objects.equals(this.groupIdentifier, newIdentifier)) {
             Object old = this.groupIdentifier;
             this.groupIdentifier = newIdentifier;
@@ -155,17 +157,17 @@ public class HRibbonGroup {
     }
     
     /**
-     * Retourne la valeur d'en-tête du groupe.
-     * Si aucune valeur d'en-tête n'est définie, retourne l'identifiant.
+     * Retourne la valeur affichée dans l'en-tête du groupe.
+     * Si headerValue n'est pas défini, retourne groupIdentifier.
      * 
-     * @return la valeur à afficher dans l'en-tête
+     * @return le texte de l'en-tête, jamais null si groupIdentifier n'est pas null
      */
     public Object getHeaderValue() {
         return headerValue != null ? headerValue : groupIdentifier;
     }
     
     /**
-     * Définit la valeur d'en-tête du groupe.
+     * Définit la valeur d'en-tête du groupe (affichage uniquement).
      * 
      * @param headerValue la nouvelle valeur d'en-tête
      */
@@ -178,18 +180,19 @@ public class HRibbonGroup {
     }
     
     /**
-     * Retourne l'index de ce groupe dans le modèle de données.
+     * Retourne l'index de ce groupe dans le HRibbonModel.
      * 
-     * @return l'index modèle
+     * @return l'index modèle, ou -1 si non lié à un modèle
      */
     public int getModelIndex() {
         return modelIndex;
     }
     
     /**
-     * Définit l'index de ce groupe dans le modèle de données.
+     * Définit l'index de ce groupe dans le HRibbonModel.
+     * Utilisé lors du réarrangement ou de l'ajout/suppression de groupes.
      * 
-     * @param newModelIndex le nouvel index modèle
+     * @param newModelIndex le nouvel index dans le modèle
      */
     public void setModelIndex(int newModelIndex) {
         if (this.modelIndex != newModelIndex) {
@@ -200,107 +203,31 @@ public class HRibbonGroup {
     }
     
     /**
-     * Retourne l'index de ce groupe dans la vue.
-     * L'index vue peut différer de l'index modèle si les groupes sont réorganisés.
-     * 
-     * @return l'index vue, ou -1 si non défini
-     */
-    public int getViewIndex() {
-        return viewIndex;
-    }
-    
-    /**
-     * Définit l'index de ce groupe dans la vue.
-     * 
-     * @param viewIndex le nouvel index vue
-     */
-    public void setViewIndex(int viewIndex) {
-        if (this.viewIndex != viewIndex) {
-            int old = this.viewIndex;
-            this.viewIndex = viewIndex;
-            firePropertyChange("viewIndex", old, viewIndex);
-        }
-    }
-    
-    /**
-     * Définit l'identifiant du groupe (alias de setGroupIdentifier).
-     * 
-     * @param newIdentifier le nouvel identifiant
-     * @see #setGroupIdentifier
-     */
-    public void setIdentifier(Object newIdentifier) {
-        setGroupIdentifier(newIdentifier);
-    }
-    
-    /**
-     * Retourne l'identifiant du groupe (alias de getGroupIdentifier).
+     * Alias de getGroupIdentifier() pour compatibilité avec le code existant.
      * 
      * @return l'identifiant du groupe
-     * @see #getGroupIdentifier
+     * @see #getGroupIdentifier()
      */
     public Object getIdentifier() {
         return getGroupIdentifier();
     }
     
-    // =========================================================================
-    // MÉTHODES DE GESTION DES COMPOSANTS
-    // =========================================================================
-    
     /**
-     * Retourne une liste non modifiable des composants du groupe.
+     * Alias de setGroupIdentifier() pour compatibilité.
      * 
-     * @return la liste des composants
+     * @param newIdentifier le nouvel identifiant
+     * @see #setGroupIdentifier(Object)
      */
-    public List<Object> getComponents() {
-        return Collections.unmodifiableList(components);
-    }
-    
-    /**
-     * Ajoute un composant au groupe.
-     * 
-     * @param component le composant à ajouter
-     * @throws NullPointerException si le composant est null
-     */
-    public void addComponent(Object component) {
-        if (component == null) {
-            throw new NullPointerException("Component cannot be null");
-        }
-        
-        components.add(component);
-        preferredWidth = calculatePreferredWidth();
-        firePropertyChange("components", null, component);
-    }
-    
-    /**
-     * Retire un composant du groupe.
-     * 
-     * @param component le composant à retirer
-     * @return true si le composant était présent et a été retiré
-     */
-    public boolean removeComponent(Object component) {
-        boolean removed = components.remove(component);
-        if (removed) {
-            preferredWidth = calculatePreferredWidth();
-            firePropertyChange("components", component, null);
-        }
-        return removed;
-    }
-    
-    /**
-     * Retourne le nombre de composants dans ce groupe.
-     * 
-     * @return le nombre de composants
-     */
-    public int getComponentsCount() {
-        return components.size();
+    public void setIdentifier(Object newIdentifier) {
+        setGroupIdentifier(newIdentifier);
     }
     
     // =========================================================================
-    // MÉTHODES DE DIMENSIONNEMENT
+    // GETTERS ET SETTERS - PROPRIÉTÉS DE DIMENSIONNEMENT
     // =========================================================================
     
     /**
-     * Retourne la largeur actuelle du groupe.
+     * Retourne la largeur actuelle d'affichage du groupe.
      * 
      * @return la largeur en pixels
      */
@@ -309,11 +236,20 @@ public class HRibbonGroup {
     }
     
     /**
-     * Définit la largeur actuelle du groupe.
+     * Définit la largeur actuelle du groupe et notifie les écouteurs.
+     * La largeur est automatiquement contrainte entre minWidth et maxWidth.
      * 
      * @param newWidth la nouvelle largeur en pixels
      */
     public void setWidth(int newWidth) {
+        // Applique les contraintes min/max
+        if (minWidth > 0 && newWidth < minWidth) {
+            newWidth = minWidth;
+        }
+        if (maxWidth > 0 && newWidth > maxWidth) {
+            newWidth = maxWidth;
+        }
+        
         if (this.width != newWidth) {
             int old = this.width;
             this.width = newWidth;
@@ -322,7 +258,7 @@ public class HRibbonGroup {
     }
     
     /**
-     * Retourne la largeur préférée du groupe.
+     * Retourne la largeur préférée du groupe pour le calcul du layout.
      * 
      * @return la largeur préférée en pixels
      */
@@ -344,85 +280,7 @@ public class HRibbonGroup {
     }
     
     /**
-     * Calcule la largeur préférée du groupe en fonction de ses composants.
-     * 
-     * <p>La largeur préférée est calculée comme :
-     * (somme des largeurs préférées des composants) 
-     * + (espacement entre composants * (nombre de composants - 1))
-     * + (padding * 2)
-     * 
-     * <p>Le résultat est contraint par les largeurs minimale et maximale.
-     * 
-     * @return la largeur préférée calculée
-     */
-    public int calculatePreferredWidth() {
-        if (components.isEmpty()) {
-            return Math.max(minWidth, defaultWidth);
-        }
-        
-        int totalWidth = 0;
-        int componentCount = 0;
-        
-        for (Object obj : components) {
-            if (obj instanceof JComponent) {
-                JComponent comp = (JComponent) obj;
-                totalWidth += comp.getPreferredSize().width;
-                componentCount++;
-            }
-        }
-        
-        // Ajoute les espacements entre composants
-        if (componentCount > 1) {
-            totalWidth += componentSpacing * (componentCount - 1);
-        }
-        
-        // Ajoute le padding interne
-        totalWidth += padding * 2;
-        
-        // Applique les contraintes min/max
-        return applyWidthConstraints(totalWidth);
-    }
-    
-    /**
-     * Applique les contraintes de largeur minimale et maximale.
-     * 
-     * @param calculatedWidth la largeur calculée
-     * @return la largeur contrainte
-     */
-    private int applyWidthConstraints(int calculatedWidth) {
-        if (minWidth > 0 && calculatedWidth < minWidth) {
-            return minWidth;
-        }
-        if (maxWidth > 0 && calculatedWidth > maxWidth) {
-            return maxWidth;
-        }
-        return calculatedWidth;
-    }
-    
-    /**
-     * Retourne la largeur maximale autorisée pour ce groupe.
-     * 
-     * @return la largeur maximale en pixels, 0 si aucune limite
-     */
-    public int getMaxWidth() {
-        return maxWidth;
-    }
-    
-    /**
-     * Définit la largeur maximale autorisée pour ce groupe.
-     * 
-     * @param maxWidth la nouvelle largeur maximale en pixels
-     */
-    public void setMaxWidth(int maxWidth) {
-        if (this.maxWidth != maxWidth) {
-            int old = this.maxWidth;
-            this.maxWidth = maxWidth;
-            firePropertyChange("maxWidth", old, maxWidth);
-        }
-    }
-    
-    /**
-     * Retourne la largeur minimale autorisée pour ce groupe.
+     * Retourne la largeur minimale autorisée.
      * 
      * @return la largeur minimale en pixels, 0 si aucune limite
      */
@@ -431,7 +289,7 @@ public class HRibbonGroup {
     }
     
     /**
-     * Définit la largeur minimale autorisée pour ce groupe.
+     * Définit la largeur minimale autorisée.
      * 
      * @param minWidth la nouvelle largeur minimale en pixels
      */
@@ -444,16 +302,38 @@ public class HRibbonGroup {
     }
     
     /**
-     * Vérifie si ce groupe peut être redimensionné par l'utilisateur.
+     * Retourne la largeur maximale autorisée.
      * 
-     * @return true si le groupe est redimensionnable
+     * @return la largeur maximale en pixels, 0 si aucune limite
+     */
+    public int getMaxWidth() {
+        return maxWidth;
+    }
+    
+    /**
+     * Définit la largeur maximale autorisée.
+     * 
+     * @param maxWidth la nouvelle largeur maximale en pixels
+     */
+    public void setMaxWidth(int maxWidth) {
+        if (this.maxWidth != maxWidth) {
+            int old = this.maxWidth;
+            this.maxWidth = maxWidth;
+            firePropertyChange("maxWidth", old, maxWidth);
+        }
+    }
+    
+    /**
+     * Indique si ce groupe peut être redimensionné par l'utilisateur.
+     * 
+     * @return true si l'utilisateur peut modifier la largeur
      */
     public boolean isResizable() {
         return isResizable;
     }
     
     /**
-     * Définit si ce groupe peut être redimensionné par l'utilisateur.
+     * Active ou désactive le redimensionnement par l'utilisateur.
      * 
      * @param isResizable true pour permettre le redimensionnement
      */
@@ -464,6 +344,10 @@ public class HRibbonGroup {
             firePropertyChange("resizable", old, isResizable);
         }
     }
+    
+    // =========================================================================
+    // GETTERS ET SETTERS - PROPRIÉTÉS DE MISE EN PAGE
+    // =========================================================================
     
     /**
      * Retourne le padding interne du groupe.
@@ -488,7 +372,7 @@ public class HRibbonGroup {
     }
     
     /**
-     * Retourne l'espacement entre les composants dans le groupe.
+     * Retourne l'espacement entre les composants à l'intérieur du groupe.
      * 
      * @return l'espacement en pixels
      */
@@ -497,7 +381,7 @@ public class HRibbonGroup {
     }
     
     /**
-     * Définit l'espacement entre les composants dans le groupe.
+     * Définit l'espacement entre les composants.
      * 
      * @param spacing le nouvel espacement en pixels
      */
@@ -509,30 +393,8 @@ public class HRibbonGroup {
         }
     }
     
-    /**
-     * Retourne la largeur par défaut du groupe.
-     * 
-     * @return la largeur par défaut en pixels
-     */
-    public int getDefaultWidth() {
-        return defaultWidth;
-    }
-    
-    /**
-     * Définit la largeur par défaut du groupe.
-     * 
-     * @param defaultWidth la nouvelle largeur par défaut en pixels
-     */
-    public void setDefaultWidth(int defaultWidth) {
-        if (this.defaultWidth != defaultWidth) {
-            int old = this.defaultWidth;
-            this.defaultWidth = defaultWidth;
-            firePropertyChange("defaultWidth", old, defaultWidth);
-        }
-    }
-    
     // =========================================================================
-    // GESTION DES ÉCOUTEURS DE CHANGEMENT
+    // GESTION DES ÉCOUTEURS (PATTERN OBSERVER)
     // =========================================================================
     
     /**
@@ -554,9 +416,10 @@ public class HRibbonGroup {
     }
     
     /**
-     * Notifie tous les écouteurs qu'une propriété a changé.
+     * Notifie tous les écouteurs enregistrés d'un changement de propriété.
+     * Méthode protected pour usage interne uniquement.
      * 
-     * @param propertyName le nom de la propriété
+     * @param propertyName le nom de la propriété modifiée
      * @param oldValue l'ancienne valeur
      * @param newValue la nouvelle valeur
      */
@@ -568,15 +431,32 @@ public class HRibbonGroup {
     }
     
     /**
-     * Retourne le support pour les écouteurs de changement.
-     * Crée le support si nécessaire.
+     * Retourne le gestionnaire d'écouteurs, en le créant si nécessaire.
+     * Pattern lazy-initialization.
      * 
-     * @return le support des écouteurs
+     * @return le SwingPropertyChangeSupport pour ce groupe
      */
     private SwingPropertyChangeSupport getChangeSupport() {
         if (changeSupport == null) {
             changeSupport = new SwingPropertyChangeSupport(this);
         }
         return changeSupport;
+    }
+    
+    // =========================================================================
+    // MÉTHODES D'UTILITÉ
+    // =========================================================================
+    
+    /**
+     * Retourne une représentation textuelle du groupe pour le débogage.
+     * 
+     * @return une chaîne descriptive du groupe
+     */
+    @Override
+    public String toString() {
+        return "HRibbonGroup[identifier=" + groupIdentifier + 
+               ", modelIndex=" + modelIndex + 
+               ", width=" + width + 
+               ", preferred=" + preferredWidth + "]";
     }
 }
