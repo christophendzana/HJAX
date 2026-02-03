@@ -2,7 +2,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package hcomponents.HRibbon;
+package rubban;
 
 import java.awt.Graphics;
 import java.awt.Rectangle;
@@ -18,7 +18,7 @@ public abstract class HRibbonUI extends ComponentUI {
      * Peint le ruban.
      * 
      * @param g le contexte graphique
-     * @param c le composant HRibbon à peindre
+     * @param c le composant Ribbon à peindre
      */
     public abstract void paint(Graphics g, JComponent c);
     
@@ -26,9 +26,9 @@ public abstract class HRibbonUI extends ComponentUI {
      * Peint l'arrière-plan du ruban.
      * 
      * @param g le contexte graphique
-     * @param c le composant HRibbon
+     * @param c le composant Ribbon
      */
-    public abstract void paintBackground(Graphics g, HRibbon ribbon);
+    public abstract void paintBackground(Graphics g, Ribbon ribbon);
     
     /**
      * Peint les bordures entre les groupes.
@@ -37,17 +37,17 @@ public abstract class HRibbonUI extends ComponentUI {
      * @param ribbon le ruban
      * @param groupBounds les limites de chaque groupe
      */
-    public abstract void paintGroupDividers(Graphics g, HRibbon ribbon, Rectangle[] groupBounds);
+    public abstract void paintGroupDividers(Graphics g, Ribbon ribbon, Rectangle[] groupBounds);
     
     /**
      * Retourne les marges préférées du ruban.
      */
-    public abstract java.awt.Insets getPreferredMargins(HRibbon ribbon);
+    public abstract java.awt.Insets getPreferredMargins(Ribbon ribbon);
     
     /**
      * Retourne la hauteur préférée du ruban.
      */
-    public abstract int getPreferredHeight(HRibbon ribbon);
+    public abstract int getPreferredHeight(Ribbon ribbon);
     
     /**
      * Installe les listeners et propriétés par défaut.

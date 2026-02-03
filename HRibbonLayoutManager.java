@@ -1,4 +1,4 @@
-package hcomponents.HRibbon;
+package rubban;
 
 import java.awt.Component;
 import java.awt.Container;
@@ -8,8 +8,11 @@ import java.awt.LayoutManager2;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * LayoutManager pour HRibbon.
@@ -30,7 +33,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     // =========================================================================
     
     /** Référence vers le ruban géré. */
-    private final HRibbon ribbon;
+    private final Ribbon ribbon;
     
     /** Mode de répartition : true = tous les groupes ont la même largeur. */
     private boolean equalDistribution = false;
@@ -40,6 +43,8 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     
     /** Cache des composants par groupe pour optimisation. */
     private Map<Integer, List<Component>> componentsByGroupCache = null;
+    
+    private Map<Integer, Component> headerComponents;
     
     // =========================================================================
     // CONSTRUCTEUR
@@ -51,7 +56,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
      * @param ribbon le ruban à gérer
      * @throws IllegalArgumentException si ribbon est null
      */
-    public HRibbonLayoutManager(HRibbon ribbon) {
+    public HRibbonLayoutManager(Ribbon ribbon) {
         if (ribbon == null) {
             throw new IllegalArgumentException("Le ruban ne peut pas être null");
         }
@@ -68,55 +73,154 @@ public class HRibbonLayoutManager implements LayoutManager2 {
      * 
      * @param parent le conteneur parent (doit être un HRibbon)
      */
-    @Override
-    public void layoutContainer(Container parent) {
-        // Vérification de type
-        if (!(parent instanceof HRibbon)) {
-            return;
-        }
-        
-        HRibbon hRibbon = (HRibbon) parent;
-        
-        // Récupère les modèles nécessaires
-        HRibbonModel model = hRibbon.getModel();
-        HRibbonGroupModel groupModel = hRibbon.getGroupModel();
-        
-        if (model == null || groupModel == null) {
-            return; // Pas de données à afficher
-        }
-        
-        // Invalide les caches
-        groupBoundsCache = null;
-        componentsByGroupCache = null;
-        
-        // Récupère les marges du ruban
-        Insets insets = parent.getInsets();
-        
-        // Calcule l'espace disponible
-        int availableWidth = parent.getWidth() - insets.left - insets.right;
-        int availableHeight = parent.getHeight() - insets.top - insets.bottom;
-        
-        // Nombre de groupes
-        int groupCount = groupModel.getGroupCount();
-        if (groupCount == 0) {
-            return; // Aucun groupe à afficher
-        }
-        
-        // 1. CALCUL DES LARGEURS DE CHAQUE GROUPE
-        int[] groupWidths = calculateGroupWidths(groupModel, availableWidth);
-        
-        // 2. CALCUL DES POSITIONS DES GROUPES
-        Rectangle[] groupBounds = calculateGroupBounds(groupWidths, groupModel, insets, availableHeight);
-        groupBoundsCache = groupBounds; // Mise en cache
-        
-        // 3. ORGANISATION DES COMPOSANTS PAR GROUPE
-        Map<Integer, List<Component>> componentsByGroup = organizeComponentsByGroup(hRibbon, model);
-        componentsByGroupCache = componentsByGroup; // Mise en cache
-        
-        // 4. POSITIONNEMENT DES COMPOSANTS DANS CHAQUE GROUPE
-        positionAllComponents(componentsByGroup, groupBounds, groupModel);
+ @Override
+public void layoutContainer(Container parent) {
+    // Vérification de type
+    if (!(parent instanceof Ribbon)) {
+        return;
     }
     
+    Ribbon hRibbon = (Ribbon) parent;
+    
+    // Récupère les modèles nécessaires
+    HRibbonModel model = hRibbon.getModel();
+    HRibbonGroupModel groupModel = hRibbon.getGroupModel();
+    
+    if (model == null || groupModel == null) {
+        return; // Pas de données à afficher
+    }
+    
+    // Invalide les caches
+    groupBoundsCache = null;
+    componentsByGroupCache = null;
+    
+    // Récupère les marges du ruban
+    Insets insets = parent.getInsets();
+    
+    // Calcule l'espace disponible TOTAL
+    int availableWidth = parent.getWidth() - insets.left - insets.right;
+    int availableHeight = parent.getHeight() - insets.top - insets.bottom;
+    
+    // Configuration des headers
+    int headerAlignment = hRibbon.getHeaderAlignment();
+    boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
+    int headerHeight = headersVisible ? hRibbon.getHeaderHeight() : 0;
+    
+    // Nombre de groupes
+    int groupCount = groupModel.getGroupCount();
+    if (groupCount == 0) {
+        return; // Aucun groupe à afficher
+    }
+    
+    // 1. CALCUL DES LARGEURS DE CHAQUE GROUPE
+    int[] groupWidths = calculateGroupWidths(groupModel, availableWidth);
+    
+    // 2. ESPACE DISPONIBLE POUR LE CONTENU DES GROUPES (hors headers)
+    int contentHeight = availableHeight;
+    if (headersVisible) {
+        // Réserver de l'espace pour les headers
+        contentHeight -= headerHeight;
+        if (contentHeight < 0) contentHeight = 0;
+    }
+    
+    // 3. CALCUL DES POSITIONS DES GROUPES (pour le contenu seulement)
+    Rectangle[] groupBounds = calculateGroupBounds(groupWidths, groupModel, 
+                                                   insets, contentHeight, headerAlignment, headerHeight);
+    groupBoundsCache = groupBounds; // Mise en cache
+    
+    // 4. CRÉER ET POSITIONNER LES HEADERS SI NÉCESSAIRE
+    if (headersVisible) {
+        createAndPositionHeaders(hRibbon, groupModel, groupBounds, 
+                                 headerAlignment, headerHeight, insets);
+    }
+    
+    // 5. ORGANISATION DES COMPOSANTS PAR GROUPE
+    Map<Integer, List<Component>> componentsByGroup = organizeComponentsByGroup(hRibbon, model);
+    componentsByGroupCache = componentsByGroup; // Mise en cache
+    
+    // 6. POSITIONNEMENT DES COMPOSANTS DANS CHAQUE GROUPE
+    positionAllComponents(componentsByGroup, groupBounds, groupModel);
+}
+    
+/**
+ * Crée et positionne les composants headers pour chaque groupe.
+ * Tous les headers sont alignés sur la même ligne horizontale.
+ */
+private void createAndPositionHeaders(Ribbon ribbon, HRibbonGroupModel groupModel,
+                                     Rectangle[] groupBounds, int headerAlignment, 
+                                     int headerHeight, Insets insets) {
+    // Initialiser le cache si nécessaire
+    if (headerComponents == null) {
+        headerComponents = new HashMap<>();
+    }
+    
+    // 1. IDENTIFIER LES HEADERS À SUPPRIMER (groupes qui n'existent plus)
+    Set<Integer> currentGroups = new HashSet<>();
+    for (int i = 0; i < groupBounds.length; i++) {
+        currentGroups.add(i);
+    }
+    
+    // Supprimer les headers des groupes qui n'existent plus
+    Iterator<Map.Entry<Integer, Component>> it = headerComponents.entrySet().iterator();
+    while (it.hasNext()) {
+        Map.Entry<Integer, Component> entry = it.next();
+        if (!currentGroups.contains(entry.getKey())) {
+            ribbon.removeHeaderComponent(entry.getValue());
+            it.remove();
+        }
+    }
+    
+    // 2. CALCULER LA POSITION Y UNIFORME POUR TOUS LES HEADERS
+    int headerY;
+    if (headerAlignment == Ribbon.HEADER_NORTH) {
+        // Headers alignés en haut
+        headerY = insets.top;
+    } else { // HEADER_SOUTH (comme Word)
+        // Headers alignés en bas
+        headerY = ribbon.getHeight() - insets.bottom - headerHeight;
+    }
+    
+    // 3. CRÉER/POSITIONNER CHAQUE HEADER
+    for (int i = 0; i < groupBounds.length; i++) {
+        Rectangle groupRect = groupBounds[i];
+        HRibbonGroup group = groupModel.getHRibbonGroup(i);
+        
+        if (group == null || groupRect == null) {
+            continue;
+        }
+        
+        // Créer ou récupérer le header
+        Component header = headerComponents.get(i);
+        if (header == null) {
+            // Créer un nouveau header
+            Object headerValue = ribbon.getHeaderValue(i);
+            
+            header = ribbon.getGroupRenderer().getHeaderComponent(
+                ribbon, headerValue, i, false // isSelected à implémenter
+            );
+            
+            if (header != null) {
+                // Ajouter le header au ruban
+                ribbon.addHeaderComponent(header);
+                headerComponents.put(i, header);
+            }
+        }
+        
+        // POSITIONNER LE HEADER (tous à la même hauteur)
+        if (header != null) {
+            header.setBounds(
+                groupRect.x,      // Même X que le groupe
+                headerY,          // MÊME Y POUR TOUS LES HEADERS
+                groupRect.width,  // Même largeur que le groupe
+                headerHeight      // Hauteur définie globalement
+            );
+            
+            // S'assurer que le header est visible
+            header.setVisible(true);
+        }
+    }
+}
+
     /**
      * Calcule la largeur de chaque groupe.
      * 
@@ -191,41 +295,46 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         return widths;
     }
     
-    /**
-     * Calcule les limites (bounds) de chaque groupe.
-     * 
-     * @param groupWidths largeurs calculées pour chaque groupe
-     * @param groupModel le modèle des groupes
-     * @param insets les marges du ruban
-     * @param availableHeight hauteur disponible
-     * @return tableau des rectangles définissant chaque groupe
-     */
-    private Rectangle[] calculateGroupBounds(int[] groupWidths, HRibbonGroupModel groupModel,
-                                            Insets insets, int availableHeight) {
-        int groupCount = groupModel.getGroupCount();
-        Rectangle[] bounds = new Rectangle[groupCount];
-        
-        // Position X de départ (après la marge gauche)
-        int currentX = insets.left;
-        int groupMargin = groupModel.getHRibbonGroupMarggin();
-        
-        for (int i = 0; i < groupCount; i++) {
-            int groupWidth = groupWidths[i];
-            
-            // Crée le rectangle pour ce groupe
-            bounds[i] = new Rectangle(
-                currentX,              // x
-                insets.top,           // y
-                groupWidth,           // width
-                availableHeight       // height
-            );
-            
-            // Avance pour le prochain groupe
-            currentX += groupWidth + groupMargin;
-        }
-        
-        return bounds;
+/**
+ * Calcule les limites des groupes pour le CONTENU seulement.
+ * Les headers sont gérés séparément.
+ */
+private Rectangle[] calculateGroupBounds(int[] groupWidths, HRibbonGroupModel groupModel,
+                                        Insets insets, int contentHeight,
+                                        int headerAlignment, int headerHeight) {
+    int groupCount = groupModel.getGroupCount();
+    Rectangle[] bounds = new Rectangle[groupCount];
+    
+    // Position X de départ (après la marge gauche)
+    int currentX = insets.left;
+    int groupMargin = groupModel.getHRibbonGroupMarggin();
+    
+    // Position Y du contenu selon la position du header
+    int contentY = insets.top; // Par défaut en haut
+    
+    if (headerAlignment == Ribbon.HEADER_NORTH) {
+        // Headers en haut : le contenu commence après les headers
+        contentY = insets.top + headerHeight;
     }
+    // Pour HEADER_SOUTH (comme Word) : le contenu est en haut, headers en bas
+    
+    for (int i = 0; i < groupCount; i++) {
+        int groupWidth = groupWidths[i];
+        
+        // Crée le rectangle pour le CONTENU de ce groupe
+        bounds[i] = new Rectangle(
+            currentX,              // x
+            contentY,              // y - TOUS LES GROUPES À LA MÊME HAUTEUR
+            groupWidth,            // width
+            contentHeight          // height - TOUS LES GROUPES ONT LA MÊME HAUTEUR
+        );
+        
+        // Avance pour le prochain groupe
+        currentX += groupWidth + groupMargin;
+    }
+    
+    return bounds;
+}
     
     /**
      * Organise les composants du HRibbon par groupe.
@@ -235,7 +344,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
      * @param model le modèle de données
      * @return map groupIndex -> liste des composants dans ce groupe
      */
-    private Map<Integer, List<Component>> organizeComponentsByGroup(HRibbon hRibbon, HRibbonModel model) {
+    private Map<Integer, List<Component>> organizeComponentsByGroup(Ribbon hRibbon, HRibbonModel model) {
        Map<Integer, List<Component>> componentsByGroup = new HashMap<>();
     
     // Parcourt tous les groupes du modèle
@@ -430,11 +539,11 @@ private int calculateLineHeight(List<Component> line) {
      */
     @Override
     public Dimension preferredLayoutSize(Container parent) {
-        if (!(parent instanceof HRibbon)) {
+        if (!(parent instanceof Ribbon)) {
             return new Dimension(0, 0);
         }
         
-        HRibbon hRibbon = (HRibbon) parent;
+        Ribbon hRibbon = (Ribbon) parent;
         HRibbonGroupModel groupModel = hRibbon.getGroupModel();
         
         if (groupModel == null) {
@@ -488,11 +597,11 @@ private int calculateLineHeight(List<Component> line) {
      */
     @Override
     public Dimension minimumLayoutSize(Container parent) {
-        if (!(parent instanceof HRibbon)) {
+        if (!(parent instanceof Ribbon)) {
             return new Dimension(0, 0);
         }
         
-        HRibbon hRibbon = (HRibbon) parent;
+        Ribbon hRibbon = (Ribbon) parent;
         HRibbonGroupModel groupModel = hRibbon.getGroupModel();
         
         if (groupModel == null) {
@@ -549,7 +658,7 @@ private int calculateLineHeight(List<Component> line) {
      * @param hRibbon le ruban
      * @return la hauteur maximale trouvée
      */
-    private int calculateMaxComponentHeight(HRibbon hRibbon) {
+    private int calculateMaxComponentHeight(Ribbon hRibbon) {
         int maxHeight = 0;
         HRibbonModel model = hRibbon.getModel();
         
@@ -662,4 +771,33 @@ private int calculateLineHeight(List<Component> line) {
         groupBoundsCache = null;
         componentsByGroupCache = null;
     }
+    
+    /**
+ * Supprime le header d'un groupe spécifique du cache.
+ * À appeler quand le groupe est supprimé ou quand son header change.
+ */
+public void removeHeaderForGroup(int groupIndex) {
+    if (headerComponents != null) {
+        Component oldHeader = headerComponents.remove(groupIndex);
+        if (oldHeader != null && ribbon != null) {
+            ribbon.removeHeaderComponent(oldHeader);
+        }
+    }
+}
+
+/**
+ * Invalide tous les headers.
+ * À appeler quand la configuration globale des headers change.
+ */
+public void invalidateAllHeaders() {
+    if (headerComponents != null && ribbon != null) {
+        // Retirer tous les headers du ruban
+        for (Component header : headerComponents.values()) {
+            ribbon.removeHeaderComponent(header);
+        }
+        headerComponents.clear();
+    }
+    headerComponents = null; // Force la recréation complète
+}
+    
 }
