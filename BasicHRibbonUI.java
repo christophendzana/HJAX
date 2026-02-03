@@ -1,4 +1,4 @@
-package hcomponents.HRibbon;
+package rubban;
 
 import java.awt.Color;
 import java.awt.Graphics;
@@ -9,7 +9,7 @@ import javax.swing.UIManager;
 import javax.swing.plaf.basic.BasicPanelUI;
 
 /**
- * Implémentation basique de l'interface utilisateur pour HRibbon.
+ * Implémentation basique de l'interface utilisateur pour Ribbon.
  * Fournit le rendu visuel de base avec séparateurs de groupes.
  */
 public class BasicHRibbonUI extends BasicPanelUI {
@@ -17,7 +17,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
     private static final BasicHRibbonUI instance = new BasicHRibbonUI();
     
     // Référence vers le ruban actuel
-    protected HRibbon ribbon;
+    protected Ribbon ribbon;
     
     // Couleurs dérivées du Look and Feel
     protected Color ribbonBackground;
@@ -28,8 +28,8 @@ public class BasicHRibbonUI extends BasicPanelUI {
     /**
      * Retourne une instance partagée (singleton pattern).
      * 
-     * @param c le composant HRibbon
-     * @return l'instance BasicHRibbonUI
+     * @param c le composant Ribbon
+     * @return l'instance BasicRibbonUI
      */
     public static BasicHRibbonUI createUI(JComponent c) {
         return instance;
@@ -81,17 +81,17 @@ public class BasicHRibbonUI extends BasicPanelUI {
     /**
      * Installe l'UI sur le composant.
      * 
-     * @param c le composant HRibbon
+     * @param c le composant Ribbon
      */
     @Override
     public void installUI(JComponent c) {
         super.installUI(c);
         
-        if (!(c instanceof HRibbon)) {
-            throw new IllegalArgumentException("BasicHRibbonUI can only be installed on HRibbon");
+        if (!(c instanceof Ribbon)) {
+            throw new IllegalArgumentException("BasicRibbonUI can only be installed on Ribbon");
         }
         
-        ribbon = (HRibbon) c;
+        ribbon = (Ribbon) c;
         
         // Configure les propriétés par défaut du ruban
         ribbon.setOpaque(true);
@@ -105,7 +105,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
     /**
      * Désinstalle l'UI du composant.
      * 
-     * @param c le composant HRibbon
+     * @param c le composant Ribbon
      */
     @Override
     public void uninstallUI(JComponent c) {
@@ -117,19 +117,19 @@ public class BasicHRibbonUI extends BasicPanelUI {
     }
     
     /**
-     * Peint le composant HRibbon.
+     * Peint le composant Ribbon.
      * 
      * @param g le contexte graphique
-     * @param c le composant HRibbon
+     * @param c le composant Ribbon
      */
     @Override
     public void paint(Graphics g, JComponent c) {
-        if (!(c instanceof HRibbon)) {
+        if (!(c instanceof Ribbon)) {
             super.paint(g, c);
             return;
         }
         
-        HRibbon hRibbon = (HRibbon) c;
+        Ribbon hRibbon = (Ribbon) c;
         
         // 1. Peint l'arrière-plan
         paintBackground(g, hRibbon);
@@ -147,7 +147,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * @param g le contexte graphique
      * @param ribbon le ruban à peindre
      */
-    public void paintBackground(Graphics g, HRibbon ribbon) {
+    public void paintBackground(Graphics g, Ribbon ribbon) {
         if (ribbon.isOpaque()) {
             g.setColor(ribbon.getBackground());
             g.fillRect(0, 0, ribbon.getWidth(), ribbon.getHeight());
@@ -160,7 +160,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * @param g le contexte graphique
      * @param ribbon le ruban à peindre
      */
-    public void paintGroups(Graphics g, HRibbon ribbon) {
+    public void paintGroups(Graphics g, Ribbon ribbon) {
         HRibbonLayoutManager layout = ribbon.getRubanLayout();
         if (layout == null) {
             return;
@@ -186,7 +186,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * @param ribbon le ruban
      * @param groupBounds les limites de chaque groupe
      */
-    public void paintGroupDividers(Graphics g, HRibbon ribbon, Rectangle[] groupBounds) {
+    public void paintGroupDividers(Graphics g, Ribbon ribbon, Rectangle[] groupBounds) {
         g.setColor(groupDividerColor);
         
         // Peint des séparateurs verticaux entre les groupes
@@ -215,7 +215,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * @param ribbon le ruban
      * @param groupBounds les limites de chaque groupe
      */
-    public void paintGroupBackgrounds(Graphics g, HRibbon ribbon, Rectangle[] groupBounds) {
+    public void paintGroupBackgrounds(Graphics g, Ribbon ribbon, Rectangle[] groupBounds) {
         g.setColor(groupBackground);
         
         for (Rectangle bounds : groupBounds) {
@@ -237,7 +237,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * @param ribbon le ruban
      * @return les marges (insets)
      */
-    public Insets getPreferredMargins(HRibbon ribbon) {
+    public Insets getPreferredMargins(Ribbon ribbon) {
         // Marges internes standard
         return new Insets(4, 8, 4, 8);
     }
@@ -249,7 +249,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * @param ribbon le ruban
      * @return la hauteur préférée en pixels
      */
-    public int getPreferredHeight(HRibbon ribbon) {
+    public int getPreferredHeight(Ribbon ribbon) {
         if (ribbon == null || ribbon.getGroupModel() == null) {
             return 80; // Hauteur par défaut
         }
@@ -292,7 +292,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * 
      * @param ribbon le ruban
      */
-    protected void installListeners(HRibbon ribbon) {
+    protected void installListeners(Ribbon ribbon) {
         // À compléter selon les besoins :
         // - Listeners de souris pour la sélection
         // - Listeners de focus
@@ -304,7 +304,7 @@ public class BasicHRibbonUI extends BasicPanelUI {
      * 
      * @param ribbon le ruban
      */
-    protected void uninstallListeners(HRibbon ribbon) {
+    protected void uninstallListeners(Ribbon ribbon) {
         // À compléter pour nettoyer les listeners installés
     }
     

@@ -2,7 +2,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
-package hcomponents.HRibbon;
+package rubban;
 
 import java.beans.PropertyChangeEvent;
 import java.util.ArrayList;
@@ -67,13 +67,17 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
     @Override
     public void addGroup(HRibbonGroup group) {
         if (group == null) {
-            throw new IllegalArgumentException("Group cannot be null");
-        }
+        throw new IllegalArgumentException("Group cannot be null");
+    }
 
-        hRibbonGroups.add(group);
-        group.setModelIndex(hRibbonGroups.size() - 1);
-        recalculateWidthCache();
-        fireGroupAdded(new HRibbonGroupEvent(this, -1, getGroupCount() - 1));
+    hRibbonGroups.add(group);
+    group.setModelIndex(hRibbonGroups.size() - 1);
+    
+    //  CHANGEMENTS DU GROUPE
+    setupGroupListener(group);
+    
+    recalculateWidthCache();
+    fireGroupAdded(new HRibbonGroupEvent(this, -1, getGroupCount() - 1));
     }
     
     @Override
@@ -513,4 +517,46 @@ public class DefaultHRibbonGroupModel implements HRibbonGroupModel, ListSelectio
         totalGroupWidth = -1;
     }
     
+    
+    /**
+ * S'abonne aux changements d'un groupe pour propager les notifications.
+ */
+private void setupGroupListener(HRibbonGroup group) {
+    if (group == null) return;
+    
+    group.addPropertyChangeListener(evt -> {
+        String propertyName = evt.getPropertyName();
+        
+        // Si une propriété visuelle du groupe change
+        if ("headerValue".equals(propertyName) || 
+            "headerAlignment".equals(propertyName) ||
+            "width".equals(propertyName) ||
+            "preferredWidth".equals(propertyName)) {
+            
+            // Trouver l'index du groupe dans la liste
+            int groupIndex = hRibbonGroups.indexOf(group);
+            if (groupIndex >= 0) {
+                // Notifier les listeners que ce groupe a changé
+                fireGroupChanged(groupIndex, propertyName);
+            }
+        }
+    });
+}
+
+/**
+ * Notifie les listeners qu'une propriété d'un groupe a changé.
+ */
+protected void fireGroupChanged(int groupIndex, String propertyName) {
+    Object[] listeners = listenerList.getListenerList();
+    for (int i = listeners.length - 2; i >= 0; i -= 2) {
+        if (listeners[i] == HRibbonGroupListener.class) {
+            // Créer un événement spécial pour les changements de propriétés
+            // On va réutiliser HRibbonGroupEvent avec fromIndex = toIndex
+            HRibbonGroupEvent e = new HRibbonGroupEvent(this, groupIndex, groupIndex);
+            
+            // Pour l'instant, on appelle groupMoved (à adapter si besoin)
+            ((HRibbonGroupListener) listeners[i + 1]).groupMoved(e);
+        }
+    }
+}
 }

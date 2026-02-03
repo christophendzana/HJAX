@@ -1,4 +1,4 @@
-package hcomponents.HRibbon;
+package rubban;
 
 import javax.swing.event.EventListenerList;
 

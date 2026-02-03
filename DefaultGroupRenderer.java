@@ -1,6 +1,8 @@
-package hcomponents.HRibbon;
+package rubban;
 
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
 import javax.swing.*;
 import java.io.File;
 import java.util.Date;
@@ -17,7 +19,7 @@ public class DefaultGroupRenderer implements GroupRenderer {
     private JTextField defaultTextField = new JTextField();
     
     @Override
-    public Component getGroupComponent(HRibbon ribbon, Object value,
+    public Component getGroupComponent(Ribbon ribbon, Object value,
                                       int groupIndex, int position,
                                       boolean isSelected, boolean hasFocus) {
         
@@ -141,4 +143,55 @@ public class DefaultGroupRenderer implements GroupRenderer {
         component.setOpaque(true);
         component.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
     }
+    
+ @Override
+public Component getHeaderComponent(Ribbon ribbon, Object headerValue,
+                                    int groupIndex, boolean isSelected) {
+    // Utiliser la logique de rendu par type comme pour getGroupComponent
+    if (headerValue == null) {
+        // Fallback: utiliser l'identifiant du groupe
+        if (ribbon.getModel() != null) {
+            headerValue = ribbon.getModel().getGroupIdentifier(groupIndex);
+        }
+        if (headerValue == null) {
+            return createNullComponent();
+        }
+    }
+    
+    // Délégation par type
+    if (headerValue instanceof String) {
+        return createHeaderLabel((String) headerValue);
+    }
+    if (headerValue instanceof Icon) {
+        JLabel label = new JLabel((Icon) headerValue);
+        configureHeaderStyle(label);
+        return label;
+    }
+    if (headerValue instanceof Component) {
+        return (Component) headerValue;
+    }
+    
+    // Par défaut : toString()
+    return createHeaderLabel(headerValue.toString());
+}
+
+// Méthode privée pour créer un header label stylisé
+private Component createHeaderLabel(String text) {
+    JLabel label = new JLabel(text, SwingConstants.CENTER);
+    configureHeaderStyle(label);
+    return label;
+}
+
+// Méthode privée pour configurer le style d'un header
+private void configureHeaderStyle(JLabel label) {
+    label.setOpaque(true);
+    label.setBackground(new Color(245, 245, 245));
+    label.setBorder(BorderFactory.createCompoundBorder(
+        BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(200, 200, 200)),
+        BorderFactory.createEmptyBorder(4, 8, 4, 8)
+    ));
+    label.setFont(label.getFont().deriveFont(Font.BOLD, 11f));
+    label.setForeground(new Color(60, 60, 60));
+}
+    
 }
