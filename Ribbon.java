@@ -5,12 +5,10 @@
 package rubban;
 
 import java.awt.*;
-import java.awt.event.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 import javax.swing.*;
 import javax.swing.event.*;
-import rubban.*;
 
 /**
  *
@@ -31,7 +29,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     public final int AUTO_RESIZE_SUBSEQUENT_GROUPS = 2;
     public final int AUTO_RESIZE_LAST_GROUP = 3;
     public final int AUTO_RESIZE_ALL_GROUPS = 4;
-
+    
     /**
      * Constante pour le positionnement du header
      */
@@ -1678,7 +1676,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Méthode interne pour ajouter des composants headers.
      */
-    void addHeaderComponent(Component header) {
+   public void addHeaderComponent(Component header) {
         if (header == null) {
             return;
         }
@@ -1692,7 +1690,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Méthode interne pour retirer un header.
      */
-    void removeHeaderComponent(Component header) {
+   public void removeHeaderComponent(Component header) {
         if (header != null && header.getParent() == this) {
             super.remove(header);
         }
@@ -1702,7 +1700,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Retourne la valeur du header pour un groupe spécifique. Utilisé par le
      * LayoutManager pour créer les composants headers.
      */
-    Object getHeaderValue(int groupIndex) {
+    public Object getHeaderValue(int groupIndex) {
         if (groupModel != null) {
             HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
             if (group != null) {
@@ -1909,4 +1907,7 @@ public int getPreferredContentHeight() {
     return 0;
 }
     
+
+  
+
 }
