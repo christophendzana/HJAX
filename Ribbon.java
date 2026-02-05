@@ -4,7 +4,13 @@
  */
 package rubban;
 
-import javax.swing.JComponent;
+import java.awt.*;
+import java.awt.event.*;
+import java.beans.PropertyChangeListener;
+import java.util.*;
+import javax.swing.*;
+import javax.swing.event.*;
+import rubban.*;
 
 /**
  *
@@ -15,26 +21,29 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Identifiant pour le système de Look and Feel.
      */
-    private  final String uiClassID = "HRibbonUI";
+    private static final String uiClassID = "HRibbonUI";
 
     /**
      * Constantes pour le mode de redimensionnement automatique.
      */
     public final int AUTO_RESIZE_OFF = 0;
-    public  final int AUTO_RESIZE_NEXT_GROUP = 1;
-    public  final int AUTO_RESIZE_SUBSEQUENT_GROUPS = 2;
-    public  final int AUTO_RESIZE_LAST_GROUP = 3;
-    public  final int AUTO_RESIZE_ALL_GROUPS = 4;
+    public final int AUTO_RESIZE_NEXT_GROUP = 1;
+    public final int AUTO_RESIZE_SUBSEQUENT_GROUPS = 2;
+    public final int AUTO_RESIZE_LAST_GROUP = 3;
+    public final int AUTO_RESIZE_ALL_GROUPS = 4;
 
     /**
      * Constante pour le positionnement du header
      */
-    public  final int HEADER_NORTH = 0;
-    public  final int HEADER_SOUTH = 1;  // Comme Word - en bas du ruban
-    public  final int HEADER_HIDDEN = -1;
+    public static final int HEADER_NORTH = 0;
+    public static final int HEADER_SOUTH = 1;  // Comme Word - en bas du ruban
+    public static final int HEADER_WEST = 2;   // À gauche de chaque groupe
+    public static final int HEADER_EAST = 3;   // À droite de chaque groupe
+    public static final int HEADER_HIDDEN = -1;
 
     private int headerAlignment = HEADER_NORTH;
-    private int headerHeight = 25; // Hauteur par défaut 
+    private int headerHeight = 25; // Hauteur par défaut pour NORTH/SOUTH
+    private int headerWidth = 25;  // Largeur par défaut pour WEST/EAST 
 
     /**
      * Modèle de données du ruban. Contient les données affichées dans les
@@ -58,12 +67,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * composants à l'intérieur.
      */
     private HRibbonLayoutManager layout;
-
-    /**
-     * Composant pour le rendu des cellules (comme dans JTable). Utilisé pour
-     * afficher les composants sans les ajouter à la hiérarchie.
-     */
-    private CellRendererPane rendererPane;
 
     /**
      * Footer optionnel du ruban (comme dans certains rubans Office).
@@ -146,9 +149,24 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     private Map<Component, ComponentInfo> componentInfoMap = new HashMap<>();
 
-    private Map<Integer, Component> headerComponents;
-
     private PropertyChangeListener groupPropertyChangeListener;
+
+    public enum HeightPolicy {
+        PREFERRED_ONLY, // Le Ribbon impose sa hauteur calculée (par défaut)
+        FILL_PARENT, // Le Ribbon s'étire pour remplir la hauteur du parent
+        FIXED           // Hauteur fixe définie par setFixedHeight(...)
+    }
+
+    /**
+     * Politique de hauteur appliquée au Ribbon (default = impose sa hauteur)
+     */
+    private HeightPolicy heightPolicy = HeightPolicy.PREFERRED_ONLY;
+
+    /**
+     * Hauteur fixe (en pixels) utilisée si heightPolicy == FIXED. -1 = non
+     * défini
+     */
+    private int fixedHeight = -1;
 
     // =========================================================================
     // CONSTRUCTEURS
@@ -232,14 +250,13 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         this.groupRenderer = createDefaultGroupRenderer();
     }
 
-    /**
-     * Constructeur avec nombre de groupes (à compléter).
-     */
-    public Ribbon(int numGroup) {
-        this();
-        // TODO: Initialiser avec 'numGroup' groupes vides
-    }
-
+//    /**
+//     * Constructeur avec nombre de groupes (à compléter).
+//     */
+//    public Ribbon(int numGroup) {
+//        this();
+//         // Penser à initialiser
+//    }
     /**
      * Constructeur avec identifiants de groupes (Vector).
      */
@@ -466,50 +483,33 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     @Override
     public Dimension getPreferredSize() {
-        // 1. Taille explicitement définie
+        // 1) Si l'utilisateur a explicitement défini une preferredSize, la respecter
         if (isPreferredSizeSet()) {
             return super.getPreferredSize();
         }
 
-        // 2. Calcul via le LayoutManager
+        // 2) Calcul habituel via le LayoutManager si présent
+        Dimension base;
         if (layout != null) {
-            return layout.preferredLayoutSize(this);
+            base = layout.preferredLayoutSize(this);
+        } else {
+            base = new Dimension(400, 80);
         }
 
-        // 3. Fallback
-        return new Dimension(400, 80);
+        // 3) Appliquer la politique de hauteur FIXED si demandée
+        if (heightPolicy == HeightPolicy.FIXED) {
+            int h = (fixedHeight > 0) ? fixedHeight : base.height;
+            return new Dimension(base.width, h);
+        }
+
+        // Sinon, renvoyer la taille calculée
+        return base;
     }
 
     /**
      * Calcule la largeur préférée du ruban. Méthode utilisée si pas de
      * LayoutManager.
      */
-    private int calculatePreferredWidth() {
-        if (groupModel == null) {
-            return 400;
-        }
-
-        int totalWidth = 0;
-        int margin = groupModel.getHRibbonGroupMarggin();
-        int groupCount = groupModel.getGroupCount();
-
-        for (int i = 0; i < groupCount; i++) {
-            HRibbonGroup group = groupModel.getHRibbonGroup(i);
-            if (group != null) {
-                totalWidth += group.getWidth();
-                if (i < groupCount - 1) {
-                    totalWidth += margin;
-                }
-            }
-        }
-
-        Insets insets = getInsets();
-        if (insets != null) {
-            totalWidth += insets.left + insets.right;
-        }
-
-        return Math.max(totalWidth, 100);
-    }
 
     // =========================================================================
     // GESTION DES MODÈLES (setModel / setGroupModel)
@@ -717,22 +717,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                 false, // isSelected (à implémenter plus tard)
                 false // hasFocus (à implémenter plus tard)
         );
-    }
-
-    /**
-     * Classe interne pour stocker les infos d'un component.
-     */
-    private class ComponentInfo {
-
-        final int groupIndex;
-        final int position;
-        final Object value;
-
-        ComponentInfo(int groupIndex, int position, Object value) {
-            this.groupIndex = groupIndex;
-            this.position = position;
-            this.value = value;
-        }
     }
 
     /**
@@ -951,41 +935,41 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     // =========================================================================
     @Override
     public void groupAdded(HRibbonGroupEvent e) {
-         if (isEditing()) {
-        stopEditing();
-    }
+        if (isEditing()) {
+            stopEditing();
+        }
 
-    // CHANGEMENTS DU NOUVEAU GROUPE
-    HRibbonGroup group = groupModel.getHRibbonGroup(e.getToIndex());
-    if (group != null) {
-        group.addPropertyChangeListener(getGroupPropertyChangeListener());
-    }
+        // CHANGEMENTS DU NOUVEAU GROUPE
+        HRibbonGroup group = groupModel.getHRibbonGroup(e.getToIndex());
+        if (group != null) {
+            group.addPropertyChangeListener(getGroupPropertyChangeListener());
+        }
 
-    if (layout != null) {
-        layout.invalidateLayout(this);
-    }
+        if (layout != null) {
+            layout.invalidateLayout(this);
+        }
 
-    revalidate();
-    repaint();
+        revalidate();
+        repaint();
     }
 
     @Override
     public void groupRemoved(HRibbonGroupEvent e) {
-         if (isEditing()) {
-        stopEditing();
-    }
+        if (isEditing()) {
+            stopEditing();
+        }
 
-    // NETTOYER LE HEADER DE CE GROUPE (si on a un cache)
-    if (layout != null) {
-        layout.removeHeaderForGroup(e.getFromIndex());
-    }
+        // NETTOYER LE HEADER DE CE GROUPE (si on a un cache)
+        if (layout != null) {
+            layout.removeHeaderForGroup(e.getFromIndex());
+        }
 
-    if (layout != null) {
-        layout.invalidateLayout(this);
-    }
+        if (layout != null) {
+            layout.invalidateLayout(this);
+        }
 
-    revalidate();
-    repaint();
+        revalidate();
+        repaint();
     }
 
     @Override
@@ -1166,7 +1150,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (groupModel != null && index >= 0 && index < groupModel.getGroupCount()) {
             return groupModel.getHRibbonGroup(index);
         }
-        return null;
+        throw new IllegalArgumentException("index cannot be null");
     }
 
     /**
@@ -1581,27 +1565,29 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Définit la position des headers de groupe.
      *
-     * @param alignment HEADER_NORTH, HEADER_SOUTH ou HEADER_HIDDEN
+     * @param alignment HEADER_NORTH, HEADER_SOUTH, HEADER_WEST, HEADER_EAST ou
+     * HEADER_HIDDEN
      * @throws IllegalArgumentException si l'alignement n'est pas valide
      */
     public void setHeaderAlignment(int alignment) {
-    if (alignment != HEADER_NORTH && alignment != HEADER_SOUTH && alignment != HEADER_HIDDEN) {
-        throw new IllegalArgumentException("Alignment must be HEADER_NORTH, HEADER_SOUTH or HEADER_HIDDEN");
-    }
-    if (this.headerAlignment != alignment) {
-        int old = this.headerAlignment;
-        this.headerAlignment = alignment;
-        firePropertyChange("headerAlignment", old, alignment);
-        
-        // INVALIDER TOUS LES HEADERS
-        if (layout != null) {
-            layout.invalidateAllHeaders();
-            layout.invalidateLayout(this);
+        if (alignment != HEADER_NORTH && alignment != HEADER_SOUTH
+                && alignment != HEADER_WEST && alignment != HEADER_EAST && alignment != HEADER_HIDDEN) {
+            throw new IllegalArgumentException("Alignment must be HEADER_NORTH, HEADER_SOUTH, HEADER_WEST, HEADER_EAST or HEADER_HIDDEN");
         }
-        revalidate();
-        repaint();
+        if (this.headerAlignment != alignment) {
+            int old = this.headerAlignment;
+            this.headerAlignment = alignment;
+            firePropertyChange("headerAlignment", old, alignment);
+
+            // INVALIDER TOUS LES HEADERS
+            if (layout != null) {
+                layout.invalidateAllHeaders();
+                layout.invalidateLayout(this);
+            }
+            revalidate();
+            repaint();
+        }
     }
-}
 
     /**
      * Retourne la position actuelle des headers.
@@ -1619,23 +1605,23 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * @throws IllegalArgumentException si la hauteur est négative
      */
     public void setHeaderHeight(int height) {
-    if (height < 0) {
-        throw new IllegalArgumentException("Header height cannot be negative");
-    }
-    if (this.headerHeight != height) {
-        int old = this.headerHeight;
-        this.headerHeight = height;
-        firePropertyChange("headerHeight", old, height);
-        
-        // INVALIDER TOUS LES HEADERS (car leur taille change)
-        if (layout != null) {
-            layout.invalidateAllHeaders();
-            layout.invalidateLayout(this);
+        if (height < 0) {
+            throw new IllegalArgumentException("Header height cannot be negative");
         }
-        revalidate();
-        repaint();
+        if (this.headerHeight != height) {
+            int old = this.headerHeight;
+            this.headerHeight = height;
+            firePropertyChange("headerHeight", old, height);
+
+            // INVALIDER TOUS LES HEADERS (car leur taille change)
+            if (layout != null) {
+                layout.invalidateAllHeaders();
+                layout.invalidateLayout(this);
+            }
+            revalidate();
+            repaint();
+        }
     }
-}
 
     /**
      * Retourne la hauteur actuelle des headers.
@@ -1647,31 +1633,46 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     }
 
     /**
+     * Définit la largeur des headers en pixels (pour WEST/EAST).
+     *
+     * @param width largeur en pixels (minimum 0)
+     * @throws IllegalArgumentException si la largeur est négative
+     */
+    public void setHeaderWidth(int width) {
+        if (width < 0) {
+            throw new IllegalArgumentException("Header width cannot be negative");
+        }
+        if (this.headerWidth != width) {
+            int old = this.headerWidth;
+            this.headerWidth = width;
+            firePropertyChange("headerWidth", old, width);
+
+            // INVALIDER TOUS LES HEADERS (car leur taille change)
+            if (layout != null) {
+                layout.invalidateAllHeaders();
+                layout.invalidateLayout(this);
+            }
+            revalidate();
+            repaint();
+        }
+    }
+
+    /**
+     * Retourne la largeur actuelle des headers (pour WEST/EAST).
+     *
+     * @return largeur en pixels
+     */
+    public int getHeaderWidth() {
+        return headerWidth;
+    }
+
+    /**
      * Vérifie si les headers sont actuellement visibles.
      *
      * @return true si HEADER_HIDDEN n'est pas défini
      */
     public boolean isHeaderVisible() {
         return headerAlignment != HEADER_HIDDEN;
-    }
-
-    /**
-     * Retourne la valeur du header pour un groupe spécifique. Utilisé par le
-     * LayoutManager pour créer les composants headers.
-     */
-    public Object getHeaderValue(int groupIndex) {
-        if (groupModel != null) {
-            HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
-            if (group != null) {
-                Object headerValue = group.getHeaderValue();
-                if (headerValue != null) {
-                    return headerValue;
-                }
-                //à défaut on retourne l'identifiant du groupe
-                return group.getGroupIdentifier();
-            }
-        }
-        return null;
     }
 
     /**
@@ -1715,47 +1716,197 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         }
         return null;
     }
-    
+
     /**
- * Crée ou retourne le listener pour les changements de propriétés des groupes.
- */
-private PropertyChangeListener getGroupPropertyChangeListener() {
-    if (groupPropertyChangeListener == null) {
-        groupPropertyChangeListener = evt -> {
-            String propertyName = evt.getPropertyName();
-            
-            // Si le headerValue a changé
-            if ("headerValue".equals(propertyName)) {
-                // Trouver quel groupe a changé
-                HRibbonGroup changedGroup = (HRibbonGroup) evt.getSource();
-                
-                // Trouver l'index du groupe
-                for (int i = 0; i < groupModel.getGroupCount(); i++) {
-                    if (groupModel.getHRibbonGroup(i) == changedGroup) {
-                        // Invalider le header de ce groupe
-                        invalidateHeader(i);
-                        break;
+     * Crée ou retourne le listener pour les changements de propriétés des
+     * groupes.
+     */
+    private PropertyChangeListener getGroupPropertyChangeListener() {
+        if (groupPropertyChangeListener == null) {
+            groupPropertyChangeListener = evt -> {
+                String propertyName = evt.getPropertyName();
+
+                // Si le headerValue a changé
+                if ("headerValue".equals(propertyName)) {
+                    // Trouver quel groupe a changé
+                    HRibbonGroup changedGroup = (HRibbonGroup) evt.getSource();
+
+                    // Trouver l'index du groupe
+                    for (int i = 0; i < groupModel.getGroupCount(); i++) {
+                        if (groupModel.getHRibbonGroup(i) == changedGroup) {
+                            // Invalider le header de ce groupe
+                            invalidateHeader(i);
+                            break;
+                        }
                     }
                 }
+            };
+        }
+        return groupPropertyChangeListener;
+    }
+
+    /**
+     * Invalide le header d'un groupe spécifique. Le header sera recréé au
+     * prochain layout.
+     */
+    private void invalidateHeader(int groupIndex) {
+        if (layout != null) {
+            // Invalider le layout pour forcer un recalcul
+            layout.invalidateLayout(this);
+
+            // Forcer un re-layout et repaint
+            revalidate();
+            repaint();
+        }
+    }
+
+    /**
+     * Définit si le Ribbon doit forcer le contenu à remplir la hauteur
+     * disponible. Par défaut : false (le contenu utilise sa hauteur préférée
+     * calculée).
+     *
+     * @param fills true pour forcer le remplissage vertical, false pour limiter
+     * la hauteur au preferredSize calculé
+     */
+    public void setFillsViewportHeight(boolean fills) {
+        if (this.fillsViewportHeight != fills) {
+            this.fillsViewportHeight = fills;
+            // Invalider le layout / redessiner
+            if (layout != null) {
+                layout.invalidateLayout(this);
             }
-        };
+            revalidate();
+            repaint();
+        }
     }
-    return groupPropertyChangeListener;
-}
 
-/**
- * Invalide le header d'un groupe spécifique.
- * Le header sera recréé au prochain layout.
+    /**
+     * Indique si le Ribbon remplit la hauteur disponible.
+     *
+     * @return true si le contenu est étiré pour remplir la hauteur du parent
+     */
+    public boolean isFillsViewportHeight() {
+        return fillsViewportHeight;
+    }
+
+    public boolean getFillsViewportHeight() {
+        return isFillsViewportHeight();
+    }
+
+    @Override
+    public Dimension getMaximumSize() {
+        Dimension pref = getPreferredSize();
+        if (pref == null) {
+            return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
+        }
+
+        switch (heightPolicy) {
+            case FILL_PARENT:
+                // Autoriser l'étirement vertical si la politique le demande
+                return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
+            case FIXED:
+                // Largeur infinie, hauteur limitée à la fixedHeight (ou preferred si non défini)
+                int fixedH = fixedHeight > 0 ? fixedHeight : pref.height;
+                return new Dimension(Integer.MAX_VALUE, fixedH);
+            case PREFERRED_ONLY:
+            default:
+                // Largeur infinie, hauteur limitée à la preferredHeight
+                return new Dimension(Integer.MAX_VALUE, pref.height);
+        }
+    }
+
+    @Override
+    public Dimension getMinimumSize() {
+        Dimension pref = getPreferredSize();
+        if (pref == null) {
+            return super.getMinimumSize();
+        }
+        // On garantit une largeur minimum raisonnable mais la hauteur suit la politique (ou preferredHeight).
+        int minWidth = 50;
+        int minHeight;
+        if (heightPolicy == HeightPolicy.FIXED && fixedHeight > 0) {
+            minHeight = fixedHeight;
+        } else {
+            minHeight = pref.height;
+        }
+        return new Dimension(minWidth, minHeight);
+    }
+
+    public void setHeightPolicy(HeightPolicy policy) {
+        if (policy == null) {
+            throw new IllegalArgumentException("HeightPolicy cannot be null");
+        }
+        if (this.heightPolicy != policy) {
+            this.heightPolicy = policy;
+            // Invalider layout et redessiner pour appliquer la nouvelle politique
+            if (layout != null) {
+                layout.invalidateLayout(this);
+            }
+            revalidate();
+            repaint();
+        }
+    }
+
+    public HeightPolicy getHeightPolicy() {
+        return this.heightPolicy;
+    }
+
+    /**
+     * Définit une hauteur fixe utilisée lorsque heightPolicy == FIXED.
+     *
+     * @param height hauteur en pixels (>= 0)
+     */
+    public void setFixedHeight(int height) {
+        if (height < 0) {
+            throw new IllegalArgumentException("Fixed height must be >= 0");
+        }
+        if (this.fixedHeight != height) {
+            this.fixedHeight = height;
+            if (this.heightPolicy == HeightPolicy.FIXED) {
+                if (layout != null) {
+                    layout.invalidateLayout(this);
+                }
+                revalidate();
+                repaint();
+            }
+        }
+    }
+
+    public int getFixedHeight() {
+        return this.fixedHeight;
+    }
+    
+    /**
+ * Retourne la hauteur de contenu préférée calculée par le HRibbonLayoutManager.
+ *
+ * Cette valeur correspond à la hauteur nécessaire pour afficher la zone "utile"
+ * du ruban (les groupes et leurs composants), hors insets (marges du conteneur).
+ *
+ * à Eviter à appeler en boucle
+ *
+ * @return hauteur de contenu préférée en pixels (>= 0), excluant les insets.
  */
-private void invalidateHeader(int groupIndex) {
-    if (layout != null) {
-        // Invalider le layout pour forcer un recalcul
-        layout.invalidateLayout(this);
-        
-        // Forcer un re-layout et repaint
-        revalidate();
-        repaint();
+public int getPreferredContentHeight() {
+    HRibbonLayoutManager lm = (HRibbonLayoutManager) getRubanLayout();
+    if (lm != null) {
+        Dimension pref = lm.preferredLayoutSize(this);
+        if (pref != null) {
+            Insets insets = getInsets();
+            int insetV = (insets != null) ? (insets.top + insets.bottom) : 0;
+            int contentH = pref.height - insetV;
+            return Math.max(contentH, 0);
+        }
     }
-}
 
+    // Fallback : utiliser la preferredSize générale
+    Dimension pref = getPreferredSize();
+    if (pref != null) {
+        Insets insets = getInsets();
+        int insetV = (insets != null) ? (insets.top + insets.bottom) : 0;
+        return Math.max(pref.height - insetV, 0);
+    }
+
+    return 0;
+}
+    
 }
