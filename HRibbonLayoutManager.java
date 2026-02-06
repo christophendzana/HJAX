@@ -319,4 +319,8 @@ public class HRibbonLayoutManager implements LayoutManager2 {
 
     public void removeHeaderForGroup(int groupIndex) { headerManager.removeHeaderForGroup(ribbon, groupIndex); }
     public void invalidateAllHeaders() { headerManager.invalidateAllHeaders(ribbon); }
+    
+    public Ribbon getRibbon(){
+        return ribbon;
+    }
 }

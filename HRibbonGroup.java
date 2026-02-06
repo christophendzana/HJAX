@@ -1,14 +1,14 @@
 /*
  * HRibbonGroup.java
  * Représente un groupe dans le ruban, décrivant uniquement la présentation d'un groupe de données.
- * Analogie stricte avec TableColumn dans JTable : cette classe ne stocke PAS les données, 
- * seulement la configuration d'affichage (largeur, padding, marges, etc.).
+ * Maintenant avec configuration complète des en-têtes (headers).
  * 
  * @see javax.swing.table.TableColumn
  * @see hcomponents.HRibbon.HRibbonModel
  */
 package rubban;
 
+import java.awt.Color;
 import java.util.Objects;
 import javax.swing.event.SwingPropertyChangeSupport;
 
@@ -77,8 +77,65 @@ public class HRibbonGroup {
     private int padding = 6;
 
     // =========================================================================
-    // SUPPORT POUR LES NOTIFICATIONS (PATTERN OBSERVER)
+    // CONFIGURATION DES EN-TÊTES (HEADERS) - NOUVELLES PROPRIÉTÉS
     // =========================================================================
+    
+    /**
+     * Couleur de fond de l'en-tête du groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     */
+    private Color headerBackground = null;
+    
+    /**
+     * Couleur du texte de l'en-tête du groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     */
+    private Color headerForeground = null;
+    
+    /**
+     * Couleur de la bordure de l'en-tête du groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     */
+    private Color headerBorderColor = null;
+    
+    /**
+     * Taille de police de l'en-tête en points.
+     * Si null, la taille par défaut du ruban sera utilisée.
+     * Exemples : 11, 12, 14, 16.
+     */
+    private Integer headerFontSize = null;
+    
+    /**
+     * Indique si le texte de l'en-tête doit être affiché en gras.
+     * Si null, le paramètre par défaut du ruban sera utilisé.
+     */
+    private Boolean headerFontBold = null;
+    
+    /**
+     * Couleur de fond de l'en-tête lorsque la souris survole le groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     */
+    private Color headerHoverBackground = null;
+    
+    /**
+     * Couleur de fond de l'en-tête lorsque le groupe est sélectionné.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     */
+    private Color headerSelectedBackground = null;
+    
+    /**
+     * Rayon des coins arrondis de l'en-tête en pixels.
+     * Si null, le rayon par défaut du ruban sera utilisé.
+     * 0 = coins carrés, 5 = légèrement arrondi, 15 = très arrondi.
+     */
+    private Integer headerCornerRadius = null;
+    
+    // =========================================================================
+    // AUTRES PROPRIÉTÉS
+    // =========================================================================
+    
+    private Color background;
+    
     /**
      * Gestionnaire des écouteurs PropertyChangeListener, notifie les
      * changements de propriétés (largeur, padding, etc.) aux composants
@@ -366,6 +423,25 @@ public class HRibbonGroup {
     }
 
     /**
+     * Définit une couleur de fond personnalisée pour ce groupe.
+     * Si null, le Ribbon utilisera la couleur globale par défaut.
+     */
+    public void setBackground(Color bg) {
+        if (!Objects.equals(this.background, bg)) {
+            Color old = this.background;
+            this.background = bg;
+            firePropertyChange("background", old, bg);
+        }
+    }
+
+    /**
+     * Retourne la couleur de fond personnalisée pour ce groupe ou null si aucune.
+     */
+    public Color getBackground() {
+        return background;
+    }
+    
+    /**
      * Retourne l'espacement entre les composants à l'intérieur du groupe.
      *
      * @return l'espacement en pixels
@@ -387,6 +463,202 @@ public class HRibbonGroup {
         }
     }
 
+    // =========================================================================
+    // GETTERS ET SETTERS - CONFIGURATION DES EN-TÊTES (NOUVEAU)
+    // =========================================================================
+    
+    /**
+     * Retourne la couleur de fond spécifique de l'en-tête de ce groupe.
+     * Si null, la couleur par défaut du ruban doit être utilisée.
+     * 
+     * @return la couleur de fond de l'en-tête, ou null si non définie
+     */
+    public Color getHeaderBackground() {
+        return headerBackground;
+    }
+    
+    /**
+     * Définit une couleur de fond spécifique pour l'en-tête de ce groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     * 
+     * @param headerBackground la nouvelle couleur de fond de l'en-tête
+     */
+    public void setHeaderBackground(Color headerBackground) {
+        if (!Objects.equals(this.headerBackground, headerBackground)) {
+            Color old = this.headerBackground;
+            this.headerBackground = headerBackground;
+            firePropertyChange("headerBackground", old, headerBackground);
+        }
+    }
+    
+    /**
+     * Retourne la couleur du texte spécifique de l'en-tête de ce groupe.
+     * Si null, la couleur par défaut du ruban doit être utilisée.
+     * 
+     * @return la couleur du texte de l'en-tête, ou null si non définie
+     */
+    public Color getHeaderForeground() {
+        return headerForeground;
+    }
+    
+    /**
+     * Définit une couleur de texte spécifique pour l'en-tête de ce groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     * 
+     * @param headerForeground la nouvelle couleur du texte de l'en-tête
+     */
+    public void setHeaderForeground(Color headerForeground) {
+        if (!Objects.equals(this.headerForeground, headerForeground)) {
+            Color old = this.headerForeground;
+            this.headerForeground = headerForeground;
+            firePropertyChange("headerForeground", old, headerForeground);
+        }
+    }
+    
+    /**
+     * Retourne la couleur de bordure spécifique de l'en-tête de ce groupe.
+     * Si null, la couleur par défaut du ruban doit être utilisée.
+     * 
+     * @return la couleur de bordure de l'en-tête, ou null si non définie
+     */
+    public Color getHeaderBorderColor() {
+        return headerBorderColor;
+    }
+    
+    /**
+     * Définit une couleur de bordure spécifique pour l'en-tête de ce groupe.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     * 
+     * @param headerBorderColor la nouvelle couleur de bordure de l'en-tête
+     */
+    public void setHeaderBorderColor(Color headerBorderColor) {
+        if (!Objects.equals(this.headerBorderColor, headerBorderColor)) {
+            Color old = this.headerBorderColor;
+            this.headerBorderColor = headerBorderColor;
+            firePropertyChange("headerBorderColor", old, headerBorderColor);
+        }
+    }
+    
+    /**
+     * Retourne la taille de police spécifique de l'en-tête de ce groupe.
+     * Si null, la taille par défaut du ruban doit être utilisée.
+     * 
+     * @return la taille de police en points, ou null si non définie
+     */
+    public Integer getHeaderFontSize() {
+        return headerFontSize;
+    }
+    
+    /**
+     * Définit une taille de police spécifique pour l'en-tête de ce groupe.
+     * Si null, la taille par défaut du ruban sera utilisée.
+     * 
+     * @param headerFontSize la nouvelle taille de police en points
+     */
+    public void setHeaderFontSize(Integer headerFontSize) {
+        if (!Objects.equals(this.headerFontSize, headerFontSize)) {
+            Integer old = this.headerFontSize;
+            this.headerFontSize = headerFontSize;
+            firePropertyChange("headerFontSize", old, headerFontSize);
+        }
+    }
+    
+    /**
+     * Retourne l'indicateur de police en gras spécifique de l'en-tête de ce groupe.
+     * Si null, le paramètre par défaut du ruban doit être utilisée.
+     * 
+     * @return true si la police doit être en gras, null si non défini
+     */
+    public Boolean getHeaderFontBold() {
+        return headerFontBold;
+    }
+    
+    /**
+     * Définit si la police de l'en-tête doit être en gras.
+     * Si null, le paramètre par défaut du ruban sera utilisé.
+     * 
+     * @param headerFontBold true pour police en gras, false pour normal
+     */
+    public void setHeaderFontBold(Boolean headerFontBold) {
+        if (!Objects.equals(this.headerFontBold, headerFontBold)) {
+            Boolean old = this.headerFontBold;
+            this.headerFontBold = headerFontBold;
+            firePropertyChange("headerFontBold", old, headerFontBold);
+        }
+    }
+    
+    /**
+     * Retourne la couleur de fond spécifique de l'en-tête au survol.
+     * Si null, la couleur par défaut du ruban doit être utilisée.
+     * 
+     * @return la couleur de fond au survol, ou null si non définie
+     */
+    public Color getHeaderHoverBackground() {
+        return headerHoverBackground;
+    }
+    
+    /**
+     * Définit une couleur de fond spécifique pour l'en-tête au survol.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     * 
+     * @param headerHoverBackground la nouvelle couleur de fond au survol
+     */
+    public void setHeaderHoverBackground(Color headerHoverBackground) {
+        if (!Objects.equals(this.headerHoverBackground, headerHoverBackground)) {
+            Color old = this.headerHoverBackground;
+            this.headerHoverBackground = headerHoverBackground;
+            firePropertyChange("headerHoverBackground", old, headerHoverBackground);
+        }
+    }
+    
+    /**
+     * Retourne la couleur de fond spécifique de l'en-tête en sélection.
+     * Si null, la couleur par défaut du ruban doit être utilisée.
+     * 
+     * @return la couleur de fond en sélection, ou null si non définie
+     */
+    public Color getHeaderSelectedBackground() {
+        return headerSelectedBackground;
+    }
+    
+    /**
+     * Définit une couleur de fond spécifique pour l'en-tête en sélection.
+     * Si null, la couleur par défaut du ruban sera utilisée.
+     * 
+     * @param headerSelectedBackground la nouvelle couleur de fond en sélection
+     */
+    public void setHeaderSelectedBackground(Color headerSelectedBackground) {
+        if (!Objects.equals(this.headerSelectedBackground, headerSelectedBackground)) {
+            Color old = this.headerSelectedBackground;
+            this.headerSelectedBackground = headerSelectedBackground;
+            firePropertyChange("headerSelectedBackground", old, headerSelectedBackground);
+        }
+    }
+    
+    /**
+     * Retourne le rayon des coins arrondis spécifique de l'en-tête.
+     * Si null, le rayon par défaut du ruban doit être utilisée.
+     * 
+     * @return le rayon des coins en pixels, ou null si non défini
+     */
+    public Integer getHeaderCornerRadius() {
+        return headerCornerRadius;
+    }
+    
+    /**
+     * Définit un rayon des coins arrondis spécifique pour l'en-tête.
+     * Si null, le rayon par défaut du ruban sera utilisé.
+     * 
+     * @param headerCornerRadius le nouveau rayon des coins en pixels
+     */
+    public void setHeaderCornerRadius(Integer headerCornerRadius) {
+        if (!Objects.equals(this.headerCornerRadius, headerCornerRadius)) {
+            Integer old = this.headerCornerRadius;
+            this.headerCornerRadius = headerCornerRadius;
+            firePropertyChange("headerCornerRadius", old, headerCornerRadius);
+        }
+    }
+    
     // =========================================================================
     // GESTION DES ÉCOUTEURS (PATTERN OBSERVER)
     // =========================================================================

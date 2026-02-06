@@ -8,7 +8,9 @@ import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.event.*;
+import javax.swing.plaf.ComponentUI;
 
 /**
  *
@@ -19,7 +21,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Identifiant pour le système de Look and Feel.
      */
-    private static final String uiClassID = "HRibbonUI";
+    private static final String uiClassID = "BasicHRibbonUI";
 
     /**
      * Constantes pour le mode de redimensionnement automatique.
@@ -136,6 +138,8 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     private GroupRenderer groupRenderer;
 
+    private int headerMargin = 0;
+    
     /**
      * Listener pour la suppression des éditeurs.
      */
@@ -166,6 +170,57 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     private int fixedHeight = -1;
 
+    
+    /**
+ * Couleur de fond par défaut pour tous les en-têtes du ruban.
+ * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
+ */
+private Color defaultHeaderBackground = new Color(197, 199, 228); // Gris-bleu clair
+
+/**
+ * Couleur de texte par défaut pour tous les en-têtes du ruban.
+ * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
+ */
+private Color defaultHeaderForeground = new Color(60, 60, 60); // Gris foncé
+
+/**
+ * Couleur de bordure par défaut pour tous les en-têtes du ruban.
+ * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
+ */
+private Color defaultHeaderBorderColor = new Color(200, 200, 200); // Gris clair
+
+/**
+ * Taille de police par défaut pour tous les en-têtes du ruban (en points).
+ * Utilisée lorsqu'un groupe n'a pas de taille spécifique définie.
+ */
+private int defaultHeaderFontSize = 11;
+
+/**
+ * Indicateur de police en gras par défaut pour tous les en-têtes du ruban.
+ * Utilisée lorsqu'un groupe n'a pas de paramètre spécifique défini.
+ */
+private boolean defaultHeaderFontBold = true;
+
+/**
+ * Couleur de fond par défaut pour les en-têtes au survol.
+ * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
+ */
+private Color defaultHeaderHoverBackground = new Color(180, 200, 255); // Bleu très clair
+
+/**
+ * Couleur de fond par défaut pour les en-têtes sélectionnés.
+ * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
+ */
+private Color defaultHeaderSelectedBackground = new Color(150, 180, 255); // Bleu clair
+
+/**
+ * Rayon des coins arrondis par défaut pour tous les en-têtes (en pixels).
+ * Utilisée lorsqu'un groupe n'a pas de rayon spécifique défini.
+ * 0 = coins carrés, 5 = légèrement arrondi, 15 = très arrondi.
+ */
+private int defaultHeaderCornerRadius = 5;
+    
+    
     // =========================================================================
     // CONSTRUCTEURS
     // =========================================================================
@@ -181,7 +236,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     public Ribbon(HRibbonModel model) {
         this(model, null, null);
-    }
+   }
 
     /**
      * Constructeur avec modèle de groupes.
@@ -246,6 +301,9 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         this.autoCreateGroupsFromModel = true;
 
         this.groupRenderer = createDefaultGroupRenderer();
+                     
+        updateUI();
+        
     }
 
 //    /**
@@ -278,7 +336,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             }
         }
     }
-
+       
     // =========================================================================
     // MÉTHODES FACTORY POUR LES DÉFAUTS
     // =========================================================================
@@ -314,26 +372,30 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         return new DefaultGroupRenderer();
     }
 
+    
+    
+    
     // =========================================================================
     // GESTION DE L'UI (Look and Feel)
     // =========================================================================
     /**
      * Retourne l'objet UI qui gère le rendu de ce composant.
      */
-    public HRibbonUI getUI() {
-        return (HRibbonUI) ui;
+    public BasicHRibbonUI getUI() {
+        return (BasicHRibbonUI) ui;
     }
 
     /**
      * Définit l'objet UI qui gère le rendu de ce composant.
      */
-    public void setUI(HRibbonUI ui) {
+    public void setUI(BasicHRibbonUI ui) {
         if (this.ui != ui) {
             super.setUI(ui);
             repaint();
         }
     }
 
+    
     /**
      * Met à jour l'UI quand le Look and Feel change.
      */
@@ -351,8 +413,20 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                 updateGroupRenderersUI();
             }
 
-            // Met à jour l'UI du ruban
-            setUI((HRibbonUI) UIManager.getUI(this));
+            if (UIManager.get("BasicHRibbonUI") == null) {
+        UIManager.put("BasicHRibbonUI", "rubban.BasicHRibbonUI");
+    }
+            
+            this.setOpaque(true);
+            
+            ComponentUI ui = UIManager.getUI(this);
+            if (ui != null) {
+                setUI((BasicHRibbonUI) ui);
+            } else {
+                // Fallback : créer directement une instance
+                setUI(new BasicHRibbonUI());
+            }
+            setUI((BasicHRibbonUI) UIManager.getUI(this));
 
             // Revalide l'affichage
             revalidate();
@@ -1069,7 +1143,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
-
+                
         if (model instanceof DefaultHRibbonModel) {
             DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
             defaultModel.addValue(value, groupIndex);
@@ -1908,6 +1982,258 @@ public int getPreferredContentHeight() {
 }
     
 
-  
+   /**
+     * Retourne la marge verticale/horizontale entre un groupe et son header.
+     */
+    public int getHeaderMargin() {
+        return headerMargin;
+    }
+
+    /**
+     * Permet de configurer la marge entre groupe et header.
+     */
+    public void setHeaderMargin(int headerMargin) {
+        this.headerMargin = Math.max(0, headerMargin);
+        revalidate();
+        repaint();
+    }
+
+    public Rectangle[] getGroupBounds() {
+    LayoutManager lm = getLayout();
+    if (lm instanceof rubban.HRibbonLayoutManager) {
+        return ((rubban.HRibbonLayoutManager) lm).getGroupBounds();
+    }
+    return null;
+}
+    
+    /**
+ * Retourne la couleur de fond par défaut pour tous les en-têtes.
+ * 
+ * @return la couleur de fond par défaut
+ */
+public Color getDefaultHeaderBackground() {
+    return defaultHeaderBackground;
+}
+
+/**
+ * Définit la couleur de fond par défaut pour tous les en-têtes.
+ * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
+ * 
+ * @param color la nouvelle couleur de fond par défaut
+ */
+public void setDefaultHeaderBackground(Color color) {
+    if (color == null) {
+        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    }
+    if (!this.defaultHeaderBackground.equals(color)) {
+        this.defaultHeaderBackground = color;
+        repaint(); // Redessine le ruban pour appliquer les changements
+    }
+}
+
+/**
+ * Retourne la couleur de texte par défaut pour tous les en-têtes.
+ * 
+ * @return la couleur de texte par défaut
+ */
+public Color getDefaultHeaderForeground() {
+    return defaultHeaderForeground;
+}
+
+/**
+ * Définit la couleur de texte par défaut pour tous les en-têtes.
+ * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
+ * 
+ * @param color la nouvelle couleur de texte par défaut
+ */
+public void setDefaultHeaderForeground(Color color) {
+    if (color == null) {
+        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    }
+    if (!this.defaultHeaderForeground.equals(color)) {
+        this.defaultHeaderForeground = color;
+        repaint();
+    }
+}
+
+/**
+ * Retourne la couleur de bordure par défaut pour tous les en-têtes.
+ * 
+ * @return la couleur de bordure par défaut
+ */
+public Color getDefaultHeaderBorderColor() {
+    return defaultHeaderBorderColor;
+}
+
+/**
+ * Définit la couleur de bordure par défaut pour tous les en-têtes.
+ * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
+ * 
+ * @param color la nouvelle couleur de bordure par défaut
+ */
+public void setDefaultHeaderBorderColor(Color color) {
+    if (color == null) {
+        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    }
+    if (!this.defaultHeaderBorderColor.equals(color)) {
+        this.defaultHeaderBorderColor = color;
+        repaint();
+    }
+}
+
+/**
+ * Retourne la taille de police par défaut pour tous les en-têtes.
+ * 
+ * @return la taille de police par défaut en points
+ */
+public int getDefaultHeaderFontSize() {
+    return defaultHeaderFontSize;
+}
+
+/**
+ * Définit la taille de police par défaut pour tous les en-têtes.
+ * Cette taille sera utilisée pour les groupes qui n'ont pas de taille spécifique.
+ * 
+ * @param size la nouvelle taille de police par défaut en points
+ */
+public void setDefaultHeaderFontSize(int size) {
+    if (size <= 0) {
+        throw new IllegalArgumentException("La taille de police doit être positive");
+    }
+    if (this.defaultHeaderFontSize != size) {
+        this.defaultHeaderFontSize = size;
+        revalidate(); // Recalcule les dimensions
+        repaint();
+    }
+}
+
+/**
+ * Retourne l'indicateur de police en gras par défaut pour tous les en-têtes.
+ * 
+ * @return true si la police est en gras par défaut
+ */
+public boolean isDefaultHeaderFontBold() {
+    return defaultHeaderFontBold;
+}
+
+/**
+ * Définit si la police doit être en gras par défaut pour tous les en-têtes.
+ * Ce paramètre sera utilisé pour les groupes qui n'ont pas de paramètre spécifique.
+ * 
+ * @param bold true pour police en gras, false pour police normale
+ */
+public void setDefaultHeaderFontBold(boolean bold) {
+    if (this.defaultHeaderFontBold != bold) {
+        this.defaultHeaderFontBold = bold;
+        repaint();
+    }
+}
+
+/**
+ * Retourne la couleur de fond par défaut pour les en-têtes au survol.
+ * 
+ * @return la couleur de fond au survol par défaut
+ */
+public Color getDefaultHeaderHoverBackground() {
+    return defaultHeaderHoverBackground;
+}
+
+/**
+ * Définit la couleur de fond par défaut pour les en-têtes au survol.
+ * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
+ * 
+ * @param color la nouvelle couleur de fond au survol par défaut
+ */
+public void setDefaultHeaderHoverBackground(Color color) {
+    if (color == null) {
+        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    }
+    if (!this.defaultHeaderHoverBackground.equals(color)) {
+        this.defaultHeaderHoverBackground = color;
+        repaint();
+    }
+}
+
+/**
+ * Retourne la couleur de fond par défaut pour les en-têtes sélectionnés.
+ * 
+ * @return la couleur de fond en sélection par défaut
+ */
+public Color getDefaultHeaderSelectedBackground() {
+    return defaultHeaderSelectedBackground;
+}
+
+/**
+ * Définit la couleur de fond par défaut pour les en-têtes sélectionnés.
+ * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
+ * 
+ * @param color la nouvelle couleur de fond en sélection par défaut
+ */
+public void setDefaultHeaderSelectedBackground(Color color) {
+    if (color == null) {
+        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    }
+    if (!this.defaultHeaderSelectedBackground.equals(color)) {
+        this.defaultHeaderSelectedBackground = color;
+        repaint();
+    }
+}
+
+/**
+ * Retourne le rayon des coins arrondis par défaut pour tous les en-têtes.
+ * 
+ * @return le rayon des coins arrondis par défaut en pixels
+ */
+public int getDefaultHeaderCornerRadius() {
+    return defaultHeaderCornerRadius;
+}
+
+/**
+ * Définit le rayon des coins arrondis par défaut pour tous les en-têtes.
+ * Ce rayon sera utilisé pour les groupes qui n'ont pas de rayon spécifique.
+ * 
+ * @param radius le nouveau rayon des coins arrondis par défaut en pixels
+ */
+public void setDefaultHeaderCornerRadius(int radius) {
+    if (radius < 0) {
+        throw new IllegalArgumentException("Le rayon ne peut pas être négatif");
+    }
+    if (this.defaultHeaderCornerRadius != radius) {
+        this.defaultHeaderCornerRadius = radius;
+        revalidate();
+        repaint();
+    }
+}
+    
+/**
+ * Crée une police pour un en-tête en fonction des paramètres fournis.
+ * Si certains paramètres sont null, les valeurs par défaut du ruban sont utilisées.
+ * 
+ * @param baseFont la police de base (généralement la police courante du composant)
+ * @param fontSize la taille de police souhaitée (ou null pour la valeur par défaut)
+ * @param isBold indicateur de police en gras (ou null pour la valeur par défaut)
+ * @return une police configurée pour l'en-tête
+ */
+public Font createHeaderFont(Font baseFont, Integer fontSize, Boolean isBold) {
+    if (baseFont == null) {
+        baseFont = getFont();
+        if (baseFont == null) {
+            baseFont = new Font("Dialog", Font.PLAIN, 12);
+        }
+    }
+    
+    // Utiliser la taille spécifiée ou la taille par défaut
+    int size = (fontSize != null) ? fontSize : this.defaultHeaderFontSize;
+    
+    // Déterminer le style (gras ou normal)
+    int style = Font.PLAIN;
+    if (isBold != null) {
+        style = isBold ? Font.BOLD : Font.PLAIN;
+    } else {
+        style = this.defaultHeaderFontBold ? Font.BOLD : Font.PLAIN;
+    }
+    
+    return baseFont.deriveFont(style, (float) size);
+}
 
 }
