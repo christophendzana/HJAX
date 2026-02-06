@@ -36,75 +36,38 @@ public class GroupBoundsCalculator {
      *         représente la zone de contenu (x,y,width,height) pour le groupe correspondant.
      *         Retourne un tableau vide si groupModel == null ou groupCount == 0.
      */
+    
     public Rectangle[] calculateGroupBounds(HRibbonLayoutContext ctx,
                                             int[] groupWidths,
                                             HRibbonGroupModel groupModel,
                                             Insets insets,
                                             int contentHeight,
                                             int headerHeight) {
-        if (groupModel == null) {
-            return new Rectangle[0];
-        }
+        if (groupWidths == null) return new Rectangle[0];
+        int groupCount = groupWidths.length;
+        Rectangle[] rects = new Rectangle[groupCount];
 
-        final int groupCount = groupModel.getGroupCount();
-        if (groupCount == 0) {
-            return new Rectangle[0];
-        }
-
-        Rectangle[] bounds = new Rectangle[groupCount];
+        int left = (insets != null) ? insets.left : 0;
+        int topInset = (insets != null) ? insets.top : 0;
 
         int headerAlignment = (ctx != null) ? ctx.getHeaderAlignment() : Ribbon.HEADER_NORTH;
-        int headerWidth = (ctx != null) ? ctx.getHeaderWidth() : 0;
-        int groupMargin = groupModel.getHRibbonGroupMarggin(); // margin between groups
+        int headerMargin = (ctx != null) ? ctx.getHeaderMargin() : 0;
 
-        // Position X de départ : après la marge gauche
-        int currentX = (insets != null) ? insets.left : 0;
+        // compute available top Y such that header (N) is visible if needed.
+        int contentYForNorthHeader = topInset + ((headerAlignment == Ribbon.HEADER_NORTH) ? (headerHeight + headerMargin) : 0);
+        int contentYDefault = topInset;
 
-        // Position Y du contenu selon l'alignement des headers
-        int contentY = (insets != null) ? insets.top : 0;
-        if (headerAlignment == Ribbon.HEADER_NORTH) {
-            // Le contenu commence après la zone des headers en haut
-            contentY += headerHeight;
-        }
-        // pour SOUTH/WEST/EAST : on garde contentY = insets.top
-
-        // Défauts de sécurité
-        if (groupWidths == null) {
-            groupWidths = new int[groupCount];
-        }
-
+        int x = left;
         for (int i = 0; i < groupCount; i++) {
-            int totalGroupWidth = (i < groupWidths.length) ? Math.max(0, groupWidths[i]) : 0;
-
-            int contentX = currentX;
-            int contentWidth = totalGroupWidth;
-
-            // Si le header est à l'ouest (gauche), le contenu commence après le header
-            if (headerAlignment == Ribbon.HEADER_WEST) {
-                contentX = currentX + headerWidth;
-                contentWidth = totalGroupWidth - headerWidth;
-            } else if (headerAlignment == Ribbon.HEADER_EAST) {
-                // Header à droite : contenu occupe la partie gauche du space alloué
-                contentWidth = totalGroupWidth - headerWidth;
-            }
-            // Pour NORTH/SOUTH : contentX reste equal currentX et header est hors du content rectangle
-
-            // Sécurité : garantir une largeur minimale pour le contenu
-            contentWidth = Math.max(contentWidth, 1);
-
-            // Construire le rectangle pour la zone de contenu
-            bounds[i] = new Rectangle(
-                    contentX,
-                    contentY,
-                    contentWidth,
-                    Math.max(0, contentHeight)
-            );
-
-            // Avancer pour le groupe suivant (toujours horizontalement)
-            currentX += totalGroupWidth + groupMargin;
+            int w = Math.max(0, groupWidths[i]);
+            int y = (headerAlignment == Ribbon.HEADER_NORTH) ? contentYForNorthHeader : contentYDefault;
+            rects[i] = new Rectangle(x, y, w, contentHeight);
+            // Advance X by width + group margin
+            int gm = (groupModel != null) ? groupModel.getHRibbonGroupMarggin() : 0;
+            x += w + Math.max(0, gm);
         }
 
-        return bounds;
+        return rects;
     }
     
 }

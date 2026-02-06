@@ -15,38 +15,28 @@ public final class HRibbonLayoutContext {
     private final boolean fillsViewportHeight;
     private final boolean equalDistribution;
     private final int groupMargin;
+    private final int headerMargin;
 
     public HRibbonLayoutContext(int headerAlignment,
                                 int headerWidth,
                                 boolean fillsViewportHeight,
                                 boolean equalDistribution,
-                                int groupMargin) {
+                                int groupMargin,
+                                int headerMargin) {
         this.headerAlignment = headerAlignment;
         this.headerWidth = Math.max(0, headerWidth);
         this.fillsViewportHeight = fillsViewportHeight;
         this.equalDistribution = equalDistribution;
         this.groupMargin = Math.max(0, groupMargin);
+        this.headerMargin = Math.max(0, headerMargin);
     }
 
-    public int getHeaderAlignment() {
-        return headerAlignment;
-    }
-
-    public int getHeaderWidth() {
-        return headerWidth;
-    }
-
-    public boolean isFillsViewportHeight() {
-        return fillsViewportHeight;
-    }
-
-    public boolean isEqualDistribution() {
-        return equalDistribution;
-    }
-
-    public int getGroupMargin() {
-        return groupMargin;
-    }
+    public int getHeaderAlignment() { return headerAlignment; }
+    public int getHeaderWidth() { return headerWidth; }
+    public boolean isFillsViewportHeight() { return fillsViewportHeight; }
+    public boolean isEqualDistribution() { return equalDistribution; }
+    public int getGroupMargin() { return groupMargin; }
+    public int getHeaderMargin() { return headerMargin; }
 
     @Override
     public String toString() {
@@ -54,7 +44,8 @@ public final class HRibbonLayoutContext {
                 + ", headerWidth=" + headerWidth
                 + ", fillsViewportHeight=" + fillsViewportHeight
                 + ", equalDistribution=" + equalDistribution
-                + ", groupMargin=" + groupMargin + "]";
+                + ", groupMargin=" + groupMargin
+                + ", headerMargin=" + headerMargin + "]";
     }
     
 }

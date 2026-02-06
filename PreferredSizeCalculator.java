@@ -32,36 +32,13 @@ import rubban.Ribbon;
  */
 public class PreferredSizeCalculator {
     
-     // Cache faible : value -> Dimension (preferred size)
     private final Map<Object, Dimension> measureCache = new WeakHashMap<>();
-
-    // Valeurs par défaut lorsque la mesure échoue
     private static final Dimension DEFAULT_DIM = new Dimension(50, 24);
 
-    public PreferredSizeCalculator() {
-    }
+    public PreferredSizeCalculator() { }
 
-    /**
-     * Vide le cache de mesures.
-     */
-    public void clearCache() {
-        measureCache.clear();
-    }
+    public void clearCache() { measureCache.clear(); }
 
-    /**
-     * Simule le wrapping et calcule la hauteur de contenu nécessaire (padding + lignes).
-     *
-     * Doit être appelé sur l'EDT car il interroge getPreferredSize() sur les Components
-     * potentiellement créés par le renderer.
-     *
-     * @param ribbon       le Ribbon (utilisé pour obtenir renderer)
-     * @param ctx          contexte layout (header alignment/width, etc.)
-     * @param groupWidths  largeurs totales par groupe (peuvent inclure header area)
-     * @param model        HRibbonModel (valeurs)
-     * @param groupModel   HRibbonGroupModel (configuration des groupes)
-     * @return hauteur de contenu requise (en pixels), excluant insets; 0 si pas de groupes
-     * @throws IllegalStateException si appelé hors EDT
-     */
     public int computeRequiredContentHeight(Ribbon ribbon,
                                             HRibbonLayoutContext ctx,
                                             int[] groupWidths,
@@ -70,32 +47,27 @@ public class PreferredSizeCalculator {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("PreferredSizeCalculator.computeRequiredContentHeight must be called on the EDT");
         }
+        if (ribbon == null || ctx == null || model == null || groupModel == null || groupWidths == null) return 0;
 
-        if (ribbon == null || model == null || groupModel == null || groupWidths == null) {
-            return 0;
-        }
-
-        final int groupCount = groupModel.getGroupCount();
+        int groupCount = groupModel.getGroupCount();
         if (groupCount == 0) return 0;
 
-        final int headerAlignment = (ctx != null) ? ctx.getHeaderAlignment() : Ribbon.HEADER_NORTH;
-        final int headerWidth = (ctx != null) ? ctx.getHeaderWidth() : 0;
+        int headerAlignment = ctx.getHeaderAlignment();
+        int headerMargin = ctx.getHeaderMargin();
+        int headerHeight = ribbon.getHeaderHeight();
 
         LineWrapper lw = new LineWrapper();
-        int maxRequired = 0;
+        int maxTotal = 0;
         GroupRenderer renderer = ribbon.getGroupRenderer();
 
         for (int gi = 0; gi < groupCount; gi++) {
             HRibbonGroup group = groupModel.getHRibbonGroup(gi);
-            if (group == null) {
-                continue;
-            }
+            if (group == null) continue;
 
-            // largeur totale du groupe (peut inclure header area)
             int totalGroupWidth = (gi < groupWidths.length) ? Math.max(0, groupWidths[gi]) : 0;
             int contentWidth = totalGroupWidth;
             if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                contentWidth = Math.max(totalGroupWidth - headerWidth, 1);
+                contentWidth = Math.max(totalGroupWidth - ctx.getHeaderWidth(), 1);
             }
 
             int padding = Math.max(0, group.getPadding());
@@ -104,53 +76,46 @@ public class PreferredSizeCalculator {
 
             int valueCount = model.getValueCount(gi);
             if (valueCount <= 0) {
-                maxRequired = Math.max(maxRequired, padding * 2);
+                int groupTotal = padding * 2;
+                if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
+                    groupTotal += headerHeight + headerMargin;
+                }
+                maxTotal = Math.max(maxTotal, groupTotal);
                 continue;
             }
 
-            // Collecter preferred sizes (Dimensions) pour chaque valeur
             List<Dimension> prefs = new ArrayList<>(valueCount);
             for (int pos = 0; pos < valueCount; pos++) {
                 Object value = model.getValueAt(pos, gi);
                 Dimension pref = null;
-
                 if (value instanceof Component) {
-                    Component comp = (Component) value;
-                    pref = comp.getPreferredSize();
+                    pref = ((Component) value).getPreferredSize();
                 } else {
-                    // Vérifier cache
                     pref = measureCache.get(value);
                     if (pref == null && renderer != null) {
                         try {
-                            Component measureComp = renderer.getGroupComponent(ribbon, value, gi, pos, false, false);
-                            if (measureComp != null) {
-                                pref = measureComp.getPreferredSize();
-                                // NOT adding measureComp to the container -- renderer must not have side-effects
-                            }
+                            Component mc = renderer.getGroupComponent(ribbon, value, gi, pos, false, false);
+                            if (mc != null) pref = mc.getPreferredSize();
                         } catch (Throwable t) {
                             pref = null;
                         }
-                        if (pref == null) {
-                            pref = DEFAULT_DIM;
-                        }
-                        // Stocker un clone de Dimension (defensive)
+                        if (pref == null) pref = DEFAULT_DIM;
                         measureCache.put(value, new Dimension(pref.width, pref.height));
                     }
                 }
-
-                if (pref == null) {
-                    pref = DEFAULT_DIM;
-                }
-
+                if (pref == null) pref = DEFAULT_DIM;
                 prefs.add(new Dimension(pref.width, pref.height));
             }
 
-            // Calcul de la hauteur nécessaire pour ce groupe
-            int totalHeight = lw.computeHeightForPreferences(prefs, innerWidth, spacing, padding);
-            maxRequired = Math.max(maxRequired, totalHeight);
+            int contentHeight = lw.computeHeightForPreferences(prefs, innerWidth, spacing, padding);
+            int groupTotal = contentHeight;
+            if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
+                groupTotal += headerHeight + headerMargin;
+            }
+            maxTotal = Math.max(maxTotal, groupTotal);
         }
 
-        return Math.max(0, maxRequired);
+        return Math.max(0, maxTotal);
     }
     
 }

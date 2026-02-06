@@ -31,79 +31,54 @@ import rubban.Ribbon;
  */
 public class HeaderManager {
     
-    private final Map<Integer, Component> headerCache = new HashMap<>();
+      private final Map<Integer, Component> headerCache = new HashMap<>();
 
     public HeaderManager() {
     }
 
     /**
      * Met à jour le cache des headers et positionne chaque header selon
-     * l'alignement (NORTH/SOUTH/WEST/EAST).
-     *
-     * IMPORTANT: doit être appelé sur l'EDT (layoutContainer est appelé sur l'EDT).
-     *
-     * @param ribbon       le Ribbon (utilisé pour obtenir renderer, headerWidth, etc.)
-     * @param groupModel   le modèle des groupes
-     * @param groupBounds  rectangles de contenu calculés pour chaque groupe
-     * @param insets       insets du parent (utilisé pour calculer y pour NORTH/SOUTH)
-     * @param headerHeight hauteur en pixels des headers (utile pour NORTH/SOUTH)
-     * @return une copie immuable du map index->Component correspondant aux headers actuels
-     * @throws IllegalStateException si la méthode est appelée hors EDT
+     * l'alignement relatif au groupBounds fournis.
      */
     public Map<Integer, Component> updateAndPositionHeaders(final Ribbon ribbon,
+                                                           final HRibbonLayoutContext ctx,
                                                            final HRibbonGroupModel groupModel,
-                                                           final Rectangle[] groupBounds,
-                                                           final Insets insets,
-                                                           final int headerHeight) {
+                                                           final Rectangle[] groupBounds) {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("HeaderManager.updateAndPositionHeaders must be called on the EDT");
         }
-
-        if (ribbon == null || groupModel == null || groupBounds == null) {
-            // nothing to do, return current cache snapshot
+        if (ribbon == null || ctx == null || groupModel == null || groupBounds == null) {
             return Collections.unmodifiableMap(new HashMap<>(headerCache));
         }
 
-        // 1) Supprimer les headers des groupes qui n'existent plus
-        Set<Integer> currentGroups = new HashSet<>();
-        for (int i = 0; i < groupBounds.length; i++) {
-            currentGroups.add(i);
-        }
-
-        // itérer sur une copie pour éviter ConcurrentModification
+        // Remove headers for groups that disappeared
+        Set<Integer> current = new HashSet<>();
+        for (int i = 0; i < groupBounds.length; i++) current.add(i);
         for (Integer idx : new HashSet<>(headerCache.keySet())) {
-            if (!currentGroups.contains(idx)) {
+            if (!current.contains(idx)) {
                 Component old = headerCache.remove(idx);
-                if (old != null) {
-                    ribbon.removeHeaderComponent(old);
-                }
+                if (old != null) ribbon.removeHeaderComponent(old);
             }
         }
 
-        // 2) Créer / positionner les headers restants
-        final int headerAlignment = ribbon.getHeaderAlignment();
-        final int headerWidth = ribbon.getHeaderWidth();
+        int headerAlignment = ctx.getHeaderAlignment();
+        int headerWidth = ctx.getHeaderWidth();
+        int headerMargin = ctx.getHeaderMargin();
+        Insets insets = ribbon.getInsets();
 
         for (int i = 0; i < groupBounds.length; i++) {
             Rectangle contentRect = groupBounds[i];
             HRibbonGroup group = groupModel.getHRibbonGroup(i);
-
-            if (group == null || contentRect == null) {
-                continue;
-            }
+            if (group == null || contentRect == null) continue;
 
             Component header = headerCache.get(i);
-
             if (header == null) {
-                // création via le renderer (defensive: renderer peut être null)
                 GroupRenderer renderer = ribbon.getGroupRenderer();
                 if (renderer != null) {
                     Object headerValue = ribbon.getHeaderValue(i);
                     try {
                         header = renderer.getHeaderComponent(ribbon, headerValue, i, false);
-                    } catch (Throwable t) {
-                        header = null; // defensive: ignore renderer failures
-                    }
+                    } catch (Throwable t) { header = null; }
                     if (header != null) {
                         ribbon.addHeaderComponent(header);
                         headerCache.put(i, header);
@@ -111,96 +86,65 @@ public class HeaderManager {
                 }
             }
 
-            if (header != null) {
-                int headerX, headerY, headerW, headerH;
+            if (header == null) continue;
 
-                switch (headerAlignment) {
-                    case Ribbon.HEADER_NORTH:
-                        headerX = contentRect.x;
-                        headerY = (insets != null) ? insets.top : 0;
-                        headerW = contentRect.width;
-                        headerH = headerHeight;
-                        break;
-
-                    case Ribbon.HEADER_SOUTH:
-                        headerX = contentRect.x;
-                        headerY = ribbon.getHeight() - ((insets != null) ? insets.bottom : 0) - headerHeight;
-                        headerW = contentRect.width;
-                        headerH = headerHeight;
-                        break;
-
-                    case Ribbon.HEADER_WEST:
-                        headerX = contentRect.x - headerWidth;
-                        headerY = contentRect.y;
-                        headerW = headerWidth;
-                        headerH = contentRect.height;
-                        break;
-
-                    case Ribbon.HEADER_EAST:
-                        headerX = contentRect.x + contentRect.width;
-                        headerY = contentRect.y;
-                        headerW = headerWidth;
-                        headerH = contentRect.height;
-                        break;
-
-                    default:
-                        //En-tête masqué ou alignement inconnu -> ignorer le positionnement
-                        continue;
-                }
-
-                // Bounds defensives : largeur/hauteur non négatives
-                headerW = Math.max(0, headerW);
-                headerH = Math.max(0, headerH);
-
-                header.setBounds(headerX, headerY, headerW, headerH);
-                header.setVisible(true);
+            int hx = 0, hy = 0, hw = 0, hh = 0;
+            switch (headerAlignment) {
+                case Ribbon.HEADER_NORTH:
+                    hw = contentRect.width;
+                    hh = ribbon.getHeaderHeight();
+                    hx = contentRect.x;
+                    hy = contentRect.y - headerMargin - hh;
+                    break;
+                case Ribbon.HEADER_SOUTH:
+                    hw = contentRect.width;
+                    hh = ribbon.getHeaderHeight();
+                    hx = contentRect.x;
+                    hy = contentRect.y + contentRect.height + headerMargin;
+                    break;
+                case Ribbon.HEADER_WEST:
+                    hw = headerWidth;
+                    hh = contentRect.height;
+                    hx = contentRect.x - headerMargin - hw;
+                    hy = contentRect.y;
+                    break;
+                case Ribbon.HEADER_EAST:
+                    hw = headerWidth;
+                    hh = contentRect.height;
+                    hx = contentRect.x + contentRect.width + headerMargin;
+                    hy = contentRect.y;
+                    break;
+                default:
+                    header.setVisible(false);
+                    continue;
             }
+
+            hw = Math.max(0, hw);
+            hh = Math.max(0, hh);
+            header.setBounds(hx, hy, hw, hh);
+            header.setVisible(true);
         }
 
         return Collections.unmodifiableMap(new HashMap<>(headerCache));
     }
 
-    /**
-     * Retire le header d'un groupe spécifique si présent.
-     * @param ribbon     le Ribbon
-     * @param groupIndex index du groupe
-     */
     public void removeHeaderForGroup(Ribbon ribbon, int groupIndex) {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("HeaderManager.removeHeaderForGroup must be called on the EDT");
         }
         Component old = headerCache.remove(groupIndex);
-        if (old != null && ribbon != null) {
-            ribbon.removeHeaderComponent(old);
-        }
+        if (old != null && ribbon != null) ribbon.removeHeaderComponent(old);
     }
 
-    /**
-     * Invalide tous les headers : les retire du Ribbon et vide le cache.
-     *
-     * @param ribbon le Ribbon
-     */
     public void invalidateAllHeaders(Ribbon ribbon) {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("HeaderManager.invalidateAllHeaders must be called on the EDT");
         }
         if (ribbon != null) {
-            for (Component header : headerCache.values()) {
-                if (header != null) {
-                    ribbon.removeHeaderComponent(header);
-                }
+            for (Component h : headerCache.values()) {
+                if (h != null) ribbon.removeHeaderComponent(h);
             }
         }
         headerCache.clear();
     }
-
-    /**
-     * Retourne une copie immuable du cache actuel des headers.     
-     *
-     * @return map index->Component (immutably wrapped)
-     */
-    public Map<Integer, Component> getHeaderComponents() {
-        return Collections.unmodifiableMap(new HashMap<>(headerCache));
-    }
-    
 }
