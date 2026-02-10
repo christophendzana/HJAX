@@ -27,6 +27,8 @@ import javax.swing.SwingUtilities;
 import rubban.GroupRenderer;
 import rubban.HRibbonModel;
 import rubban.Ribbon;
+import rubban.HRibbonGroup;
+import rubban.HRibbonGroupModel;
 
 /**
  * ComponentOrganizer - Gestionnaire intelligent de composants pour HRibbon
@@ -270,90 +272,112 @@ public class ComponentOrganizer {
      * @see SwingUtilities#isEventDispatchThread()
      */
     public ComponentCollectionResult collectComponents(final Ribbon ribbon, final HRibbonModel model) {
-        // VÉRIFICATION DU THREAD - Swing est single-threaded
-        if (!SwingUtilities.isEventDispatchThread()) {
-            throw new IllegalStateException(
-                "ComponentOrganizer.collectComponents must be called on the EDT"
-            );
-        }
+    // VÉRIFICATION DU THREAD - Swing est single-threaded
+    if (!SwingUtilities.isEventDispatchThread()) {
+        throw new IllegalStateException(
+            "ComponentOrganizer.collectComponents must be called on the EDT"
+        );
+    }
 
-        // Structures de résultats vides par défaut
-        Map<Integer, List<Component>> componentsByGroup = new HashMap<>();
-        Map<Component, ComponentData> componentInfoMap = new HashMap<>();
+    // Structures de résultats vides par défaut
+    Map<Integer, List<Component>> componentsByGroup = new HashMap<>();
+    Map<Component, ComponentData> componentInfoMap = new HashMap<>();
 
-        // CAS LIMITE : Paramètres invalides
-        if (ribbon == null || model == null) {
-            return new ComponentCollectionResult(componentsByGroup, componentInfoMap);
-        }
-
-        // Récupération du renderer (peut être null)
-        GroupRenderer renderer = ribbon.getGroupRenderer();
-
-        // PARCOURS DE TOUS LES GROUPES
-        final int groupCount = model.getGroupCount();
-        for (int gi = 0; gi < groupCount; gi++) {
-            // Liste des composants pour ce groupe
-            List<Component> list = new ArrayList<>();
-            
-            // PARCOURS DE TOUTES LES VALEURS DU GROUPE
-            int valueCount = model.getValueCount(gi);
-            for (int pos = 0; pos < valueCount; pos++) {
-                Object value = model.getValueAt(pos, gi);
-                Component comp = null;
-
-                // IGNORER LES VALEURS NULLES
-                if (value == null) {
-                    continue; // Passer à la valeur suivante
-                }
-
-                // CAS 1 : VALEUR DÉJÀ COMPOSANT
-                // La valeur est déjà un Component Swing (prêt à l'emploi)
-                if (value instanceof Component) {
-                    comp = (Component) value;
-                } 
-                // CAS 2 : VALEUR OBJET (NÉCESSITE UN RENDERER)
-                // La valeur doit être transformée en Component par le renderer
-                else {
-                    // Création de la clé de cache
-                    CacheKey key = new CacheKey(gi, pos, value);
-                    
-                    // RECHERCHE DANS LE CACHE
-                    comp = cache.get(key);
-                    
-                    // NON TROUVÉ DANS LE CACHE → CRÉATION
-                    if (comp == null) {
-                        // Utilisation du renderer si disponible
-                        if (renderer != null) {
-                            try {
-                                // Appel sécurisé au renderer
-                                comp = renderer.getGroupComponent(ribbon, value, gi, pos, false, false);
-                            } catch (Throwable t) {
-                                // Gestion robuste des erreurs du renderer
-                                comp = null; // Échec silencieux
-                            }
-                        }
-                        
-                        // MISE EN CACHE SI CRÉATION RÉUSSIE
-                        if (comp != null) {
-                            cache.put(key, comp);
-                        }
-                    }
-                }
-
-                // AJOUT DU COMPOSANT AUX RÉSULTATS
-                if (comp != null) {
-                    list.add(comp);
-                    componentInfoMap.put(comp, new ComponentData(gi, pos, value));
-                }
-            }
-            
-            // AJOUT DE LA LISTE À LA MAP (même si vide)
-            componentsByGroup.put(gi, list);
-        }
-
-        // RETOUR DU RÉSULTAT COMPLET
+    // CAS LIMITE : Paramètres invalides
+    if (ribbon == null || model == null) {
         return new ComponentCollectionResult(componentsByGroup, componentInfoMap);
     }
+
+    // Récupération du renderer (peut être null)
+    GroupRenderer renderer = ribbon.getGroupRenderer();
+    
+    // Récupération du groupModel pour vérifier l'état collapsed
+    HRibbonGroupModel groupModel = ribbon.getGroupModel();
+
+    // PARCOURS DE TOUS LES GROUPES
+    final int groupCount = model.getGroupCount();
+    for (int gi = 0; gi < groupCount; gi++) {
+        
+        // Liste des composants pour ce groupe
+        List<Component> list = new ArrayList<>();
+        
+        // Récupérer le groupe pour vérifier son état
+        HRibbonGroup group = null;
+        if (groupModel != null) {
+            group = groupModel.getHRibbonGroup(gi);
+        }
+        
+        // ============ NOUVEAU : GÉRER LE COMBOBOX SI COLLAPSED ============
+        if (group != null && group.isCollapsed()) {
+            // Créer ou récupérer le JComboBox
+            Component collapsedComp = group.getCollapsedComponent();
+            
+            if (collapsedComp == null) {
+                // Créer le combo via CollapsedGroupRenderer
+                CollapsedGroupRenderer collapsedRenderer = new CollapsedGroupRenderer();
+                collapsedComp = collapsedRenderer.createCollapsedComboBox(ribbon, group, gi);
+                group.setCollapsedComponent(collapsedComp);
+            }
+            
+            // Ajouter le combo à la liste
+            list.add(collapsedComp);
+            
+            // Métadonnées : position = -1 pour indiquer "groupe collapsed"
+            componentInfoMap.put(collapsedComp, new ComponentData(gi, -1, group.getHeaderValue()));
+        }
+        
+        // ============ TOUJOURS COLLECTER LES COMPOSANTS NORMAUX ============
+        // Même si le groupe est collapsed, on collecte les composants normaux
+        // Le LayoutManager décidera de leur visibilité
+        
+        int valueCount = model.getValueCount(gi);
+        for (int pos = 0; pos < valueCount; pos++) {
+            Object value = model.getValueAt(pos, gi);
+            Component comp = null;
+
+            // IGNORER LES VALEURS NULLES
+            if (value == null) {
+                continue;
+            }
+
+            // CAS 1 : VALEUR DÉJÀ COMPOSANT
+            if (value instanceof Component) {
+                comp = (Component) value;
+            } 
+            // CAS 2 : VALEUR OBJET (NÉCESSITE UN RENDERER)
+            else {
+                CacheKey key = new CacheKey(gi, pos, value);
+                comp = cache.get(key);
+                
+                if (comp == null) {
+                    if (renderer != null) {
+                        try {
+                            comp = renderer.getGroupComponent(ribbon, value, gi, pos, false, false);
+                        } catch (Throwable t) {
+                            comp = null;
+                        }
+                    }
+                    
+                    if (comp != null) {
+                        cache.put(key, comp);
+                    }
+                }
+            }
+
+            // AJOUT DU COMPOSANT AUX RÉSULTATS
+            if (comp != null) {
+                list.add(comp);
+                componentInfoMap.put(comp, new ComponentData(gi, pos, value));
+            }
+        }
+        
+        // AJOUT DE LA LISTE À LA MAP (même si vide)
+        componentsByGroup.put(gi, list);
+    }
+
+    // RETOUR DU RÉSULTAT COMPLET
+    return new ComponentCollectionResult(componentsByGroup, componentInfoMap);
+}
 
     // =========================================================================
     // MÉTHODE UTILITAIRE DE CRÉATION/OBTENTION

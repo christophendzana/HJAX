@@ -172,6 +172,16 @@ public class HeaderManager {
                 continue; // Groupe invalide, passer au suivant
             }
             
+             // Si le groupe est collapsed, masquer son header
+        if (group.isCollapsed()) {
+            // Masquer le header existant s'il y en a un
+            Component existingHeader = headerCache.get(i);
+            if (existingHeader != null) {
+                existingHeader.setVisible(false);
+            }
+            continue; // Ne pas créer/afficher de header pour un groupe collapsed
+        }
+            
             // RECHERCHE DANS LE CACHE
             Component header = headerCache.get(i);
             

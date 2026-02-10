@@ -19,6 +19,7 @@ package rubban.layout;
 
 import java.awt.Insets;
 import java.awt.Rectangle;
+import rubban.HRibbonGroup;
 import rubban.HRibbonGroupModel;
 import rubban.Ribbon;
 
@@ -129,8 +130,13 @@ public class GroupBoundsCalculator {
             int contentX = x;   // Position X initiale
             int contentW = totalW; // Largeur initiale
             
+            //Vérifier si le groupe est collapsed
+            HRibbonGroup group = (groupModel != null) ? groupModel.getHRibbonGroup(i) : null;
+            boolean isCollapsed = (group != null && group.isCollapsed());
+            
             // CAS DES EN-TÊTES LATÉRAUX (GAUCHE/DROITE)
-            if (headerAlignment == Ribbon.HEADER_WEST) {
+            //Ne pas soustraire l'espace du header si le groupe est collapsed
+            if (!isCollapsed && headerAlignment == Ribbon.HEADER_WEST) {
                 // EN-TÊTE À GAUCHE : réserver de l'espace sur le côté gauche
                 // Calcul de la zone réservée (header + marge)
                 int reserved = Math.min(totalW, headerWidth + headerMargin);
@@ -141,7 +147,7 @@ public class GroupBoundsCalculator {
                 // Réduire la largeur disponible
                 contentW = Math.max(0, totalW - reserved);
                 
-            } else if (headerAlignment == Ribbon.HEADER_EAST) {
+            } else if (!isCollapsed && headerAlignment == Ribbon.HEADER_EAST) {
                 // EN-TÊTE À DROITE : réserver de l'espace sur le côté droit
                 // Calcul de la zone réservée (header + marge)
                 int reserved = Math.min(totalW, headerWidth + headerMargin);
@@ -153,8 +159,7 @@ public class GroupBoundsCalculator {
                 contentW = Math.max(0, totalW - reserved);
                 
             } else {
-                // EN-TÊTES HAUT/BAS : le contenu utilise toute la largeur
-                // L'en-tête est placé au-dessus ou en dessous, pas sur les côtés
+                // EN-TÊTES HAUT/BAS OU GROUPE COLLAPSED : le contenu utilise toute la largeur
                 contentX = x;
                 contentW = totalW;
             }
