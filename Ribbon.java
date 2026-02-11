@@ -8,9 +8,12 @@ import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 import javax.swing.*;
-import javax.swing.Timer;
 import javax.swing.event.*;
 import javax.swing.plaf.ComponentUI;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.util.List;
 
 /**
  *
@@ -31,7 +34,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     public final int AUTO_RESIZE_SUBSEQUENT_GROUPS = 2;
     public final int AUTO_RESIZE_LAST_GROUP = 3;
     public final int AUTO_RESIZE_ALL_GROUPS = 4;
-    
+
     /**
      * Constante pour le positionnement du header
      */
@@ -113,6 +116,8 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Empêcher les mises à jour récursives de l'UI.
      */
     private transient boolean updateInProgress;
+    
+    private transient boolean isLayoutInProgress = false;
 
     /**
      * Le ruban remplit toujours la hauteur du viewport.
@@ -139,7 +144,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private GroupRenderer groupRenderer;
 
     private int headerMargin = 0;
-    
+
     /**
      * Listener pour la suppression des éditeurs.
      */
@@ -170,57 +175,61 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     private int fixedHeight = -1;
 
-    
     /**
- * Couleur de fond par défaut pour tous les en-têtes du ruban.
- * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
- */
-private Color defaultHeaderBackground = new Color(197, 199, 228); // Gris-bleu clair
+     * Couleur de fond par défaut pour tous les en-têtes du ruban. Utilisée
+     * lorsqu'un groupe n'a pas de couleur spécifique définie.
+     */
+    private Color defaultHeaderBackground = new Color(197, 199, 228); // Gris-bleu clair
 
-/**
- * Couleur de texte par défaut pour tous les en-têtes du ruban.
- * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
- */
-private Color defaultHeaderForeground = new Color(60, 60, 60); // Gris foncé
+    /**
+     * Couleur de texte par défaut pour tous les en-têtes du ruban. Utilisée
+     * lorsqu'un groupe n'a pas de couleur spécifique définie.
+     */
+    private Color defaultHeaderForeground = new Color(60, 60, 60); // Gris foncé
 
-/**
- * Couleur de bordure par défaut pour tous les en-têtes du ruban.
- * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
- */
-private Color defaultHeaderBorderColor = new Color(200, 200, 200); // Gris clair
+    /**
+     * Couleur de bordure par défaut pour tous les en-têtes du ruban. Utilisée
+     * lorsqu'un groupe n'a pas de couleur spécifique définie.
+     */
+    private Color defaultHeaderBorderColor = new Color(200, 200, 200); // Gris clair
 
-/**
- * Taille de police par défaut pour tous les en-têtes du ruban (en points).
- * Utilisée lorsqu'un groupe n'a pas de taille spécifique définie.
- */
-private int defaultHeaderFontSize = 11;
+    /**
+     * Taille de police par défaut pour tous les en-têtes du ruban (en points).
+     * Utilisée lorsqu'un groupe n'a pas de taille spécifique définie.
+     */
+    private int defaultHeaderFontSize = 11;
 
-/**
- * Indicateur de police en gras par défaut pour tous les en-têtes du ruban.
- * Utilisée lorsqu'un groupe n'a pas de paramètre spécifique défini.
- */
-private boolean defaultHeaderFontBold = true;
+    /**
+     * Indicateur de police en gras par défaut pour tous les en-têtes du ruban.
+     * Utilisée lorsqu'un groupe n'a pas de paramètre spécifique défini.
+     */
+    private boolean defaultHeaderFontBold = true;
 
-/**
- * Couleur de fond par défaut pour les en-têtes au survol.
- * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
- */
-private Color defaultHeaderHoverBackground = new Color(180, 200, 255); // Bleu très clair
+    /**
+     * Couleur de fond par défaut pour les en-têtes au survol. Utilisée
+     * lorsqu'un groupe n'a pas de couleur spécifique définie.
+     */
+    private Color defaultHeaderHoverBackground = new Color(180, 200, 255); // Bleu très clair
 
-/**
- * Couleur de fond par défaut pour les en-têtes sélectionnés.
- * Utilisée lorsqu'un groupe n'a pas de couleur spécifique définie.
- */
-private Color defaultHeaderSelectedBackground = new Color(150, 180, 255); // Bleu clair
+    /**
+     * Couleur de fond par défaut pour les en-têtes sélectionnés. Utilisée
+     * lorsqu'un groupe n'a pas de couleur spécifique définie.
+     */
+    private Color defaultHeaderSelectedBackground = new Color(150, 180, 255); // Bleu clair
 
-/**
- * Rayon des coins arrondis par défaut pour tous les en-têtes (en pixels).
- * Utilisée lorsqu'un groupe n'a pas de rayon spécifique défini.
- * 0 = coins carrés, 5 = légèrement arrondi, 15 = très arrondi.
- */
-private int defaultHeaderCornerRadius = 5;
-    
-    
+    /**
+     * Rayon des coins arrondis par défaut pour tous les en-têtes (en pixels).
+     * Utilisée lorsqu'un groupe n'a pas de rayon spécifique défini. 0 = coins
+     * carrés, 5 = légèrement arrondi, 15 = très arrondi.
+     */
+    private int defaultHeaderCornerRadius = 5;
+
+    /**
+     * Listener pour détecter les changements de taille du conteneur parent.
+     * Utilisé pour le redimensionnement adaptatif des groupes.
+     */
+    private transient ComponentListener resizeListener = null;
+
     // =========================================================================
     // CONSTRUCTEURS
     // =========================================================================
@@ -236,7 +245,7 @@ private int defaultHeaderCornerRadius = 5;
      */
     public Ribbon(HRibbonModel model) {
         this(model, null, null);
-   }
+    }
 
     /**
      * Constructeur avec modèle de groupes.
@@ -301,9 +310,13 @@ private int defaultHeaderCornerRadius = 5;
         this.autoCreateGroupsFromModel = true;
 
         this.groupRenderer = createDefaultGroupRenderer();
-                     
-        updateUI();
+
+         // Installer le listener de redimensionnement adaptatif
+        installResizeListener();
+
         
+        updateUI();
+
     }
 
 //    /**
@@ -336,7 +349,7 @@ private int defaultHeaderCornerRadius = 5;
             }
         }
     }
-       
+
     // =========================================================================
     // MÉTHODES FACTORY POUR LES DÉFAUTS
     // =========================================================================
@@ -372,9 +385,6 @@ private int defaultHeaderCornerRadius = 5;
         return new DefaultGroupRenderer();
     }
 
-    
-    
-    
     // =========================================================================
     // GESTION DE L'UI (Look and Feel)
     // =========================================================================
@@ -395,7 +405,6 @@ private int defaultHeaderCornerRadius = 5;
         }
     }
 
-    
     /**
      * Met à jour l'UI quand le Look and Feel change.
      */
@@ -414,11 +423,11 @@ private int defaultHeaderCornerRadius = 5;
             }
 
             if (UIManager.get("BasicHRibbonUI") == null) {
-        UIManager.put("BasicHRibbonUI", "rubban.BasicHRibbonUI");
-    }
-            
+                UIManager.put("BasicHRibbonUI", "rubban.BasicHRibbonUI");
+            }
+
             this.setOpaque(true);
-            
+
             ComponentUI ui = UIManager.getUI(this);
             if (ui != null) {
                 setUI((BasicHRibbonUI) ui);
@@ -582,7 +591,6 @@ private int defaultHeaderCornerRadius = 5;
      * Calcule la largeur préférée du ruban. Méthode utilisée si pas de
      * LayoutManager.
      */
-
     // =========================================================================
     // GESTION DES MODÈLES (setModel / setGroupModel)
     // =========================================================================
@@ -705,67 +713,273 @@ private int defaultHeaderCornerRadius = 5;
         }
     }
 
-    // =========================================================================
-    // IMPLÉMENTATION DE HRibbonModelListener
-    // =========================================================================
     /**
-     * Synchronise les composants affichés avec le modèle de données. Cette
-     * méthode est appelée lorsqu'un changement est détecté dans le modèle.
-     */
-    private void syncComponentsWithModel() {
-        if (syncingWithModel || model == null || groupRenderer == null) {
-            return;
-        }
+ * Synchronise les composants affichés avec le modèle de données.
+ * 
+ * PRINCIPE FONDAMENTAL - SÉPARATION STRICTE DES ÉTATS :
+ * ------------------------------------------------------
+ * - Groupe NORMAL    → composants DANS le Ribbon (parent = Ribbon)
+ * - Groupe COLLAPSED → composants DANS le OverflowButton (parent ≠ Ribbon)
+ * 
+ * Un composant n'est JAMAIS présent dans les deux conteneurs simultanément.
+ * Le transfert est exclusif et contrôlé par l'état du groupe.
+ * 
+ * Cette méthode maintient l'invariant : displayedComponents = composants NORMAUX uniquement
+ */
+private void syncComponentsWithModel() {
+    // Vérifications de sécurité
+    if (syncingWithModel || model == null || groupRenderer == null || groupModel == null) {
+        return;
+    }
 
-        syncingWithModel = true;
+    syncingWithModel = true;
 
-        try {
-            // VIDER LE CACHE ANCIEN
-            Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
-            Set<Component> expectedComponents = new HashSet<>();
+    try {
+        // === CARTE D'IDENTITÉ DES COMPOSANTS ===
+        // Associe chaque composant à ses coordonnées (groupe, position, valeur)
+        Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
+        
+        // === ENSEMBLE DES COMPOSANTS EXISTANT DANS LE MODÈLE ===
+        // Tous les composants qui DEVRAIENT exister (indépendamment de leur état)
+        Set<Component> allExpectedComponents = new HashSet<>();
+        
+        // === ENSEMBLE DES COMPOSANTS À PLACER DANS LE RIBBON ===
+        // UNIQUEMENT ceux des groupes NON collapsed
+        Set<Component> componentsToKeepInRibbon = new HashSet<>();
 
-            // 1. PARCOURIR TOUT LE MODÈLE
-            for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
-                int valueCount = model.getValueCount(groupIndex);
-                for (int position = 0; position < valueCount; position++) {
-                    Object value = model.getValueAt(position, groupIndex);
+        // ÉTAPE 1 : PARCOURS COMPLET DU MODÈLE
+        // -------------------------------------
+        for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
+            
+            // Déterminer l'état du groupe
+            HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
+            boolean isCollapsed = (group != null && group.isCollapsed());
+            
+            int valueCount = model.getValueCount(groupIndex);
+            
+            for (int position = 0; position < valueCount; position++) {
+                Object value = model.getValueAt(position, groupIndex);
+                
+                // Créer ou récupérer le composant associé à cette valeur
+                Component component = createComponentForValue(value, groupIndex, position);
 
-                    // 2. CRÉER OU RÉCUPÉRER LE COMPONENT
-                    Component component = createComponentForValue(value, groupIndex, position);
+                if (component != null) {
+                    // Enregistrer les métadonnées du composant
+                    newComponentInfoMap.put(component,
+                            new ComponentInfo(groupIndex, position, value));
+                    
+                    // Ce composant est attendu dans le modèle
+                    allExpectedComponents.add(component);
 
-                    if (component != null) {
-                        // 3. AJOUTER AU CACHE
-                        newComponentInfoMap.put(component,
-                                new ComponentInfo(groupIndex, position, value));
-                        expectedComponents.add(component);
+                    // DÉCISION CRUCIALE : Où doit vivre ce composant ?
+                    // -------------------------------------------------
+                    if (!isCollapsed) {
+                        // CAS 1 : Groupe NORMAL → le composant DOIT être dans le Ribbon
+                        componentsToKeepInRibbon.add(component);
                     }
+                    // CAS 2 : Groupe COLLAPSED → le composant NE DOIT PAS être dans le Ribbon
+                    // (il sera dans le OverflowButton, géré par CollapsedGroupRenderer)
+                    // → NE PAS l'ajouter à componentsToKeepInRibbon
                 }
             }
+        }
 
-            // 4. IDENTIFIER LES CHANGEMENTS
-            Set<Component> toRemove = new HashSet<>(displayedComponents);
-            toRemove.removeAll(expectedComponents);
+        // ÉTAPE 2 : NETTOYAGE DES COMPOSANTS ORPHELINS
+        // --------------------------------------------
+        // Retirer tous les composants qui ne sont plus dans le modèle
+        Set<Component> toRemove = new HashSet<>(displayedComponents);
+        toRemove.removeAll(allExpectedComponents);
+        for (Component comp : toRemove) {
+            removeComponentFromContainer(comp);
+            // Nettoyer également le cache d'informations
+            componentInfoMap.remove(comp);
+        }
 
-            Set<Component> toAdd = new HashSet<>(expectedComponents);
-            toAdd.removeAll(displayedComponents);
+        // ÉTAPE 3 : AJOUT DES NOUVEAUX COMPOSANTS NORMaux
+        // -----------------------------------------------
+        // Ajouter uniquement les composants des groupes normaux qui ne sont pas déjà présents
+        Set<Component> toAdd = new HashSet<>(componentsToKeepInRibbon);
+        toAdd.removeAll(displayedComponents);
+        for (Component comp : toAdd) {
+            addComponentToContainer(comp);
+        }
 
-            // 5. APPLIQUER LES CHANGEMENTS
-            for (Component comp : toRemove) {
-                removeComponentFromContainer(comp);
+        // ÉTAPE 4 : EXPULSION DES COMPOSANTS COLLAPSED DU RIBBON
+        // -------------------------------------------------------
+        // C'est le cœur de la séparation stricte :
+        // Tout composant qui est dans le Ribbon mais qui appartient à un groupe collapsed
+        // DOIT être immédiatement retiré
+        Set<Component> toRemoveFromCollapsed = new HashSet<>(displayedComponents);
+        toRemoveFromCollapsed.removeAll(componentsToKeepInRibbon);
+        for (Component comp : toRemoveFromCollapsed) {
+            removeComponentFromContainer(comp);
+            // Important : on garde le composant dans componentInfoMap
+            // car il existe toujours dans le modèle, juste déplacé
+        }
+
+        // ÉTAPE 5 : MISE À JOUR DES CACHES
+        // --------------------------------
+        // displayedComponents ne contient PLUS QUE les composants des groupes normaux
+        displayedComponents = new HashSet<>(componentsToKeepInRibbon);
+        
+        // Remplacer la carte d'identité
+        componentInfoMap = newComponentInfoMap;
+
+        // Journalisation debug (à désactiver en production)
+        if (debugMode) {
+            System.out.println("syncComponentsWithModel - " +
+                             "Normaux: " + componentsToKeepInRibbon.size() + 
+                             ", Total: " + allExpectedComponents.size());
+        }
+
+    } finally {
+        syncingWithModel = false;
+    }
+}
+
+/**
+ * TRANSFERT EXCLUSIF : Ribbon → OverflowButton
+ * --------------------------------------------
+ * Vide complètement un groupe du Ribbon et transfère tous ses composants
+ * vers un RibbonOverflowButton.
+ * 
+ * Préconditions :
+ * - Le groupe est en cours de collapse
+ * - Le bouton est fraîchement créé ou vide
+ * 
+ * Postconditions :
+ * - Tous les composants du groupe n'ont PLUS le Ribbon comme parent
+ * - Tous les composants sont dans le bouton (via sa liste interne)
+ * - Le cache displayedComponents est mis à jour
+ * 
+ * @param groupIndex index du groupe à vider
+ * @param button le bouton de débordement qui va recevoir les composants
+ */
+public void transferComponentsToOverflow(int groupIndex, RibbonOverflowButton button) {
+    // Validation des paramètres
+    if (model == null || button == null) {
+        return;
+    }
+    
+    // Vérifier que le groupe existe
+    if (groupIndex < 0 || groupIndex >= model.getGroupCount()) {
+        return;
+    }
+    
+    // Éviter les transferts redondants pendant les mises à jour
+    if (syncingWithModel) {
+        return;
+    }
+    
+    if (debugMode) {
+        System.out.println(">>> TRANSFERT Ribbon → Overflow - Groupe " + groupIndex);
+    }
+    
+    int valueCount = model.getValueCount(groupIndex);
+    int transferredCount = 0;
+    
+    for (int i = 0; i < valueCount; i++) {
+        Object value = model.getValueAt(i, groupIndex);
+        
+        if (value instanceof JComponent) {
+            JComponent comp = (JComponent) value;
+            
+            // ÉTAPE 1 : RETIRER DU RIBBON
+            // ----------------------------
+            if (comp.getParent() == this) {
+                removeComponentSafely(comp);
+                
+                // Important : on retire aussi du cache displayedComponents
+                displayedComponents.remove(comp);
+                
+                if (debugMode) {
+                    System.out.println("   - Retiré: " + comp.getClass().getSimpleName());
+                }
             }
-
-            for (Component comp : toAdd) {
-                addComponentToContainer(comp);
-            }
-
-            // 6. METTRE À JOUR LES CACHES
-            displayedComponents = expectedComponents;
-            componentInfoMap = newComponentInfoMap; // ← METTRE À JOUR LE CACHE
-
-        } finally {
-            syncingWithModel = false;
+            
+            // ÉTAPE 2 : AJOUTER AU BOUTON
+            // ----------------------------
+            // Le bouton accepte les composants sans parent
+            button.addComponent(comp);
+            transferredCount++;
         }
     }
+    
+    if (debugMode) {
+        System.out.println("<<< TRANSFERT TERMINÉ: " + transferredCount + 
+                         " composants transférés");
+    }
+}
+
+/**
+ * TRANSFERT EXCLUSIF : OverflowButton → Ribbon
+ * --------------------------------------------
+ * Récupère tous les composants d'un bouton de débordement et les replace
+ * dans le Ribbon. Utilisé lors de l'expansion d'un groupe.
+ * 
+ * Préconditions :
+ * - Le groupe repasse en mode normal
+ * - Le bouton contient des composants
+ * 
+ * Postconditions :
+ * - Le bouton est vidé (clearComponents)
+ * - Les composants sont marqués comme devant être dans le Ribbon
+ * - Le prochain syncComponentsWithModel les ajoutera automatiquement
+ * 
+ * @param groupIndex index du groupe à restaurer
+ * @param button le bouton de débordement à vider
+ */
+public void transferComponentsFromOverflow(int groupIndex, RibbonOverflowButton button) {
+    // Validation
+    if (button == null) {
+        return;
+    }
+    
+    if (syncingWithModel) {
+        return;
+    }
+    
+    if (debugMode) {
+        System.out.println(">>> TRANSFERT Overflow → Ribbon - Groupe " + groupIndex);
+    }
+    
+    // ÉTAPE 1 : RÉCUPÉRER LA LISTE DES COMPOSANTS CACHÉS
+    // ---------------------------------------------------
+    List<JComponent> hiddenComponents = button.getHiddenComponents();
+    
+    if (debugMode) {
+        System.out.println("   - Composants dans le bouton: " + hiddenComponents.size());
+    }
+    
+    // ÉTAPE 2 : VIDER LE BOUTON
+    // --------------------------
+    // Important : on vide AVANT de récupérer les composants
+    // pour éviter qu'ils ne soient encore référencés
+    button.clearComponents();
+    
+    // ÉTAPE 3 : NETTOYER LE BOUTON DU RIBBON
+    // ---------------------------------------
+    // Retirer physiquement le bouton du conteneur
+    if (button.getParent() == this) {
+        removeComponentSafely(button);
+    }
+    
+    // ÉTAPE 4 : FORCER LA RESYNCHRONISATION
+    // --------------------------------------
+    // Les composants vont être automatiquement ré-ajoutés au Ribbon
+    // lors du prochain syncComponentsWithModel car le groupe n'est plus collapsed
+    // On déclenche une mise à jour immédiate
+    revalidate();
+    repaint();
+    
+    if (debugMode) {
+        System.out.println("<<< TRANSFERT TERMINÉ, resync déclenchée");
+    }
+}
+
+
+// Ajouter cette constante en haut de la classe pour le debug
+private static final boolean debugMode = false; // Mettre à true pour tracer
 
     /**
      * Crée un Component pour une valeur en utilisant le GroupRenderer.
@@ -886,6 +1100,21 @@ private int defaultHeaderCornerRadius = 5;
             displayedComponents.remove(component);
         }
     }
+    
+    /**
+ * Retire un composant physique du conteneur HRibbon de manière sécurisée.
+ * Version publique pour permettre au LayoutManager de nettoyer proprement.
+ * 
+ * Cette méthode garantit que :
+ * - Le composant est retiré de l'arbre Swing
+ * - displayedComponents est mis à jour
+ * 
+ * @param component le composant à retirer
+ */
+public void removeComponentSafely(Component component) {
+    removeComponentFromContainer(component);
+}
+    
 
     /**
      * Retire tous les composants du conteneur HRibbon.
@@ -1143,7 +1372,7 @@ private int defaultHeaderCornerRadius = 5;
         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
-                
+
         if (model instanceof DefaultHRibbonModel) {
             DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
             defaultModel.addValue(value, groupIndex);
@@ -1750,7 +1979,7 @@ private int defaultHeaderCornerRadius = 5;
     /**
      * Méthode interne pour ajouter des composants headers.
      */
-   public void addHeaderComponent(Component header) {
+    public void addHeaderComponent(Component header) {
         if (header == null) {
             return;
         }
@@ -1764,7 +1993,7 @@ private int defaultHeaderCornerRadius = 5;
     /**
      * Méthode interne pour retirer un header.
      */
-   public void removeHeaderComponent(Component header) {
+    public void removeHeaderComponent(Component header) {
         if (header != null && header.getParent() == this) {
             super.remove(header);
         }
@@ -1947,42 +2176,44 @@ private int defaultHeaderCornerRadius = 5;
     public int getFixedHeight() {
         return this.fixedHeight;
     }
-    
+
     /**
- * Retourne la hauteur de contenu préférée calculée par le HRibbonLayoutManager.
- *
- * Cette valeur correspond à la hauteur nécessaire pour afficher la zone "utile"
- * du ruban (les groupes et leurs composants), hors insets (marges du conteneur).
- *
- * à Eviter à appeler en boucle
- *
- * @return hauteur de contenu préférée en pixels (>= 0), excluant les insets.
- */
-public int getPreferredContentHeight() {
-    HRibbonLayoutManager lm = (HRibbonLayoutManager) getRubanLayout();
-    if (lm != null) {
-        Dimension pref = lm.preferredLayoutSize(this);
+     * Retourne la hauteur de contenu préférée calculée par le
+     * HRibbonLayoutManager.
+     *
+     * Cette valeur correspond à la hauteur nécessaire pour afficher la zone
+     * "utile" du ruban (les groupes et leurs composants), hors insets (marges
+     * du conteneur).
+     *
+     * à Eviter à appeler en boucle
+     *
+     * @return hauteur de contenu préférée en pixels (>= 0), excluant les
+     * insets.
+     */
+    public int getPreferredContentHeight() {
+        HRibbonLayoutManager lm = (HRibbonLayoutManager) getRubanLayout();
+        if (lm != null) {
+            Dimension pref = lm.preferredLayoutSize(this);
+            if (pref != null) {
+                Insets insets = getInsets();
+                int insetV = (insets != null) ? (insets.top + insets.bottom) : 0;
+                int contentH = pref.height - insetV;
+                return Math.max(contentH, 0);
+            }
+        }
+
+        // Fallback : utiliser la preferredSize générale
+        Dimension pref = getPreferredSize();
         if (pref != null) {
             Insets insets = getInsets();
             int insetV = (insets != null) ? (insets.top + insets.bottom) : 0;
-            int contentH = pref.height - insetV;
-            return Math.max(contentH, 0);
+            return Math.max(pref.height - insetV, 0);
         }
+
+        return 0;
     }
 
-    // Fallback : utiliser la preferredSize générale
-    Dimension pref = getPreferredSize();
-    if (pref != null) {
-        Insets insets = getInsets();
-        int insetV = (insets != null) ? (insets.top + insets.bottom) : 0;
-        return Math.max(pref.height - insetV, 0);
-    }
-
-    return 0;
-}
-    
-
-   /**
+    /**
      * Retourne la marge verticale/horizontale entre un groupe et son header.
      */
     public int getHeaderMargin() {
@@ -1999,241 +2230,347 @@ public int getPreferredContentHeight() {
     }
 
     public Rectangle[] getGroupBounds() {
-    LayoutManager lm = getLayout();
-    if (lm instanceof rubban.HRibbonLayoutManager) {
-        return ((rubban.HRibbonLayoutManager) lm).getGroupBounds();
+        LayoutManager lm = getLayout();
+        if (lm instanceof rubban.HRibbonLayoutManager) {
+            return ((rubban.HRibbonLayoutManager) lm).getGroupBounds();
+        }
+        return null;
     }
-    return null;
-}
-    
+
     /**
- * Retourne la couleur de fond par défaut pour tous les en-têtes.
- * 
- * @return la couleur de fond par défaut
- */
-public Color getDefaultHeaderBackground() {
-    return defaultHeaderBackground;
-}
-
-/**
- * Définit la couleur de fond par défaut pour tous les en-têtes.
- * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
- * 
- * @param color la nouvelle couleur de fond par défaut
- */
-public void setDefaultHeaderBackground(Color color) {
-    if (color == null) {
-        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+     * Retourne la couleur de fond par défaut pour tous les en-têtes.
+     *
+     * @return la couleur de fond par défaut
+     */
+    public Color getDefaultHeaderBackground() {
+        return defaultHeaderBackground;
     }
-    if (!this.defaultHeaderBackground.equals(color)) {
-        this.defaultHeaderBackground = color;
-        repaint(); // Redessine le ruban pour appliquer les changements
-    }
-}
 
-/**
- * Retourne la couleur de texte par défaut pour tous les en-têtes.
- * 
- * @return la couleur de texte par défaut
- */
-public Color getDefaultHeaderForeground() {
-    return defaultHeaderForeground;
-}
-
-/**
- * Définit la couleur de texte par défaut pour tous les en-têtes.
- * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
- * 
- * @param color la nouvelle couleur de texte par défaut
- */
-public void setDefaultHeaderForeground(Color color) {
-    if (color == null) {
-        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    /**
+     * Définit la couleur de fond par défaut pour tous les en-têtes. Cette
+     * couleur sera utilisée pour les groupes qui n'ont pas de couleur
+     * spécifique.
+     *
+     * @param color la nouvelle couleur de fond par défaut
+     */
+    public void setDefaultHeaderBackground(Color color) {
+        if (color == null) {
+            throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+        }
+        if (!this.defaultHeaderBackground.equals(color)) {
+            this.defaultHeaderBackground = color;
+            repaint(); // Redessine le ruban pour appliquer les changements
+        }
     }
-    if (!this.defaultHeaderForeground.equals(color)) {
-        this.defaultHeaderForeground = color;
-        repaint();
-    }
-}
 
-/**
- * Retourne la couleur de bordure par défaut pour tous les en-têtes.
- * 
- * @return la couleur de bordure par défaut
- */
-public Color getDefaultHeaderBorderColor() {
-    return defaultHeaderBorderColor;
-}
-
-/**
- * Définit la couleur de bordure par défaut pour tous les en-têtes.
- * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
- * 
- * @param color la nouvelle couleur de bordure par défaut
- */
-public void setDefaultHeaderBorderColor(Color color) {
-    if (color == null) {
-        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    /**
+     * Retourne la couleur de texte par défaut pour tous les en-têtes.
+     *
+     * @return la couleur de texte par défaut
+     */
+    public Color getDefaultHeaderForeground() {
+        return defaultHeaderForeground;
     }
-    if (!this.defaultHeaderBorderColor.equals(color)) {
-        this.defaultHeaderBorderColor = color;
-        repaint();
-    }
-}
 
-/**
- * Retourne la taille de police par défaut pour tous les en-têtes.
- * 
- * @return la taille de police par défaut en points
- */
-public int getDefaultHeaderFontSize() {
-    return defaultHeaderFontSize;
-}
-
-/**
- * Définit la taille de police par défaut pour tous les en-têtes.
- * Cette taille sera utilisée pour les groupes qui n'ont pas de taille spécifique.
- * 
- * @param size la nouvelle taille de police par défaut en points
- */
-public void setDefaultHeaderFontSize(int size) {
-    if (size <= 0) {
-        throw new IllegalArgumentException("La taille de police doit être positive");
+    /**
+     * Définit la couleur de texte par défaut pour tous les en-têtes. Cette
+     * couleur sera utilisée pour les groupes qui n'ont pas de couleur
+     * spécifique.
+     *
+     * @param color la nouvelle couleur de texte par défaut
+     */
+    public void setDefaultHeaderForeground(Color color) {
+        if (color == null) {
+            throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+        }
+        if (!this.defaultHeaderForeground.equals(color)) {
+            this.defaultHeaderForeground = color;
+            repaint();
+        }
     }
-    if (this.defaultHeaderFontSize != size) {
-        this.defaultHeaderFontSize = size;
-        revalidate(); // Recalcule les dimensions
-        repaint();
-    }
-}
 
-/**
- * Retourne l'indicateur de police en gras par défaut pour tous les en-têtes.
- * 
- * @return true si la police est en gras par défaut
- */
-public boolean isDefaultHeaderFontBold() {
-    return defaultHeaderFontBold;
-}
-
-/**
- * Définit si la police doit être en gras par défaut pour tous les en-têtes.
- * Ce paramètre sera utilisé pour les groupes qui n'ont pas de paramètre spécifique.
- * 
- * @param bold true pour police en gras, false pour police normale
- */
-public void setDefaultHeaderFontBold(boolean bold) {
-    if (this.defaultHeaderFontBold != bold) {
-        this.defaultHeaderFontBold = bold;
-        repaint();
+    /**
+     * Retourne la couleur de bordure par défaut pour tous les en-têtes.
+     *
+     * @return la couleur de bordure par défaut
+     */
+    public Color getDefaultHeaderBorderColor() {
+        return defaultHeaderBorderColor;
     }
-}
 
-/**
- * Retourne la couleur de fond par défaut pour les en-têtes au survol.
- * 
- * @return la couleur de fond au survol par défaut
- */
-public Color getDefaultHeaderHoverBackground() {
-    return defaultHeaderHoverBackground;
-}
+    /**
+     * Définit la couleur de bordure par défaut pour tous les en-têtes. Cette
+     * couleur sera utilisée pour les groupes qui n'ont pas de couleur
+     * spécifique.
+     *
+     * @param color la nouvelle couleur de bordure par défaut
+     */
+    public void setDefaultHeaderBorderColor(Color color) {
+        if (color == null) {
+            throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+        }
+        if (!this.defaultHeaderBorderColor.equals(color)) {
+            this.defaultHeaderBorderColor = color;
+            repaint();
+        }
+    }
 
-/**
- * Définit la couleur de fond par défaut pour les en-têtes au survol.
- * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
- * 
- * @param color la nouvelle couleur de fond au survol par défaut
- */
-public void setDefaultHeaderHoverBackground(Color color) {
-    if (color == null) {
-        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    /**
+     * Retourne la taille de police par défaut pour tous les en-têtes.
+     *
+     * @return la taille de police par défaut en points
+     */
+    public int getDefaultHeaderFontSize() {
+        return defaultHeaderFontSize;
     }
-    if (!this.defaultHeaderHoverBackground.equals(color)) {
-        this.defaultHeaderHoverBackground = color;
-        repaint();
-    }
-}
 
-/**
- * Retourne la couleur de fond par défaut pour les en-têtes sélectionnés.
- * 
- * @return la couleur de fond en sélection par défaut
- */
-public Color getDefaultHeaderSelectedBackground() {
-    return defaultHeaderSelectedBackground;
-}
+    /**
+     * Définit la taille de police par défaut pour tous les en-têtes. Cette
+     * taille sera utilisée pour les groupes qui n'ont pas de taille spécifique.
+     *
+     * @param size la nouvelle taille de police par défaut en points
+     */
+    public void setDefaultHeaderFontSize(int size) {
+        if (size <= 0) {
+            throw new IllegalArgumentException("La taille de police doit être positive");
+        }
+        if (this.defaultHeaderFontSize != size) {
+            this.defaultHeaderFontSize = size;
+            revalidate(); // Recalcule les dimensions
+            repaint();
+        }
+    }
 
-/**
- * Définit la couleur de fond par défaut pour les en-têtes sélectionnés.
- * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur spécifique.
- * 
- * @param color la nouvelle couleur de fond en sélection par défaut
- */
-public void setDefaultHeaderSelectedBackground(Color color) {
-    if (color == null) {
-        throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+    /**
+     * Retourne l'indicateur de police en gras par défaut pour tous les
+     * en-têtes.
+     *
+     * @return true si la police est en gras par défaut
+     */
+    public boolean isDefaultHeaderFontBold() {
+        return defaultHeaderFontBold;
     }
-    if (!this.defaultHeaderSelectedBackground.equals(color)) {
-        this.defaultHeaderSelectedBackground = color;
-        repaint();
-    }
-}
 
-/**
- * Retourne le rayon des coins arrondis par défaut pour tous les en-têtes.
- * 
- * @return le rayon des coins arrondis par défaut en pixels
- */
-public int getDefaultHeaderCornerRadius() {
-    return defaultHeaderCornerRadius;
-}
+    /**
+     * Définit si la police doit être en gras par défaut pour tous les en-têtes.
+     * Ce paramètre sera utilisé pour les groupes qui n'ont pas de paramètre
+     * spécifique.
+     *
+     * @param bold true pour police en gras, false pour police normale
+     */
+    public void setDefaultHeaderFontBold(boolean bold) {
+        if (this.defaultHeaderFontBold != bold) {
+            this.defaultHeaderFontBold = bold;
+            repaint();
+        }
+    }
 
-/**
- * Définit le rayon des coins arrondis par défaut pour tous les en-têtes.
- * Ce rayon sera utilisé pour les groupes qui n'ont pas de rayon spécifique.
+    /**
+     * Retourne la couleur de fond par défaut pour les en-têtes au survol.
+     *
+     * @return la couleur de fond au survol par défaut
+     */
+    public Color getDefaultHeaderHoverBackground() {
+        return defaultHeaderHoverBackground;
+    }
+
+    /**
+     * Définit la couleur de fond par défaut pour les en-têtes au survol. Cette
+     * couleur sera utilisée pour les groupes qui n'ont pas de couleur
+     * spécifique.
+     *
+     * @param color la nouvelle couleur de fond au survol par défaut
+     */
+    public void setDefaultHeaderHoverBackground(Color color) {
+        if (color == null) {
+            throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+        }
+        if (!this.defaultHeaderHoverBackground.equals(color)) {
+            this.defaultHeaderHoverBackground = color;
+            repaint();
+        }
+    }
+
+    /**
+     * Retourne la couleur de fond par défaut pour les en-têtes sélectionnés.
+     *
+     * @return la couleur de fond en sélection par défaut
+     */
+    public Color getDefaultHeaderSelectedBackground() {
+        return defaultHeaderSelectedBackground;
+    }
+
+    /**
+     * Définit la couleur de fond par défaut pour les en-têtes sélectionnés.
+     * Cette couleur sera utilisée pour les groupes qui n'ont pas de couleur
+     * spécifique.
+     *
+     * @param color la nouvelle couleur de fond en sélection par défaut
+     */
+    public void setDefaultHeaderSelectedBackground(Color color) {
+        if (color == null) {
+            throw new IllegalArgumentException("La couleur par défaut ne peut pas être null");
+        }
+        if (!this.defaultHeaderSelectedBackground.equals(color)) {
+            this.defaultHeaderSelectedBackground = color;
+            repaint();
+        }
+    }
+
+    /**
+     * Retourne le rayon des coins arrondis par défaut pour tous les en-têtes.
+     *
+     * @return le rayon des coins arrondis par défaut en pixels
+     */
+    public int getDefaultHeaderCornerRadius() {
+        return defaultHeaderCornerRadius;
+    }
+
+    /**
+     * Définit le rayon des coins arrondis par défaut pour tous les en-têtes. Ce
+     * rayon sera utilisé pour les groupes qui n'ont pas de rayon spécifique.
+     *
+     * @param radius le nouveau rayon des coins arrondis par défaut en pixels
+     */
+    public void setDefaultHeaderCornerRadius(int radius) {
+        if (radius < 0) {
+            throw new IllegalArgumentException("Le rayon ne peut pas être négatif");
+        }
+        if (this.defaultHeaderCornerRadius != radius) {
+            this.defaultHeaderCornerRadius = radius;
+            revalidate();
+            repaint();
+        }
+    }
+
+    /**
+     * Crée une police pour un en-tête en fonction des paramètres fournis. Si
+     * certains paramètres sont null, les valeurs par défaut du ruban sont
+     * utilisées.
+     *
+     * @param baseFont la police de base (généralement la police courante du
+     * composant)
+     * @param fontSize la taille de police souhaitée (ou null pour la valeur par
+     * défaut)
+     * @param isBold indicateur de police en gras (ou null pour la valeur par
+     * défaut)
+     * @return une police configurée pour l'en-tête
+     */
+    public Font createHeaderFont(Font baseFont, Integer fontSize, Boolean isBold) {
+        if (baseFont == null) {
+            baseFont = getFont();
+            if (baseFont == null) {
+                baseFont = new Font("Dialog", Font.PLAIN, 12);
+            }
+        }
+
+        // Utiliser la taille spécifiée ou la taille par défaut
+        int size = (fontSize != null) ? fontSize : this.defaultHeaderFontSize;
+
+        // Déterminer le style (gras ou normal)
+        int style = Font.PLAIN;
+        if (isBold != null) {
+            style = isBold ? Font.BOLD : Font.PLAIN;
+        } else {
+            style = this.defaultHeaderFontBold ? Font.BOLD : Font.PLAIN;
+        }
+
+        return baseFont.deriveFont(style, (float) size);
+    }
+
+   /**
+ * Installe le listener qui détecte les changements de taille du parent.
+ * Déclenche un nouveau layout quand le conteneur est redimensionné.
  * 
- * @param radius le nouveau rayon des coins arrondis par défaut en pixels
+ * PROTECTION CONTRE LES BOUCLES INFINIES :
+ * Utilise le flag isLayoutInProgress pour éviter que le layout déclenche
+ * un nouveau resize qui déclenche un nouveau layout, etc.
  */
-public void setDefaultHeaderCornerRadius(int radius) {
-    if (radius < 0) {
-        throw new IllegalArgumentException("Le rayon ne peut pas être négatif");
+private void installResizeListener() {
+    if (resizeListener == null) {
+        resizeListener = new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                // Éviter les boucles infinies de layout
+                if (isLayoutInProgress) {
+                    return; // Layout déjà en cours, ne pas déclencher un nouveau
+                }
+                
+                try {
+                    isLayoutInProgress = true;
+                    
+                    // Déclencher un nouveau layout
+                    // Le HRibbonLayoutManager va gérer le collapse/expand automatiquement
+                    revalidate();
+                    repaint();
+                    
+                } finally {
+                    // Toujours réinitialiser le flag, même en cas d'exception
+                    isLayoutInProgress = false;
+                }
+            }
+        };
     }
-    if (this.defaultHeaderCornerRadius != radius) {
-        this.defaultHeaderCornerRadius = radius;
-        revalidate();
-        repaint();
-    }
+    
+    // Ajouter le listener sur le Ribbon lui-même
+    addComponentListener(resizeListener);
 }
     
+
 /**
- * Crée une police pour un en-tête en fonction des paramètres fournis.
- * Si certains paramètres sont null, les valeurs par défaut du ruban sont utilisées.
+ * Ajoute un composant système au Ruban.
  * 
- * @param baseFont la police de base (généralement la police courante du composant)
- * @param fontSize la taille de police souhaitée (ou null pour la valeur par défaut)
- * @param isBold indicateur de police en gras (ou null pour la valeur par défaut)
- * @return une police configurée pour l'en-tête
+ * Cette méthode est destinée UNIQUEMENT aux composants internes du ruban
+ * comme les boutons de débordement, les headers, etc.
+ * 
+ * Elle contourne la restriction des add() publics qui sont bloqués
+ * pour empêcher l'ajout sauvage de composants par l'utilisateur.
+ * 
+ * @param component le composant système à ajouter
  */
-public Font createHeaderFont(Font baseFont, Integer fontSize, Boolean isBold) {
-    if (baseFont == null) {
-        baseFont = getFont();
-        if (baseFont == null) {
-            baseFont = new Font("Dialog", Font.PLAIN, 12);
+public void addSystemComponent(JComponent component) {
+    if (component == null) {
+        return;
+    }
+    
+    // Appel direct à l'implémentation de JComponent (public)
+    super.add(component);
+    
+    // IMPORTANT : On doit aussi ajouter ce composant au cache displayedComponents
+    // pour que le LayoutManager en tienne compte
+    displayedComponents.add(component);
+    
+    // Marquer ce composant comme système (optionnel, pour debug)
+    component.putClientProperty("ribbon.system.component", Boolean.TRUE);
+}
+
+    /**
+     * Désinstalle le listener de redimensionnement.
+     * Appelé lors de la destruction du composant.
+     */
+    private void uninstallResizeListener() {
+        if (resizeListener != null) {
+            removeComponentListener(resizeListener);
         }
     }
     
-    // Utiliser la taille spécifiée ou la taille par défaut
-    int size = (fontSize != null) ? fontSize : this.defaultHeaderFontSize;
-    
-    // Déterminer le style (gras ou normal)
-    int style = Font.PLAIN;
-    if (isBold != null) {
-        style = isBold ? Font.BOLD : Font.PLAIN;
-    } else {
-        style = this.defaultHeaderFontBold ? Font.BOLD : Font.PLAIN;
+    /**
+     * Override de removeNotify pour nettoyer les ressources.
+     * Appelé quand le composant est retiré de son conteneur parent.
+     */
+    @Override
+    public void removeNotify() {
+        uninstallResizeListener();
+        super.removeNotify();
     }
-    
-    return baseFont.deriveFont(style, (float) size);
-}
 
+/*
+ * NOTES :
+ * - Le ComponentListener détecte automatiquement les changements de taille
+ * - Quand le parent (JFrame, JPanel, etc.) est redimensionné, componentResized() est appelé
+ * - revalidate() déclenche layoutContainer() dans HRibbonLayoutManager
+ * - HRibbonLayoutManager appelle ResizeManager qui calcule les actions nécessaires
+ * - Les groupes sont collapsed/expanded automatiquement selon l'espace disponible
+ */
+    
 }

@@ -1,59 +1,61 @@
 package rubban.layout;
 
-import java.awt.Component;
-import java.awt.Dimension;
-import javax.swing.AbstractButton;
-import javax.swing.DefaultListCellRenderer;
-import javax.swing.JComboBox;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JSeparator;
-import rubban.GroupRenderer;
+import hcomponents.vues.HButtonStyle;
 import rubban.HRibbonGroup;
 import rubban.HRibbonModel;
 import rubban.Ribbon;
+import rubban.RibbonOverflowButton;
+import rubban.GroupRenderer;
+import java.awt.Component;
+import javax.swing.JComponent;
 
 /**
  * Renderer pour les groupes collapsed.
- * Crée et configure les JComboBox utilisés pour représenter les groupes réduits.
  * 
- * RESPONSABILITÉS :
- * - Créer le JComboBox avec le header et les composants du groupe
- * - Configurer le renderer personnalisé pour afficher les composants
- * - Gérer les événements de sélection
- * - Assurer une présentation cohérente
+ * RESPONSABILITÉ UNIQUE :
+ * -----------------------
+ * Cette classe est l'ENDROIT UNIQUE où s'effectue le transfert de propriété
+ * des composants du Ruban vers le RibbonOverflowButton.
+ * 
+ * PRINCIPE DE TRANSFERT EXCLUSIF :
+ * --------------------------------
+ * 1. Les composants sont RETIRÉS du Ruban (parent = null)
+ * 2. Les composants sont AJOUTÉS au bouton (parent = null → parent = popup interne)
+ * 3. Aucun composant n'est dupliqué
+ * 4. Le Ruban perd totalement la possession des composants collapsed
  * 
  * @author FIDELE
- * @version 1.0
  */
 public class CollapsedGroupRenderer {
+
+    private boolean debugMode = false; // Mettre à true pour tracer
     
     /**
-     * Crée un JComboBox représentant un groupe collapsed.
+     * Crée un RibbonOverflowButton représentant un groupe collapsed.
      * 
-     * CONTENU DU COMBO :
-     * 1. Header du groupe (non-sélectionnable, affiché en haut)
-     * 2. Séparateur visuel
-     * 3. Tous les composants du groupe (sélectionnables)
-     * 
-     * @param ribbon le ruban contenant le groupe
+     * @param ribbon le ruban parent
      * @param group le groupe à représenter
-     * @param groupIndex l'index du groupe dans le modèle
-     * @return JComboBox configuré
+     * @param groupIndex l'index du groupe
+     * @return un bouton configuré contenant TOUS les composants du groupe
+     * @throws IllegalArgumentException si ribbon ou group est null
      */
-    public JComboBox<Object> createCollapsedComboBox(
+    public RibbonOverflowButton createCollapsedButton(
             Ribbon ribbon,
             HRibbonGroup group,
             int groupIndex) {
-        
-        if (ribbon == null || group == null) {
-            throw new IllegalArgumentException("Ribbon and group cannot be null");
+
+        // ============ VALIDATION ============
+        if (ribbon == null) {
+            throw new IllegalArgumentException("Ribbon cannot be null");
         }
-        
-        // Créer le combo
-        JComboBox<Object> combo = new JComboBox<>();
-        
-        // 1. Ajouter le header comme premier élément (sera affiché quand collapsed)
+        if (group == null) {
+            throw new IllegalArgumentException("HRibbonGroup cannot be null");
+        }
+
+        // ============ TEXTE DU BOUTON ============
+        // Priorité 1 : Header personnalisé
+        // Priorité 2 : Identifiant du groupe
+        // Priorité 3 : Fallback générique
         Object headerValue = group.getHeaderValue();
         if (headerValue == null) {
             headerValue = group.getGroupIdentifier();
@@ -61,129 +63,126 @@ public class CollapsedGroupRenderer {
         if (headerValue == null) {
             headerValue = "Groupe " + groupIndex;
         }
-        combo.addItem(headerValue);
+
+        if (debugMode) {
+            System.out.println("=== CRÉATION BOUTON COLLAPSED ===");
+            System.out.println("Groupe " + groupIndex + " - Texte: " + headerValue);
+        }
+
+        // ============ CRÉATION DU BOUTON ============
+        RibbonOverflowButton button = new RibbonOverflowButton(headerValue.toString());
         
-        // 2. Ajouter un séparateur visuel
-        combo.addItem("────────");
+        // Style discret pour un bouton de ruban
+        button.setButtonStyle(HButtonStyle.FIELD);
         
-        // 3. Ajouter les composants du groupe
+        // ============ TRANSFERT EXCLUSIF DES COMPOSANTS ============
+        // Cette section est CRITIQUE : c'est ici que s'opère le changement de propriétaire
+        // ------------------------------------------------------------------------------
         HRibbonModel model = ribbon.getModel();
+        GroupRenderer renderer = ribbon.getGroupRenderer();
+
         if (model != null) {
             int valueCount = model.getValueCount(groupIndex);
             
+            if (debugMode) {
+                System.out.println("Nombre de composants à transférer: " + valueCount);
+            }
+
             for (int i = 0; i < valueCount; i++) {
                 Object value = model.getValueAt(i, groupIndex);
-                if (value != null) {
-                    combo.addItem(value);
+                
+                if (value == null) {
+                    continue;
+                }
+
+                // ============ CAS 1 : VALEUR DÉJÀ COMPOSANT ============
+                if (value instanceof JComponent) {
+                    JComponent comp = (JComponent) value;
+                    
+                    // ÉTAPE 1 : RETIRER DU RUBAN (si présent)
+                    // ----------------------------------------
+                    if (comp.getParent() instanceof Ribbon) {
+                        ribbon.removeComponentSafely(comp);
+                        
+                        if (debugMode) {
+                            System.out.println("  → Retiré du Ribbon: " + 
+                                             comp.getClass().getSimpleName());
+                        }
+                    }
+                    
+                    // ÉTAPE 2 : AJOUTER AU BOUTON
+                    // ----------------------------
+                    // Le bouton accepte les composants sans parent
+                    button.addComponent(comp);
+                    
+                    if (debugMode) {
+                        System.out.println("  → Ajouté au bouton: " + 
+                                         comp.getClass().getSimpleName());
+                    }
+                
+                // ============ CAS 2 : VALEUR À TRANSFORMER VIA RENDERER ============
+                } else if (!(value instanceof Component) && renderer != null) {
+                    try {
+                        Component comp = renderer.getGroupComponent(
+                                ribbon, 
+                                value, 
+                                groupIndex, 
+                                i, 
+                                false,      // isSelected (non utilisé)
+                                false       // hasFocus (non utilisé)
+                        );
+                        
+                        if (comp instanceof JComponent) {
+                            // Important : ce composant est FRAIS, il n'a PAS de parent
+                            // On l'ajoute DIRECTEMENT au bouton, JAMAIS au Ribbon
+                            button.addComponent((JComponent) comp);
+                            
+                            if (debugMode) {
+                                System.out.println("  → Créé et ajouté: " + 
+                                                 comp.getClass().getSimpleName());
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("ERREUR: Échec de création du composant pour " + value);
+                        e.printStackTrace();
+                    }
                 }
             }
         }
+
+        // ============ CONFIGURATION FINALE ============
+        // Largeur fixe correspondant à l'espace réservé pour le groupe collapsed
+        int collapsedWidth = group.getCollapsedWidth();
+        if (collapsedWidth <= 0) {
+            collapsedWidth = 30; // Valeur par défaut sécurisée
+        }
         
-        // 4. Configurer le renderer personnalisé
-        combo.setRenderer(new CollapsedComboRenderer(ribbon, group, groupIndex));
+        button.setPreferredSize(new java.awt.Dimension(
+                collapsedWidth,
+                button.getPreferredSize().height
+        ));
         
-        // 5. Sélectionner le header par défaut (index 0)
-        combo.setSelectedIndex(0);
-        
-        // 6. Configurer la taille préférée
-        combo.setPreferredSize(new Dimension(group.getCollapsedWidth(), 25));
-        combo.setMaximumSize(new Dimension(group.getCollapsedWidth(), 25));
-        
-        // 7. Ajouter le listener pour gérer les sélections
-        combo.addActionListener(e -> {
-            int selectedIndex = combo.getSelectedIndex();
-            
-            // Ignorer le header (index 0) et le séparateur (index 1)
-            if (selectedIndex <= 1) {
-                combo.setSelectedIndex(0); // Remettre sur le header
-                return;
-            }
-            
-            // Récupérer l'élément sélectionné
-            Object selected = combo.getSelectedItem();
-            
-            if (selected != null) {
-                // Si c'est un Component avec action (JButton, etc.)
-                if (selected instanceof AbstractButton) {
-                    AbstractButton button = (AbstractButton) selected;
-                    // Simuler un clic sur le bouton
-                    button.doClick();
-                }
-                // Pour les autres composants, on pourrait ajouter d'autres logiques
-                // Par exemple, déclencher un événement personnalisé
-            }
-            
-            // Remettre le combo sur le header après l'action
-            combo.setSelectedIndex(0);
-        });
-        
-        return combo;
+        // S'assurer que le bouton n'est pas trop grand
+        button.setMaximumSize(new java.awt.Dimension(
+                collapsedWidth,
+                Integer.MAX_VALUE
+        ));
+
+        if (debugMode) {
+            System.out.println("Bouton configuré - Largeur: " + collapsedWidth + 
+                             ", Hauteur pref: " + button.getPreferredSize().height);
+            System.out.println("=== FIN CRÉATION BOUTON ===\n");
+        }
+
+        return button;
     }
     
     /**
-     * Renderer personnalisé pour les éléments du JComboBox.
+     * Active/désactive les messages de debug.
      * 
-     * RESPONSABILITÉS :
-     * - Afficher le header en gras
-     * - Afficher le séparateur visuellement
-     * - Afficher les composants de manière lisible
+     * @param enabled true pour activer les traces console
      */
-    private static class CollapsedComboRenderer extends DefaultListCellRenderer {
-        
-        private final Ribbon ribbon;
-        private final HRibbonGroup group;
-        private final int groupIndex;
-        
-        public CollapsedComboRenderer(Ribbon ribbon, HRibbonGroup group, int groupIndex) {
-            this.ribbon = ribbon;
-            this.group = group;
-            this.groupIndex = groupIndex;
-        }
-        
-        @Override
-        public Component getListCellRendererComponent(
-                JList<?> list,
-                Object value,
-                int index,
-                boolean isSelected,
-                boolean cellHasFocus) {
-            
-            // Cas 1 : Header (index 0)
-            if (index == 0) {
-                JLabel label = (JLabel) super.getListCellRendererComponent(
-                    list, value, index, isSelected, cellHasFocus
-                );
-                label.setFont(label.getFont().deriveFont(java.awt.Font.BOLD));
-                return label;
-            }
-            
-            // Cas 2 : Séparateur (index 1)
-            if (index == 1) {
-                JLabel label = (JLabel) super.getListCellRendererComponent(
-                    list, value, index, isSelected, cellHasFocus
-                );
-                label.setEnabled(false);
-                return label;
-            }
-            
-            // Cas 3 : Composant du groupe
-            if (value instanceof Component) {
-                Component comp = (Component) value;
-                
-                // Si c'est un composant Swing, essayer d'extraire du texte
-                if (comp instanceof JLabel) {
-                    value = ((JLabel) comp).getText();
-                } else if (comp instanceof AbstractButton) {
-                    value = ((AbstractButton) comp).getText();
-                } else {
-                    value = comp.getClass().getSimpleName();
-                }
-            }
-            
-            // Rendu par défaut
-            return super.getListCellRendererComponent(
-                list, value, index, isSelected, cellHasFocus
-            );
-        }
+    public void setDebugMode(boolean enabled) {
+        debugMode = enabled;
     }
 }

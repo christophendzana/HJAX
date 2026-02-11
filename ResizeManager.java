@@ -6,6 +6,7 @@ import java.util.Map;
 import rubban.HRibbonGroup;
 import rubban.HRibbonGroupModel;
 import rubban.Ribbon;
+import rubban.RibbonOverflowButton;
 
 /**
  * Gestionnaire du redimensionnement adaptatif des groupes du ruban.
@@ -276,26 +277,40 @@ public class ResizeManager {
     }
     
     /**
-     * Applique un collapse à un groupe.
-     * 
-     * @param ribbon le ruban
-     * @param groupIndex index du groupe à collapser
-     */
-    public void collapseGroup(Ribbon ribbon, int groupIndex) {
-        if (ribbon == null) {
-            return;
-        }
-        
-        HRibbonGroupModel groupModel = ribbon.getGroupModel();
-        if (groupModel == null) {
-            return;
-        }
-        
-        HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
-        if (group != null && group.isNormal()) {
-            group.collapse();
-        }
+ * Réduit un groupe (collapse).
+ * Utilise le CollapsedGroupRenderer pour créer le bouton et transfère
+ * exclusivement les composants.
+ */
+public void collapseGroup(Ribbon ribbon, int groupIndex) {
+    if (ribbon == null) return;
+    
+    HRibbonGroupModel groupModel = ribbon.getGroupModel();
+    if (groupModel == null) return;
+    
+    HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
+    if (group == null || group.isCollapsed()) {
+        return; // Déjà collapsed
     }
+    
+    // 1. Marquer le groupe comme collapsed
+    group.setCollapsed(true);
+    
+    // 2. Créer le bouton de débordement (ceci effectuera le transfert)
+    CollapsedGroupRenderer renderer = new CollapsedGroupRenderer();
+    RibbonOverflowButton button = renderer.createCollapsedButton(ribbon, group, groupIndex);
+    
+    // 3. Stocker le bouton dans le groupe
+    group.setCollapsedButton(button);
+    
+    // 4. Ajouter le bouton au Ruban (il sera positionné par le LayoutManager)
+    if (button.getParent() != ribbon) {
+        ribbon.addSystemComponent(button);
+    }
+    
+    // 5. Forcer la synchronisation pour que le Ruban oublie les composants transférés
+    ribbon.revalidate();
+    ribbon.repaint();
+}
     
     /**
      * Applique un expand à un groupe.
@@ -317,7 +332,7 @@ public class ResizeManager {
         if (group != null && group.isCollapsed()) {
             group.expand();
             // Invalider le composant collapsed pour forcer sa recréation
-            group.invalidateCollapsedComponent();
+            group.invalidateCollapsedButton();
         }
     }
 }
