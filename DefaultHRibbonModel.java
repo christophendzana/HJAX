@@ -25,6 +25,12 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
     private ArrayList<Object> groupIdentifiers;
 
     /**
+ * Compteur de version du modèle.
+ * Incrémenté à chaque modification pour détecter les changements.
+ */
+private long version = 0;
+    
+    /**
      * Constructeur par défaut. Crée un modèle vide.
      */
     public DefaultHRibbonModel() {
@@ -148,6 +154,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
 
         try {
             dataGroup.get(index).set(position, value);
+           
         } catch (IndexOutOfBoundsException e) {
             if (index == -1) {
                 throw new ArrayStoreException("groupIdentifier not exist");
@@ -190,6 +197,11 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
         }
     }
 
+    @Override
+public long getVersion() {
+    return version;
+}
+    
     /**
      * Ajoute une valeur au groupe à l'index donné.
      *
@@ -203,6 +215,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             group.add(value);
+            version++; 
             fireValueAdded(groupIndex, group.size() - 1);
         }
     }
@@ -232,6 +245,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
                     "Position: " + position + ", Size: " + group.size());
             }
             group.add(position, value);
+            version++;  
             fireValueAdded(groupIndex, position);
         }
     }
@@ -254,6 +268,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (position >= 0 && position < group.size()) {
                 group.remove(position);
+                version++;  
                 fireValueRemoved(groupIndex, position);
             }
         }
@@ -296,8 +311,10 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             int position = group.indexOf(value);
-            if (position >= 0) {
+            if (position >= 0) {                
                 removeValueAt(position, groupIndex);
+                version++;  
+                fireValueRemoved(groupIndex, position);
             }
         }
     }
@@ -319,6 +336,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (!group.isEmpty()) {
                 group.clear();
+                version++;  
                 fireGroupValuesChanged(groupIndex); 
             }
         }
@@ -345,6 +363,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
                     && newPosition >= 0 && newPosition < group.size()) {
                 Object value = group.remove(oldPosition);
                 group.add(newPosition, value);
+                version++;  
                 fireValueMoved(groupIndex, oldPosition, newPosition);
             }
         }
@@ -402,7 +421,8 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
         }
         groupIdentifiers.add(groupIdentifier);
         dataGroup.add(new ArrayList<>());
-        fireGroupAdded(groupIdentifiers.size() - 1);
+        version++; 
+        fireGroupAdded(groupIdentifiers.size() - 1);        
     }
 
     /**
@@ -414,6 +434,7 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
         if (groupIndex >= 0 && groupIndex < groupIdentifiers.size()) {
             groupIdentifiers.remove(groupIndex);
             dataGroup.remove(groupIndex);
+            version++;  
             fireGroupRemoved(groupIndex);
         }
     }

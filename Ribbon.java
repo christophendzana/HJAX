@@ -8,12 +8,12 @@ import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.event.*;
 import javax.swing.plaf.ComponentUI;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
-import java.util.List;
 
 /**
  *
@@ -72,11 +72,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private HRibbonLayoutManager layout;
 
     /**
-     * Footer optionnel du ruban (comme dans certains rubans Office).
-     */
-    protected HRibbonFooter footer;
-
-    /**
      * Afficher les lignes verticales entre les groupes.
      */
     protected boolean showVerticalLines;
@@ -116,7 +111,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Empêcher les mises à jour récursives de l'UI.
      */
     private transient boolean updateInProgress;
-    
+
     private transient boolean isLayoutInProgress = false;
 
     /**
@@ -230,6 +225,12 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     private transient ComponentListener resizeListener = null;
 
+    /**
+     * Fabrique de proxies pour les boutons de débordement. Transforme les
+     * composants du Ribbon en proxies légers pour le popup.
+     */
+    private OverflowProxyFactory overflowProxyFactory = new DefaultOverflowProxyFactory();
+
     // =========================================================================
     // CONSTRUCTEURS
     // =========================================================================
@@ -311,10 +312,9 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
         this.groupRenderer = createDefaultGroupRenderer();
 
-         // Installer le listener de redimensionnement adaptatif
+        // Installer le listener de redimensionnement adaptatif
         installResizeListener();
 
-        
         updateUI();
 
     }
@@ -713,273 +713,67 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         }
     }
 
+    // =========================================================================
+    // IMPLÉMENTATION DE HRibbonModelListener
+    // =========================================================================
     /**
- * Synchronise les composants affichés avec le modèle de données.
- * 
- * PRINCIPE FONDAMENTAL - SÉPARATION STRICTE DES ÉTATS :
- * ------------------------------------------------------
- * - Groupe NORMAL    → composants DANS le Ribbon (parent = Ribbon)
- * - Groupe COLLAPSED → composants DANS le OverflowButton (parent ≠ Ribbon)
- * 
- * Un composant n'est JAMAIS présent dans les deux conteneurs simultanément.
- * Le transfert est exclusif et contrôlé par l'état du groupe.
- * 
- * Cette méthode maintient l'invariant : displayedComponents = composants NORMAUX uniquement
- */
-private void syncComponentsWithModel() {
-    // Vérifications de sécurité
-    if (syncingWithModel || model == null || groupRenderer == null || groupModel == null) {
-        return;
-    }
+     * Synchronise les composants affichés avec le modèle de données. Cette
+     * méthode est appelée lorsqu'un changement est détecté dans le modèle.
+     */
+    private void syncComponentsWithModel() {
+        if (syncingWithModel || model == null || groupRenderer == null) {
+            return;
+        }
 
-    syncingWithModel = true;
+        syncingWithModel = true;
 
-    try {
-        // === CARTE D'IDENTITÉ DES COMPOSANTS ===
-        // Associe chaque composant à ses coordonnées (groupe, position, valeur)
-        Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
-        
-        // === ENSEMBLE DES COMPOSANTS EXISTANT DANS LE MODÈLE ===
-        // Tous les composants qui DEVRAIENT exister (indépendamment de leur état)
-        Set<Component> allExpectedComponents = new HashSet<>();
-        
-        // === ENSEMBLE DES COMPOSANTS À PLACER DANS LE RIBBON ===
-        // UNIQUEMENT ceux des groupes NON collapsed
-        Set<Component> componentsToKeepInRibbon = new HashSet<>();
+        try {
+            // VIDER LE CACHE ANCIEN
+            Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
+            Set<Component> expectedComponents = new HashSet<>();
 
-        // ÉTAPE 1 : PARCOURS COMPLET DU MODÈLE
-        // -------------------------------------
-        for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
-            
-            // Déterminer l'état du groupe
-            HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
-            boolean isCollapsed = (group != null && group.isCollapsed());
-            
-            int valueCount = model.getValueCount(groupIndex);
-            
-            for (int position = 0; position < valueCount; position++) {
-                Object value = model.getValueAt(position, groupIndex);
-                
-                // Créer ou récupérer le composant associé à cette valeur
-                Component component = createComponentForValue(value, groupIndex, position);
+            // 1. PARCOURIR TOUT LE MODÈLE
+            for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
+                int valueCount = model.getValueCount(groupIndex);
+                for (int position = 0; position < valueCount; position++) {
+                    Object value = model.getValueAt(position, groupIndex);
 
-                if (component != null) {
-                    // Enregistrer les métadonnées du composant
-                    newComponentInfoMap.put(component,
-                            new ComponentInfo(groupIndex, position, value));
-                    
-                    // Ce composant est attendu dans le modèle
-                    allExpectedComponents.add(component);
+                    // 2. CRÉER OU RÉCUPÉRER LE COMPONENT
+                    Component component = createComponentForValue(value, groupIndex, position);
 
-                    // DÉCISION CRUCIALE : Où doit vivre ce composant ?
-                    // -------------------------------------------------
-                    if (!isCollapsed) {
-                        // CAS 1 : Groupe NORMAL → le composant DOIT être dans le Ribbon
-                        componentsToKeepInRibbon.add(component);
+                    if (component != null) {
+                        // 3. AJOUTER AU CACHE
+                        newComponentInfoMap.put(component,
+                                new ComponentInfo(groupIndex, position, value));
+                        expectedComponents.add(component);
                     }
-                    // CAS 2 : Groupe COLLAPSED → le composant NE DOIT PAS être dans le Ribbon
-                    // (il sera dans le OverflowButton, géré par CollapsedGroupRenderer)
-                    // → NE PAS l'ajouter à componentsToKeepInRibbon
                 }
             }
-        }
 
-        // ÉTAPE 2 : NETTOYAGE DES COMPOSANTS ORPHELINS
-        // --------------------------------------------
-        // Retirer tous les composants qui ne sont plus dans le modèle
-        Set<Component> toRemove = new HashSet<>(displayedComponents);
-        toRemove.removeAll(allExpectedComponents);
-        for (Component comp : toRemove) {
-            removeComponentFromContainer(comp);
-            // Nettoyer également le cache d'informations
-            componentInfoMap.remove(comp);
-        }
+            // 4. IDENTIFIER LES CHANGEMENTS
+            Set<Component> toRemove = new HashSet<>(displayedComponents);
+            toRemove.removeAll(expectedComponents);
 
-        // ÉTAPE 3 : AJOUT DES NOUVEAUX COMPOSANTS NORMaux
-        // -----------------------------------------------
-        // Ajouter uniquement les composants des groupes normaux qui ne sont pas déjà présents
-        Set<Component> toAdd = new HashSet<>(componentsToKeepInRibbon);
-        toAdd.removeAll(displayedComponents);
-        for (Component comp : toAdd) {
-            addComponentToContainer(comp);
-        }
+            Set<Component> toAdd = new HashSet<>(expectedComponents);
+            toAdd.removeAll(displayedComponents);
 
-        // ÉTAPE 4 : EXPULSION DES COMPOSANTS COLLAPSED DU RIBBON
-        // -------------------------------------------------------
-        // C'est le cœur de la séparation stricte :
-        // Tout composant qui est dans le Ribbon mais qui appartient à un groupe collapsed
-        // DOIT être immédiatement retiré
-        Set<Component> toRemoveFromCollapsed = new HashSet<>(displayedComponents);
-        toRemoveFromCollapsed.removeAll(componentsToKeepInRibbon);
-        for (Component comp : toRemoveFromCollapsed) {
-            removeComponentFromContainer(comp);
-            // Important : on garde le composant dans componentInfoMap
-            // car il existe toujours dans le modèle, juste déplacé
-        }
-
-        // ÉTAPE 5 : MISE À JOUR DES CACHES
-        // --------------------------------
-        // displayedComponents ne contient PLUS QUE les composants des groupes normaux
-        displayedComponents = new HashSet<>(componentsToKeepInRibbon);
-        
-        // Remplacer la carte d'identité
-        componentInfoMap = newComponentInfoMap;
-
-        // Journalisation debug (à désactiver en production)
-        if (debugMode) {
-            System.out.println("syncComponentsWithModel - " +
-                             "Normaux: " + componentsToKeepInRibbon.size() + 
-                             ", Total: " + allExpectedComponents.size());
-        }
-
-    } finally {
-        syncingWithModel = false;
-    }
-}
-
-/**
- * TRANSFERT EXCLUSIF : Ribbon → OverflowButton
- * --------------------------------------------
- * Vide complètement un groupe du Ribbon et transfère tous ses composants
- * vers un RibbonOverflowButton.
- * 
- * Préconditions :
- * - Le groupe est en cours de collapse
- * - Le bouton est fraîchement créé ou vide
- * 
- * Postconditions :
- * - Tous les composants du groupe n'ont PLUS le Ribbon comme parent
- * - Tous les composants sont dans le bouton (via sa liste interne)
- * - Le cache displayedComponents est mis à jour
- * 
- * @param groupIndex index du groupe à vider
- * @param button le bouton de débordement qui va recevoir les composants
- */
-public void transferComponentsToOverflow(int groupIndex, RibbonOverflowButton button) {
-    // Validation des paramètres
-    if (model == null || button == null) {
-        return;
-    }
-    
-    // Vérifier que le groupe existe
-    if (groupIndex < 0 || groupIndex >= model.getGroupCount()) {
-        return;
-    }
-    
-    // Éviter les transferts redondants pendant les mises à jour
-    if (syncingWithModel) {
-        return;
-    }
-    
-    if (debugMode) {
-        System.out.println(">>> TRANSFERT Ribbon → Overflow - Groupe " + groupIndex);
-    }
-    
-    int valueCount = model.getValueCount(groupIndex);
-    int transferredCount = 0;
-    
-    for (int i = 0; i < valueCount; i++) {
-        Object value = model.getValueAt(i, groupIndex);
-        
-        if (value instanceof JComponent) {
-            JComponent comp = (JComponent) value;
-            
-            // ÉTAPE 1 : RETIRER DU RIBBON
-            // ----------------------------
-            if (comp.getParent() == this) {
-                removeComponentSafely(comp);
-                
-                // Important : on retire aussi du cache displayedComponents
-                displayedComponents.remove(comp);
-                
-                if (debugMode) {
-                    System.out.println("   - Retiré: " + comp.getClass().getSimpleName());
-                }
+            // 5. APPLIQUER LES CHANGEMENTS
+            for (Component comp : toRemove) {
+                removeComponentFromContainer(comp);
             }
-            
-            // ÉTAPE 2 : AJOUTER AU BOUTON
-            // ----------------------------
-            // Le bouton accepte les composants sans parent
-            button.addComponent(comp);
-            transferredCount++;
+
+            for (Component comp : toAdd) {
+                addComponentToContainer(comp);
+            }
+
+            // 6. METTRE À JOUR LES CACHES
+            displayedComponents = expectedComponents;
+            componentInfoMap = newComponentInfoMap; // ← METTRE À JOUR LE CACHE
+
+        } finally {
+            syncingWithModel = false;
         }
     }
-    
-    if (debugMode) {
-        System.out.println("<<< TRANSFERT TERMINÉ: " + transferredCount + 
-                         " composants transférés");
-    }
-}
-
-/**
- * TRANSFERT EXCLUSIF : OverflowButton → Ribbon
- * --------------------------------------------
- * Récupère tous les composants d'un bouton de débordement et les replace
- * dans le Ribbon. Utilisé lors de l'expansion d'un groupe.
- * 
- * Préconditions :
- * - Le groupe repasse en mode normal
- * - Le bouton contient des composants
- * 
- * Postconditions :
- * - Le bouton est vidé (clearComponents)
- * - Les composants sont marqués comme devant être dans le Ribbon
- * - Le prochain syncComponentsWithModel les ajoutera automatiquement
- * 
- * @param groupIndex index du groupe à restaurer
- * @param button le bouton de débordement à vider
- */
-public void transferComponentsFromOverflow(int groupIndex, RibbonOverflowButton button) {
-    // Validation
-    if (button == null) {
-        return;
-    }
-    
-    if (syncingWithModel) {
-        return;
-    }
-    
-    if (debugMode) {
-        System.out.println(">>> TRANSFERT Overflow → Ribbon - Groupe " + groupIndex);
-    }
-    
-    // ÉTAPE 1 : RÉCUPÉRER LA LISTE DES COMPOSANTS CACHÉS
-    // ---------------------------------------------------
-    List<JComponent> hiddenComponents = button.getHiddenComponents();
-    
-    if (debugMode) {
-        System.out.println("   - Composants dans le bouton: " + hiddenComponents.size());
-    }
-    
-    // ÉTAPE 2 : VIDER LE BOUTON
-    // --------------------------
-    // Important : on vide AVANT de récupérer les composants
-    // pour éviter qu'ils ne soient encore référencés
-    button.clearComponents();
-    
-    // ÉTAPE 3 : NETTOYER LE BOUTON DU RIBBON
-    // ---------------------------------------
-    // Retirer physiquement le bouton du conteneur
-    if (button.getParent() == this) {
-        removeComponentSafely(button);
-    }
-    
-    // ÉTAPE 4 : FORCER LA RESYNCHRONISATION
-    // --------------------------------------
-    // Les composants vont être automatiquement ré-ajoutés au Ribbon
-    // lors du prochain syncComponentsWithModel car le groupe n'est plus collapsed
-    // On déclenche une mise à jour immédiate
-    revalidate();
-    repaint();
-    
-    if (debugMode) {
-        System.out.println("<<< TRANSFERT TERMINÉ, resync déclenchée");
-    }
-}
-
-
-// Ajouter cette constante en haut de la classe pour le debug
-private static final boolean debugMode = false; // Mettre à true pour tracer
 
     /**
      * Crée un Component pour une valeur en utilisant le GroupRenderer.
@@ -1100,21 +894,19 @@ private static final boolean debugMode = false; // Mettre à true pour tracer
             displayedComponents.remove(component);
         }
     }
-    
+
     /**
- * Retire un composant physique du conteneur HRibbon de manière sécurisée.
- * Version publique pour permettre au LayoutManager de nettoyer proprement.
- * 
- * Cette méthode garantit que :
- * - Le composant est retiré de l'arbre Swing
- * - displayedComponents est mis à jour
- * 
- * @param component le composant à retirer
- */
-public void removeComponentSafely(Component component) {
-    removeComponentFromContainer(component);
-}
-    
+     * Retire un composant physique du conteneur HRibbon de manière sécurisée.
+     * Version publique pour permettre au LayoutManager de nettoyer proprement.
+     *
+     * Cette méthode garantit que : - Le composant est retiré de l'arbre Swing -
+     * displayedComponents est mis à jour
+     *
+     * @param component le composant à retirer
+     */
+    public void removeComponentSafely(Component component) {
+        removeComponentFromContainer(component);
+    }
 
     /**
      * Retire tous les composants du conteneur HRibbon.
@@ -2148,6 +1940,36 @@ public void removeComponentSafely(Component component) {
         }
     }
 
+    /**
+     * Définit la fabrique de proxies pour le débordement.
+     *
+     * @param factory la nouvelle fabrique (ne peut pas être null)
+     * @throws IllegalArgumentException si factory est null
+     */
+    public void setOverflowProxyFactory(OverflowProxyFactory factory) {
+        if (factory == null) {
+            throw new IllegalArgumentException("OverflowProxyFactory cannot be null");
+        }
+
+        if (this.overflowProxyFactory != factory) {
+            OverflowProxyFactory old = this.overflowProxyFactory;
+            this.overflowProxyFactory = factory;
+            firePropertyChange("overflowProxyFactory", old, factory);
+
+            // Invalider tous les boutons de débordement existants ?
+            // Non, ils reconstruiront leurs proxies à la prochaine ouverture
+        }
+    }
+
+    /**
+     * Retourne la fabrique de proxies pour le débordement.
+     *
+     * @return la fabrique de proxies (jamais null)
+     */
+    public OverflowProxyFactory getOverflowProxyFactory() {
+        return overflowProxyFactory;
+    }
+
     public HeightPolicy getHeightPolicy() {
         return this.heightPolicy;
     }
@@ -2478,85 +2300,57 @@ public void removeComponentSafely(Component component) {
         return baseFont.deriveFont(style, (float) size);
     }
 
-   /**
- * Installe le listener qui détecte les changements de taille du parent.
- * Déclenche un nouveau layout quand le conteneur est redimensionné.
- * 
- * PROTECTION CONTRE LES BOUCLES INFINIES :
- * Utilise le flag isLayoutInProgress pour éviter que le layout déclenche
- * un nouveau resize qui déclenche un nouveau layout, etc.
- */
-private void installResizeListener() {
-    if (resizeListener == null) {
-        resizeListener = new ComponentAdapter() {
-            @Override
-            public void componentResized(ComponentEvent e) {
-                // Éviter les boucles infinies de layout
-                if (isLayoutInProgress) {
-                    return; // Layout déjà en cours, ne pas déclencher un nouveau
-                }
-                
-                try {
-                    isLayoutInProgress = true;
-                    
-                    // Déclencher un nouveau layout
-                    // Le HRibbonLayoutManager va gérer le collapse/expand automatiquement
-                    revalidate();
-                    repaint();
-                    
-                } finally {
-                    // Toujours réinitialiser le flag, même en cas d'exception
-                    isLayoutInProgress = false;
-                }
-            }
-        };
-    }
-    
-    // Ajouter le listener sur le Ribbon lui-même
-    addComponentListener(resizeListener);
-}
-    
+    /**
+     * Installe le listener qui détecte les changements de taille du parent.
+     * Déclenche un nouveau layout quand le conteneur est redimensionné.
+     *
+     * PROTECTION CONTRE LES BOUCLES INFINIES : Utilise le flag
+     * isLayoutInProgress pour éviter que le layout déclenche un nouveau resize
+     * qui déclenche un nouveau layout, etc.
+     */
+    private void installResizeListener() {
+        if (resizeListener == null) {
+            resizeListener = new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    // Éviter les boucles infinies de layout
+                    if (isLayoutInProgress) {
+                        return; // Layout déjà en cours, ne pas déclencher un nouveau
+                    }
 
-/**
- * Ajoute un composant système au Ruban.
- * 
- * Cette méthode est destinée UNIQUEMENT aux composants internes du ruban
- * comme les boutons de débordement, les headers, etc.
- * 
- * Elle contourne la restriction des add() publics qui sont bloqués
- * pour empêcher l'ajout sauvage de composants par l'utilisateur.
- * 
- * @param component le composant système à ajouter
- */
-public void addSystemComponent(JComponent component) {
-    if (component == null) {
-        return;
+                    try {
+                        isLayoutInProgress = true;
+
+                        // Déclencher un nouveau layout
+                        // Le HRibbonLayoutManager va gérer le collapse/expand automatiquement
+                        revalidate();
+                        repaint();
+
+                    } finally {
+                        // Toujours réinitialiser le flag, même en cas d'exception
+                        isLayoutInProgress = false;
+                    }
+                }
+            };
+        }
+
+        // Ajouter le listener sur le Ribbon lui-même
+        addComponentListener(resizeListener);
     }
-    
-    // Appel direct à l'implémentation de JComponent (public)
-    super.add(component);
-    
-    // IMPORTANT : On doit aussi ajouter ce composant au cache displayedComponents
-    // pour que le LayoutManager en tienne compte
-    displayedComponents.add(component);
-    
-    // Marquer ce composant comme système (optionnel, pour debug)
-    component.putClientProperty("ribbon.system.component", Boolean.TRUE);
-}
 
     /**
-     * Désinstalle le listener de redimensionnement.
-     * Appelé lors de la destruction du composant.
+     * Désinstalle le listener de redimensionnement. Appelé lors de la
+     * destruction du composant.
      */
     private void uninstallResizeListener() {
         if (resizeListener != null) {
             removeComponentListener(resizeListener);
         }
     }
-    
+
     /**
-     * Override de removeNotify pour nettoyer les ressources.
-     * Appelé quand le composant est retiré de son conteneur parent.
+     * Override de removeNotify pour nettoyer les ressources. Appelé quand le
+     * composant est retiré de son conteneur parent.
      */
     @Override
     public void removeNotify() {
@@ -2564,13 +2358,12 @@ public void addSystemComponent(JComponent component) {
         super.removeNotify();
     }
 
-/*
+    /*
  * NOTES :
  * - Le ComponentListener détecte automatiquement les changements de taille
  * - Quand le parent (JFrame, JPanel, etc.) est redimensionné, componentResized() est appelé
  * - revalidate() déclenche layoutContainer() dans HRibbonLayoutManager
  * - HRibbonLayoutManager appelle ResizeManager qui calcule les actions nécessaires
  * - Les groupes sont collapsed/expanded automatiquement selon l'espace disponible
- */
-    
+     */
 }

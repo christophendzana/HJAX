@@ -1,61 +1,50 @@
+/*
+ * CollapsedGroupRenderer.java
+ * 
+ * Renderer pour les groupes collapsed.
+ * 
+ * NOUVELLE VERSION - SIMPLIFIÉE RADICALEMENT
+ * 
+ * RESPONSABILITÉ UNIQUE :
+ * Créer un RibbonOverflowButton vide, configuré, et le remplir
+ * UNE SEULE FOIS (au moment du collapse) avec des PROXIES créés
+ * via OverflowProxyFactory.
+ * 
+ * PLUS AUCUN TRANSFERT DE COMPOSANTS ORIGINAUX.
+ * PLUS AUCUN PROBLÈME DE PARENT SWING.
+ * 
+ * @author FIDELE
+ * @version 2.0
+ */
 package rubban.layout;
 
 import hcomponents.vues.HButtonStyle;
-import rubban.HRibbonGroup;
-import rubban.HRibbonModel;
-import rubban.Ribbon;
-import rubban.RibbonOverflowButton;
-import rubban.GroupRenderer;
-import java.awt.Component;
-import javax.swing.JComponent;
+import rubban.*;
+import javax.swing.*;
+import java.awt.*;
 
-/**
- * Renderer pour les groupes collapsed.
- * 
- * RESPONSABILITÉ UNIQUE :
- * -----------------------
- * Cette classe est l'ENDROIT UNIQUE où s'effectue le transfert de propriété
- * des composants du Ruban vers le RibbonOverflowButton.
- * 
- * PRINCIPE DE TRANSFERT EXCLUSIF :
- * --------------------------------
- * 1. Les composants sont RETIRÉS du Ruban (parent = null)
- * 2. Les composants sont AJOUTÉS au bouton (parent = null → parent = popup interne)
- * 3. Aucun composant n'est dupliqué
- * 4. Le Ruban perd totalement la possession des composants collapsed
- * 
- * @author FIDELE
- */
 public class CollapsedGroupRenderer {
 
-    private boolean debugMode = false; // Mettre à true pour tracer
-    
     /**
      * Crée un RibbonOverflowButton représentant un groupe collapsed.
      * 
      * @param ribbon le ruban parent
      * @param group le groupe à représenter
      * @param groupIndex l'index du groupe
-     * @return un bouton configuré contenant TOUS les composants du groupe
-     * @throws IllegalArgumentException si ribbon ou group est null
+     * @return un bouton configuré, contenant déjà les proxies des composants
      */
     public RibbonOverflowButton createCollapsedButton(
             Ribbon ribbon,
             HRibbonGroup group,
             int groupIndex) {
 
-        // ============ VALIDATION ============
-        if (ribbon == null) {
-            throw new IllegalArgumentException("Ribbon cannot be null");
-        }
-        if (group == null) {
-            throw new IllegalArgumentException("HRibbonGroup cannot be null");
+        if (ribbon == null || group == null) {
+            throw new IllegalArgumentException("Ribbon and group cannot be null");
         }
 
-        // ============ TEXTE DU BOUTON ============
-        // Priorité 1 : Header personnalisé
-        // Priorité 2 : Identifiant du groupe
-        // Priorité 3 : Fallback générique
+        // ============================================================
+        // 1. TEXTE DU BOUTON (header du groupe)
+        // ============================================================
         Object headerValue = group.getHeaderValue();
         if (headerValue == null) {
             headerValue = group.getGroupIdentifier();
@@ -64,125 +53,74 @@ public class CollapsedGroupRenderer {
             headerValue = "Groupe " + groupIndex;
         }
 
-        if (debugMode) {
-            System.out.println("=== CRÉATION BOUTON COLLAPSED ===");
-            System.out.println("Groupe " + groupIndex + " - Texte: " + headerValue);
+        // ============================================================
+        // 2. CRÉATION DU BOUTON VIDE
+        // ============================================================
+        RibbonOverflowButton button = new RibbonOverflowButton(headerValue.toString());
+        button.setButtonStyle(HButtonStyle.FIELD);
+        button.setPreferredSize(new Dimension(
+            group.getCollapsedWidth(),
+            button.getPreferredSize().height
+        ));
+        
+        // Lier le bouton à son groupe (indispensable pour le rebuild)
+        button.setGroupIndex(groupIndex);
+
+        // ============================================================
+        // 3. RÉCUPÉRATION DE LA FACTORY DE PROXIES
+        // ============================================================
+        OverflowProxyFactory proxyFactory = ribbon.getOverflowProxyFactory();
+        if (proxyFactory == null) {
+            // Normalement impossible (Ribbon garantit une factory non null)
+            return button;
         }
 
-        // ============ CRÉATION DU BOUTON ============
-        RibbonOverflowButton button = new RibbonOverflowButton(headerValue.toString());
-        
-        // Style discret pour un bouton de ruban
-        button.setButtonStyle(HButtonStyle.FIELD);
-        
-        // ============ TRANSFERT EXCLUSIF DES COMPOSANTS ============
-        // Cette section est CRITIQUE : c'est ici que s'opère le changement de propriétaire
-        // ------------------------------------------------------------------------------
+        // ============================================================
+        // 4. CRÉATION DES PROXIES ET REMPLISSAGE DU BOUTON
+        // ============================================================
         HRibbonModel model = ribbon.getModel();
-        GroupRenderer renderer = ribbon.getGroupRenderer();
+        GroupRenderer groupRenderer = ribbon.getGroupRenderer();
 
         if (model != null) {
             int valueCount = model.getValueCount(groupIndex);
-            
-            if (debugMode) {
-                System.out.println("Nombre de composants à transférer: " + valueCount);
-            }
 
             for (int i = 0; i < valueCount; i++) {
                 Object value = model.getValueAt(i, groupIndex);
-                
-                if (value == null) {
-                    continue;
-                }
+                JComponent proxy = null;
 
-                // ============ CAS 1 : VALEUR DÉJÀ COMPOSANT ============
+                // --------------------------------------------------------
+                // CAS 1 : La valeur est DÉJÀ un composant Swing
+                // --------------------------------------------------------
                 if (value instanceof JComponent) {
-                    JComponent comp = (JComponent) value;
-                    
-                    // ÉTAPE 1 : RETIRER DU RUBAN (si présent)
-                    // ----------------------------------------
-                    if (comp.getParent() instanceof Ribbon) {
-                        ribbon.removeComponentSafely(comp);
-                        
-                        if (debugMode) {
-                            System.out.println("  → Retiré du Ribbon: " + 
-                                             comp.getClass().getSimpleName());
-                        }
-                    }
-                    
-                    // ÉTAPE 2 : AJOUTER AU BOUTON
-                    // ----------------------------
-                    // Le bouton accepte les composants sans parent
-                    button.addComponent(comp);
-                    
-                    if (debugMode) {
-                        System.out.println("  → Ajouté au bouton: " + 
-                                         comp.getClass().getSimpleName());
-                    }
-                
-                // ============ CAS 2 : VALEUR À TRANSFORMER VIA RENDERER ============
-                } else if (!(value instanceof Component) && renderer != null) {
+                    JComponent original = (JComponent) value;
+                    proxy = proxyFactory.createProxy(original);
+                }
+                // --------------------------------------------------------
+                // CAS 2 : La valeur est un OBJET (à rendre via GroupRenderer)
+                // --------------------------------------------------------
+                else if (value != null && groupRenderer != null) {
                     try {
-                        Component comp = renderer.getGroupComponent(
-                                ribbon, 
-                                value, 
-                                groupIndex, 
-                                i, 
-                                false,      // isSelected (non utilisé)
-                                false       // hasFocus (non utilisé)
+                        Component original = groupRenderer.getGroupComponent(
+                            ribbon, value, groupIndex, i, false, false
                         );
-                        
-                        if (comp instanceof JComponent) {
-                            // Important : ce composant est FRAIS, il n'a PAS de parent
-                            // On l'ajoute DIRECTEMENT au bouton, JAMAIS au Ribbon
-                            button.addComponent((JComponent) comp);
-                            
-                            if (debugMode) {
-                                System.out.println("  → Créé et ajouté: " + 
-                                                 comp.getClass().getSimpleName());
-                            }
+                        if (original instanceof JComponent) {
+                            proxy = proxyFactory.createProxy((JComponent) original);
                         }
                     } catch (Exception e) {
-                        System.err.println("ERREUR: Échec de création du composant pour " + value);
-                        e.printStackTrace();
+                        // Échec du rendu → ignorer silencieusement
+                        // Le composant n'apparaîtra pas dans le popup
                     }
+                }
+
+                // --------------------------------------------------------
+                // Ajout du proxy au bouton (s'il a été créé)
+                // --------------------------------------------------------
+                if (proxy != null) {
+                    button.addComponent(proxy);
                 }
             }
         }
 
-        // ============ CONFIGURATION FINALE ============
-        // Largeur fixe correspondant à l'espace réservé pour le groupe collapsed
-        int collapsedWidth = group.getCollapsedWidth();
-        if (collapsedWidth <= 0) {
-            collapsedWidth = 30; // Valeur par défaut sécurisée
-        }
-        
-        button.setPreferredSize(new java.awt.Dimension(
-                collapsedWidth,
-                button.getPreferredSize().height
-        ));
-        
-        // S'assurer que le bouton n'est pas trop grand
-        button.setMaximumSize(new java.awt.Dimension(
-                collapsedWidth,
-                Integer.MAX_VALUE
-        ));
-
-        if (debugMode) {
-            System.out.println("Bouton configuré - Largeur: " + collapsedWidth + 
-                             ", Hauteur pref: " + button.getPreferredSize().height);
-            System.out.println("=== FIN CRÉATION BOUTON ===\n");
-        }
-
         return button;
-    }
-    
-    /**
-     * Active/désactive les messages de debug.
-     * 
-     * @param enabled true pour activer les traces console
-     */
-    public void setDebugMode(boolean enabled) {
-        debugMode = enabled;
     }
 }

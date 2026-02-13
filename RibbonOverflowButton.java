@@ -117,6 +117,18 @@ public class RibbonOverflowButton extends HButton {
      *  indépendant de celui du bouton. */
     private HMenuStyle forcedMenuStyle = null;
     
+    /**
+ * Index du groupe que ce bouton représente.
+ * Nécessaire pour reconstruire les proxies à partir du modèle.
+ */
+private int groupIndex = -1;
+
+/**
+ * Version du modèle au moment du dernier rebuild des proxies.
+ * Permet de détecter les changements et de recréer si nécessaire.
+ */
+private long modelVersion = -1;
+    
     // ============================================================
     // CONSTRUCTEURS
     // ============================================================
@@ -217,6 +229,24 @@ public class RibbonOverflowButton extends HButton {
         // Synchronisation initiale
         syncPopupStyleWithButtonStyle();
     }
+    
+    /**
+ * Définit l'index du groupe associé à ce bouton.
+ * 
+ * @param groupIndex l'index du groupe dans le Ribbon
+ */
+public void setGroupIndex(int groupIndex) {
+    this.groupIndex = groupIndex;
+}
+
+/**
+ * Retourne l'index du groupe associé à ce bouton.
+ * 
+ * @return l'index du groupe, ou -1 si non défini
+ */
+public int getGroupIndex() {
+    return groupIndex;
+}
     
     // ============================================================
     // GESTION DES COMPOSANTS
@@ -467,8 +497,20 @@ public class RibbonOverflowButton extends HButton {
             return; // Rien à afficher
         }
         
-        // Mettre à jour la taille avant affichage
-        updatePopupSize();
+         // ============================================================
+    // VÉRIFICATION DE COHÉRENCE AVEC LE MODÈLE
+    // ============================================================
+    Ribbon ribbon = (Ribbon) SwingUtilities.getAncestorOfClass(Ribbon.class, this);
+    
+    if (ribbon != null && groupIndex != -1) {
+        HRibbonModel Rmodel = ribbon.getModel();
+        long currentVersion = Rmodel.getVersion();
+        
+        // Si le modèle a changé depuis notre dernier rebuild → on recrée tout
+        if (currentVersion != this.modelVersion) {
+            rebuildFromModel(ribbon, Rmodel);
+        }
+    }
         
         // Afficher le popup
         popupMenu.show(this, 0, this.getHeight());
@@ -476,6 +518,61 @@ public class RibbonOverflowButton extends HButton {
         // Démarrer le timer de fermeture automatique si configuré
         startAutoCloseTimer();
     }
+    
+    /**
+ * Reconstruit TOUS les proxies du popup à partir du modèle.
+ * 
+ * Cette méthode est appelée automatiquement si le modèle a changé
+ * depuis la dernière ouverture du popup.
+ * 
+ * @param ribbon le Ribbon parent
+ * @param model le modèle de données actuel
+ */
+private void rebuildFromModel(Ribbon ribbon, HRibbonModel model) {
+    // 1. Vider complètement le popup
+    clearComponents();
+    
+    // 2. Récupérer la factory de proxies
+    OverflowProxyFactory proxyFactory = ribbon.getOverflowProxyFactory();
+    GroupRenderer groupRenderer = ribbon.getGroupRenderer();
+    
+    if (proxyFactory == null || groupRenderer == null || groupIndex == -1) {
+        return;
+    }
+    
+    // 3. Recréer tous les proxies à partir du modèle
+    int valueCount = model.getValueCount(groupIndex);
+    
+    for (int i = 0; i < valueCount; i++) {
+        Object value = model.getValueAt(i, groupIndex);
+        JComponent proxy = null;
+        
+        if (value instanceof JComponent) {
+            proxy = proxyFactory.createProxy((JComponent) value);
+        } else if (value != null) {
+            try {
+                Component original = groupRenderer.getGroupComponent(
+                    ribbon, value, groupIndex, i, false, false
+                );
+                if (original instanceof JComponent) {
+                    proxy = proxyFactory.createProxy((JComponent) original);
+                }
+            } catch (Exception e) {
+                // Ignorer silencieusement
+            }
+        }
+        
+        if (proxy != null) {
+            addComponent(proxy);
+        }
+    }
+    
+    // 4. Mémoriser la version du modèle pour la prochaine fois
+    this.modelVersion = model.getVersion();
+    
+    // 5. Mettre à jour la taille du popup
+    updatePopupSize();
+}
     
     /**
      * Masque le popup.

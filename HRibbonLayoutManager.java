@@ -39,7 +39,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     private final ResizeManager resizeManager = new ResizeManager();
 
     private Rectangle[] groupBoundsCache = null;
-    private java.util.Map<Integer, java.util.List<Component>> componentsByGroupCache = null;
+    private Map<Integer, List<Component>> componentsByGroupCache = null;
 
     public HRibbonLayoutManager(Ribbon ribbon) {
         if (ribbon == null) {
@@ -49,280 +49,258 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     }
 
     @Override
-public void layoutContainer(Container parent) {
-    if (!SwingUtilities.isEventDispatchThread()) {
-        throw new IllegalStateException("HRibbonLayoutManager.layoutContainer must be called on the EDT");
-    }
-    if (!(parent instanceof Ribbon)) {
-        return;
-    }
+    public void layoutContainer(Container parent) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            throw new IllegalStateException("HRibbonLayoutManager.layoutContainer must be called on the EDT");
+        }
+        if (!(parent instanceof Ribbon)) {
+            return;
+        }
 
-    Ribbon hRibbon = (Ribbon) parent;
-    HRibbonModel model = hRibbon.getModel();
-    HRibbonGroupModel groupModel = hRibbon.getGroupModel();
-    if (model == null || groupModel == null) {
-        return;
-    }
+        Ribbon hRibbon = (Ribbon) parent;
+        HRibbonModel model = hRibbon.getModel();
+        HRibbonGroupModel groupModel = hRibbon.getGroupModel();
+        if (model == null || groupModel == null) {
+            return;
+        }
 
-    // ============ NETTOYAGE PRÉALABLE ============
-    // Supprimer les combos des groupes normaux pour éviter les fantômes
-    if (groupModel != null) {
-        int groupCount = groupModel.getGroupCount();
-        for (int i = 0; i < groupCount; i++) {
-            HRibbonGroup group = groupModel.getHRibbonGroup(i);
-            if (group != null && !group.isCollapsed()) {
-                // Groupe en mode NORMAL : pas de bouton
-                RibbonOverflowButton oldButton = group.getCollapsedButton();
-                if (oldButton != null) {
-                    if (oldButton.getParent() == hRibbon) {
-                        hRibbon.removeComponentSafely(oldButton);
+        // Parcourir tous les groupes et supprimer les OverflowButton des groupes normaux
+        // AVANT de commencer le layout pour éviter les fantômes
+        if (groupModel != null) {
+            int groupCount = groupModel.getGroupCount();
+            for (int i = 0; i < groupCount; i++) {
+                HRibbonGroup group = groupModel.getHRibbonGroup(i);
+                if (group != null && !group.isCollapsed()) {
+                    // Ce groupe est en mode NORMAL
+
+                    RibbonOverflowButton oldButton = group.getCollapsedButton();
+                    if (oldButton != null) {
+                        if (oldButton.getParent() == hRibbon) {
+                            hRibbon.removeComponentSafely(oldButton);
+                        }
+                        group.setCollapsedButton(null);
                     }
-                    group.setCollapsedButton(null);
                 }
             }
         }
-    }
 
-    groupBoundsCache = null;
-    componentsByGroupCache = null;
+        groupBoundsCache = null;
+        componentsByGroupCache = null;
 
-    Insets insets = parent.getInsets();
-    int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 0);
-    int availableHeight = parent.getHeight() - (insets != null ? (insets.top + insets.bottom) : 0);
+        Insets insets = parent.getInsets();
+        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 0);
+        int availableHeight = parent.getHeight() - (insets != null ? (insets.top + insets.bottom) : 0);
 
-    int headerAlignment = hRibbon.getHeaderAlignment();
-    boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
-    int headerHeight = headersVisible ? hRibbon.getHeaderHeight() : 0;
-    int groupMargin = groupModel.getHRibbonGroupMarggin();
+        int headerAlignment = hRibbon.getHeaderAlignment();
+        boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
+        int headerHeight = headersVisible ? hRibbon.getHeaderHeight() : 0;
+        int groupMargin = groupModel.getHRibbonGroupMarggin();
 
-    HRibbonLayoutContext ctx = new HRibbonLayoutContext(
-            headerAlignment,
-            hRibbon.getHeaderWidth(),
-            hRibbon.isFillsViewportHeight(),
-            widthDistributor.isEqualDistribution(),
-            groupMargin,
-            hRibbon.getHeaderMargin()
-    );
-
-    int groupCount = groupModel.getGroupCount();
-    if (groupCount == 0) {
-        return;
-    }
-
-    // ============ ÉTAPE 1 : CALCULER LES LARGEURS NORMALES ============
-    int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, groupModel, availableWidth);
-
-    // ============ ÉTAPE 2 : CALCULER LA LARGEUR TOTALE SI TOUT ÉTAIT NORMAL ============
-    int totalNormalWidth = 0;
-    for (int i = 0; i < normalGroupWidths.length; i++) {
-        totalNormalWidth += normalGroupWidths[i];
-        if (i < normalGroupWidths.length - 1) {
-            totalNormalWidth += groupMargin;
-        }
-    }
-
-    // ============ ÉTAPE 3 : CONSTRUIRE LA MAP DES LARGEURS NORMALES ============
-    Map<Integer, Integer> normalWidths = new HashMap<>();
-    for (int i = 0; i < normalGroupWidths.length; i++) {
-        normalWidths.put(i, normalGroupWidths[i]);
-    }
-
-    // ============ ÉTAPE 4 : DÉTERMINER LES ACTIONS DE RESIZE ============
-    List<ResizeAction> resizeActions = resizeManager.calculateResizeActions(
-            groupModel,
-            availableWidth,
-            normalWidths,
-            groupMargin
-    );
-
-    // ============ ÉTAPE 5 : APPLIQUER LES ACTIONS DE RESIZE ============
-    for (ResizeAction action : resizeActions) {
-        if (action.isCollapse()) {
-            resizeManager.collapseGroup(hRibbon, action.getGroupIndex());
-        } else {
-            resizeManager.expandGroup(hRibbon, action.getGroupIndex());
-        }
-    }
-
-    // ============ ÉTAPE 5.5 : GESTION EXCLUSIVE DES TRANSFERTS ============
-    // NOUVEAU : Assurer la séparation stricte après chaque action de resize
-    // ----------------------------------------------------------------------
-    for (ResizeAction action : resizeActions) {
-        if (action.isExpand()) {
-            // CAS 1 : Groupe restauré (collapsed → normal)
-            // Tous les composants DOIVENT repasser du bouton vers le Ribbon
-            int groupIndex = action.getGroupIndex();
-            HRibbonGroup group = groupModel.getHRibbonGroup(groupIndex);
-            
-            if (group != null && !group.isCollapsed()) {
-                RibbonOverflowButton oldButton = group.getCollapsedButton();
-                
-                if (oldButton != null) {
-                    // Transfert exclusif : OverflowButton → Ribbon
-                    hRibbon.transferComponentsFromOverflow(groupIndex, oldButton);
-                    
-                    // Nettoyage final du bouton
-                    if (oldButton.getParent() == hRibbon) {
-                        hRibbon.removeComponentSafely(oldButton);
-                    }
-                    group.setCollapsedButton(null);
-                }
-            }
-        }
-    }
-
-    // ============ ÉTAPE 6 : CALCULER LES LARGEURS FINALES ============
-    int[] groupWidths = new int[groupCount];
-    for (int i = 0; i < groupCount; i++) {
-        HRibbonGroup g = groupModel.getHRibbonGroup(i);
-        if (g != null && g.isCollapsed()) {
-            groupWidths[i] = g.getCollapsedWidth();
-        } else {
-            groupWidths[i] = normalGroupWidths[i];
-        }
-    }
-
-    // ============ ÉTAPE 7 : CALCUL DE LA HAUTEUR DU RUBAN ============
-    int ribbonHeight;
-    Ribbon.HeightPolicy policy = hRibbon.getHeightPolicy();
-
-    if (policy == Ribbon.HeightPolicy.FIXED) {
-        ribbonHeight = Math.max(0, availableHeight);
-    } else {
-        ribbonHeight = preferredCalculator.computeRequiredContentHeight(
-                hRibbon, ctx, normalGroupWidths, model, groupModel
+        HRibbonLayoutContext ctx = new HRibbonLayoutContext(
+                headerAlignment,
+                hRibbon.getHeaderWidth(),
+                hRibbon.isFillsViewportHeight(),
+                widthDistributor.isEqualDistribution(),
+                groupMargin,
+                hRibbon.getHeaderMargin()
         );
-        ribbonHeight = Math.max(ribbonHeight, 1);
-        if (hRibbon.isFillsViewportHeight()) {
-            ribbonHeight = Math.max(ribbonHeight, availableHeight);
+
+        int groupCount = groupModel.getGroupCount();
+        if (groupCount == 0) {
+            return;
         }
-    }
 
-    // ============ ÉTAPE 8 : CALCUL DES RECTANGLES DE CONTENU ============
-    int headerMargin = ctx.getHeaderMargin();
-    int contentHeightPerGroup;
-    if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
-        contentHeightPerGroup = Math.max(0, ribbonHeight - (headersVisible ? (headerHeight + headerMargin) : 0));
-    } else {
-        contentHeightPerGroup = Math.max(0, ribbonHeight);
-    }
+        // ============ ÉTAPE 1 : CALCULER LES LARGEURS NORMALES ============
+        int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, groupModel, availableWidth);
 
-    Rectangle[] groupBounds = boundsCalculator.calculateGroupBounds(
-            ctx, groupWidths, groupModel, insets, contentHeightPerGroup, headerHeight
-    );
-    if (groupBounds == null) {
-        groupBounds = new Rectangle[groupCount];
-    }
-
-    int baseTopInset = (insets != null) ? insets.top : 0;
-    for (int i = 0; i < groupBounds.length; i++) {
-        Rectangle r = groupBounds[i];
-        if (r == null) {
-            r = new Rectangle(0, baseTopInset, (i < groupWidths.length ? groupWidths[i] : 0), contentHeightPerGroup);
-            groupBounds[i] = r;
-        } else {
-            r.height = contentHeightPerGroup;
-            if (headerAlignment == Ribbon.HEADER_NORTH) {
-                r.y = baseTopInset + headerHeight + headerMargin;
-            } else {
-                r.y = baseTopInset;
+        // ============ ÉTAPE 2 : CALCULER LA LARGEUR TOTALE SI TOUT ÉTAIT NORMAL ============
+        int totalNormalWidth = 0;
+        for (int i = 0; i < normalGroupWidths.length; i++) {
+            totalNormalWidth += normalGroupWidths[i];
+            if (i < normalGroupWidths.length - 1) {
+                totalNormalWidth += groupMargin;
             }
         }
-    }
-    groupBoundsCache = groupBounds;
 
-    // ============ ÉTAPE 9 : POSITION DES HEADERS ============
-    headerManager.updateAndPositionHeaders(hRibbon, ctx, groupModel, groupBounds);
+        // ============ ÉTAPE 3 : CONSTRUIRE LA MAP DES LARGEURS NORMALES ============
+        Map<Integer, Integer> normalWidths = new HashMap<>();
+        for (int i = 0; i < normalGroupWidths.length; i++) {
+            normalWidths.put(i, normalGroupWidths[i]);
+        }
 
-    // ============ ÉTAPE 10 : COLLECTE DES COMPOSANTS ============
-    ComponentOrganizer.ComponentCollectionResult coll = componentOrganizer.collectComponents(hRibbon, model);
-    componentsByGroupCache = coll.componentsByGroup;
+        // ============ ÉTAPE 4 : DÉTERMINER LES ACTIONS DE RESIZE ============
+        List<ResizeAction> resizeActions = resizeManager.calculateResizeActions(
+                groupModel,
+                availableWidth,
+                normalWidths,
+                groupMargin
+        );
 
-    // ============ ÉTAPE 11 : GESTION DE LA VISIBILITÉ ============
-    // SIMPLIFIÉ : Les composants sont déjà au bon endroit grâce aux transferts
-    // On ne fait que gérer la visibilité et le layout positionnel
-    for (Map.Entry<Integer, List<Component>> e : componentsByGroupCache.entrySet()) {
-        Integer gi = e.getKey();
-        List<Component> comps = e.getValue();
-        HRibbonGroup group = groupModel.getHRibbonGroup(gi);
+        // ============ ÉTAPE 5 : APPLIQUER LES ACTIONS DE RESIZE ============
+        for (ResizeAction action : resizeActions) {
+            if (action.isCollapse()) {
+                resizeManager.collapseGroup(hRibbon, action.getGroupIndex());
+            } else {
+                resizeManager.expandGroup(hRibbon, action.getGroupIndex());
+            }
+        }
 
-        for (Component c : comps) {
-            if (c == null) {
+        // ============ ÉTAPE 6 : CALCULER LES LARGEURS FINALES ============
+        int[] groupWidths = new int[groupCount];
+        for (int i = 0; i < groupCount; i++) {
+            HRibbonGroup g = groupModel.getHRibbonGroup(i);
+            if (g != null && g.isCollapsed()) {
+                // Largeur collapsed simple (sans ajout de headerWidth)
+                groupWidths[i] = g.getCollapsedWidth();
+            } else {
+                groupWidths[i] = normalGroupWidths[i];
+            }
+        }
+
+        // ============ ÉTAPE 7 : CALCUL DE LA HAUTEUR DU RUBAN ============
+        
+        int ribbonHeight;
+        Ribbon.HeightPolicy policy = hRibbon.getHeightPolicy();
+
+        if (policy == Ribbon.HeightPolicy.FIXED) {
+            ribbonHeight = Math.max(0, availableHeight);
+        } else {
+            ribbonHeight = preferredCalculator.computeRequiredContentHeight(
+                    hRibbon, ctx, normalGroupWidths, model, groupModel
+            );
+            ribbonHeight = Math.max(ribbonHeight, 1);
+            if (hRibbon.isFillsViewportHeight()) {
+                ribbonHeight = Math.max(ribbonHeight, availableHeight);
+            }
+        }
+
+        // ============ ÉTAPE 8 : CALCUL DES RECTANGLES DE CONTENU ============
+        int headerMargin = ctx.getHeaderMargin();
+        int contentHeightPerGroup;
+        if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
+            contentHeightPerGroup = Math.max(0, ribbonHeight - (headersVisible ? (headerHeight + headerMargin) : 0));
+        } else {
+            contentHeightPerGroup = Math.max(0, ribbonHeight);
+        }
+
+        Rectangle[] groupBounds = boundsCalculator.calculateGroupBounds(
+                ctx, groupWidths, groupModel, insets, contentHeightPerGroup, headerHeight
+        );
+        if (groupBounds == null) {
+            groupBounds = new Rectangle[groupCount];
+        }
+
+        int baseTopInset = (insets != null) ? insets.top : 0;
+        for (int i = 0; i < groupBounds.length; i++) {
+            Rectangle r = groupBounds[i];
+            if (r == null) {
+                r = new Rectangle(0, baseTopInset, (i < groupWidths.length ? groupWidths[i] : 0), contentHeightPerGroup);
+                groupBounds[i] = r;
+            } else {
+                r.height = contentHeightPerGroup;
+                if (headerAlignment == Ribbon.HEADER_NORTH) {
+                    r.y = baseTopInset + headerHeight + headerMargin;
+                } else {
+                    r.y = baseTopInset;
+                }
+            }
+        }
+        groupBoundsCache = groupBounds;
+
+        // ============ ÉTAPE 9 : POSITION DES HEADERS ============
+        headerManager.updateAndPositionHeaders(hRibbon, ctx, groupModel, groupBounds);
+
+        // ============ ÉTAPE 10 : COLLECTE DES COMPOSANTS ============
+        ComponentOrganizer.ComponentCollectionResult coll = componentOrganizer.collectComponents(hRibbon, model);
+
+        // ============ ÉTAPE 11 : GESTION DE LA VISIBILITÉ ET AJOUT AU CONTENEUR ============
+        for (Map.Entry<Integer, List<Component>> e : coll.componentsByGroup.entrySet()) {
+            Integer gi = e.getKey();
+            List<Component> comps = e.getValue();
+            HRibbonGroup group = groupModel.getHRibbonGroup(gi);
+
+            for (Component c : comps) {
+                if (c == null) {
+                    continue;
+                }
+
+                // Ajouter au conteneur si pas déjà présent
+                if (c.getParent() != hRibbon) {
+                    hRibbon.addComponentToContainer(c);
+                }
+
+                //Gestion stricte de la visibilité du OverflowButton
+                if (group != null) {
+                    boolean isOverflowBtn = (c == group.getCollapsedButton());
+
+                    if (group.isCollapsed()) {
+                        // Groupe collapsed
+                        if (isOverflowBtn) {
+                            c.setVisible(true);  // Seul le OverflowButton est visible
+                        } else {
+                            c.setVisible(false); // Composants normaux invisibles
+                        }
+                    } else {
+                        // Groupe normal
+                        if (isOverflowBtn) {
+                            // OverflowButton ne doit jamais être visible en mode normal
+                            c.setVisible(false);
+                            // Supprimer du conteneur pour éviter 
+                            if (c.getParent() == hRibbon) {
+                                hRibbon.removeComponentSafely(c);
+                            }
+                            // Invalider le cache
+                            group.setCollapsedButton(null);
+                        } else {
+                            c.setVisible(true);  // Composants normaux visibles
+                        }
+                    }
+                }
+            }
+        }
+
+        componentsByGroupCache = coll.componentsByGroup;
+
+        // ============ ÉTAPE 12 : LAYOUT DES COMPOSANTS DANS CHAQUE GROUPE ============
+        for (int gi = 0; gi < groupBounds.length; gi++) {
+            Rectangle groupRect = groupBounds[gi];
+            List<Component> comps = componentsByGroupCache.get(gi);
+            if (comps == null || comps.isEmpty() || groupRect == null) {
                 continue;
             }
 
-            // S'assurer que le composant est bien dans le conteneur
-            if (c.getParent() != hRibbon) {
-                hRibbon.addComponentToContainer(c);
+            HRibbonGroup group = groupModel.getHRibbonGroup(gi);
+            if (group == null) {
+                continue;
             }
 
-            // Gestion simplifiée de la visibilité
-            if (group != null) {
-                boolean isOverflowBtn = (c == group.getCollapsedButton());
+            if (group.isCollapsed()) {
+                // Groupe collapsed : positionner uniquement le OverflowButton
+                RibbonOverflowButton btn = group.getCollapsedButton();
+                if (btn != null && btn.isVisible()) {
+                    // Centrer le OverflowButton verticalement dans le groupRect
+                    int btnHeight = Math.min(btn.getPreferredSize().height, groupRect.height);
+                    int y = groupRect.y + (groupRect.height - btnHeight) / 2;
+                    btn.setBounds(groupRect.x, y, group.getCollapsedWidth(), btnHeight);
+                }
+            } else {
+                // Groupe normal : layout multi-lignes habituel
+                // Filtrer pour ne layouter que les composants visibles
+                List<Component> visibleComps = new ArrayList<>();
+                for (Component c : comps) {
+                    if (c.isVisible()) {
+                        visibleComps.add(c);
+                    }
+                }
                 
-                if (group.isCollapsed()) {
-                    // Groupe collapsed : seul le bouton est visible
-                    c.setVisible(isOverflowBtn);
-                    
-                    // Les composants normaux sont invisibles et gérés par le bouton
-                    if (!isOverflowBtn) {
-                        c.setVisible(false);
-                    }
-                } else {
-                    // Groupe normal : tous les composants sauf le bouton sont visibles
-                    if (isOverflowBtn) {
-                        c.setVisible(false);
-                        // Le bouton ne doit pas rester dans le Ribbon
-                        if (c.getParent() == hRibbon) {
-                            hRibbon.removeComponentSafely(c);
-                        }
-                        group.setCollapsedButton(null);
-                    } else {
-                        c.setVisible(true);
-                    }
+                if (!visibleComps.isEmpty()) {
+                    lineWrapper.layoutComponentsInGroup(
+                            visibleComps, groupRect, group.getPadding(), group.getComponentSpacing()
+                    );
                 }
             }
         }
     }
-
-    // ============ ÉTAPE 12 : LAYOUT DES COMPOSANTS DANS CHAQUE GROUPE ============
-    for (int gi = 0; gi < groupBounds.length; gi++) {
-        Rectangle groupRect = groupBounds[gi];
-        List<Component> comps = componentsByGroupCache.get(gi);
-        if (comps == null || comps.isEmpty() || groupRect == null) {
-            continue;
-        }
-
-        HRibbonGroup group = groupModel.getHRibbonGroup(gi);
-        if (group == null) {
-            continue;
-        }
-
-        if (group.isCollapsed()) {
-            // Groupe collapsed : positionner uniquement le combo
-            RibbonOverflowButton btn = group.getCollapsedButton();
-            if (btn != null && btn.isVisible()) {
-                int btnHeight = Math.min(btn.getPreferredSize().height, groupRect.height);
-                int y = groupRect.y + (groupRect.height - btnHeight) / 2;
-                btn.setBounds(groupRect.x, y, group.getCollapsedWidth(), btnHeight);
-            }
-        } else {
-            // Groupe normal : layout multi-lignes
-            List<Component> visibleComps = new ArrayList<>();
-            for (Component c : comps) {
-                if (c.isVisible()) {
-                    visibleComps.add(c);
-                }
-            }
-            
-            if (!visibleComps.isEmpty()) {
-                lineWrapper.layoutComponentsInGroup(
-                        visibleComps, groupRect, group.getPadding(), group.getComponentSpacing()
-                );
-            }
-        }
-    }
-}
 
     /**
      * Construit estimatedGroupWidths basé sur preferredWidth sinon somme des

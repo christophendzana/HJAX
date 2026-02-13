@@ -9,8 +9,10 @@
 package rubban;
 
 import java.awt.Color;
+import java.awt.Component;
 import java.util.Objects;
 import javax.swing.event.SwingPropertyChangeSupport;
+import rubban.layout.CollapseLevel;
 
 public class HRibbonGroup {
 
@@ -64,6 +66,28 @@ public class HRibbonGroup {
     private boolean isResizable = true;
 
     // =========================================================================
+    // PROPRIÉTÉS DE REDIMENSIONNEMENT 
+    // =========================================================================
+    /**
+     * Niveau de collapse actuel du groupe. Détermine si le groupe est affiché
+     * normalement ou réduit en JComboBox.
+     */
+    private CollapseLevel currentLevel = CollapseLevel.NORMAL;
+
+    /**
+     * Largeur du groupe lorsqu'il est en mode COLLAPSED (JComboBox). Par défaut
+     * 80 pixels.
+     */
+    private int collapsedWidth = 80;
+
+    /**
+     * Composant affiché quand le groupe est collapsed (généralement un
+     * JComboBox). Cache pour éviter les recréations inutiles. Transient car ne
+     * doit pas être sérialisé.
+     */
+    private transient RibbonOverflowButton collapsedButton = null;
+
+    // =========================================================================
     // PROPRIÉTÉS DE MISE EN PAGE INTERNE
     // =========================================================================
     /**
@@ -79,69 +103,67 @@ public class HRibbonGroup {
     // =========================================================================
     // CONFIGURATION DES EN-TÊTES (HEADERS) - NOUVELLES PROPRIÉTÉS
     // =========================================================================
-    
     /**
-     * Couleur de fond de l'en-tête du groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
+     * Couleur de fond de l'en-tête du groupe. Si null, la couleur par défaut du
+     * ruban sera utilisée.
      */
     private Color headerBackground = null;
-    
+
     /**
-     * Couleur du texte de l'en-tête du groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
+     * Couleur du texte de l'en-tête du groupe. Si null, la couleur par défaut
+     * du ruban sera utilisée.
      */
     private Color headerForeground = null;
-    
+
     /**
-     * Couleur de la bordure de l'en-tête du groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
+     * Couleur de la bordure de l'en-tête du groupe. Si null, la couleur par
+     * défaut du ruban sera utilisée.
      */
     private Color headerBorderColor = null;
-    
+
     /**
-     * Taille de police de l'en-tête en points.
-     * Si null, la taille par défaut du ruban sera utilisée.
-     * Exemples : 11, 12, 14, 16.
+     * Taille de police de l'en-tête en points. Si null, la taille par défaut du
+     * ruban sera utilisée. Exemples : 11, 12, 14, 16.
      */
     private Integer headerFontSize = null;
-    
+
     /**
-     * Indique si le texte de l'en-tête doit être affiché en gras.
-     * Si null, le paramètre par défaut du ruban sera utilisé.
+     * Indique si le texte de l'en-tête doit être affiché en gras. Si null, le
+     * paramètre par défaut du ruban sera utilisé.
      */
     private Boolean headerFontBold = null;
-    
+
     /**
-     * Couleur de fond de l'en-tête lorsque la souris survole le groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
+     * Couleur de fond de l'en-tête lorsque la souris survole le groupe. Si
+     * null, la couleur par défaut du ruban sera utilisée.
      */
     private Color headerHoverBackground = null;
-    
+
     /**
-     * Couleur de fond de l'en-tête lorsque le groupe est sélectionné.
-     * Si null, la couleur par défaut du ruban sera utilisée.
+     * Couleur de fond de l'en-tête lorsque le groupe est sélectionné. Si null,
+     * la couleur par défaut du ruban sera utilisée.
      */
     private Color headerSelectedBackground = null;
-    
+
     /**
-     * Rayon des coins arrondis de l'en-tête en pixels.
-     * Si null, le rayon par défaut du ruban sera utilisé.
-     * 0 = coins carrés, 5 = légèrement arrondi, 15 = très arrondi.
+     * Rayon des coins arrondis de l'en-tête en pixels. Si null, le rayon par
+     * défaut du ruban sera utilisé. 0 = coins carrés, 5 = légèrement arrondi,
+     * 15 = très arrondi.
      */
     private Integer headerCornerRadius = null;
-    
-    // =========================================================================
-    // AUTRES PROPRIÉTÉS
-    // =========================================================================
-    
+
     private Color background;
-    
+
     /**
      * Gestionnaire des écouteurs PropertyChangeListener, notifie les
      * changements de propriétés (largeur, padding, etc.) aux composants
      * intéressés.
      */
     private SwingPropertyChangeSupport changeSupport;
+
+    private boolean collapsible = true;      // peut-on transformer le groupe en menu ?
+    private int collapseWidth = 48;          // largeur (px) du placeholder quand collapsed (par défaut)
+    private boolean collapsed = false;       // état courant de collapse
 
     // =========================================================================
     // CONSTRUCTEURS
@@ -423,8 +445,8 @@ public class HRibbonGroup {
     }
 
     /**
-     * Définit une couleur de fond personnalisée pour ce groupe.
-     * Si null, le Ribbon utilisera la couleur globale par défaut.
+     * Définit une couleur de fond personnalisée pour ce groupe. Si null, le
+     * Ribbon utilisera la couleur globale par défaut.
      */
     public void setBackground(Color bg) {
         if (!Objects.equals(this.background, bg)) {
@@ -435,12 +457,13 @@ public class HRibbonGroup {
     }
 
     /**
-     * Retourne la couleur de fond personnalisée pour ce groupe ou null si aucune.
+     * Retourne la couleur de fond personnalisée pour ce groupe ou null si
+     * aucune.
      */
     public Color getBackground() {
         return background;
     }
-    
+
     /**
      * Retourne l'espacement entre les composants à l'intérieur du groupe.
      *
@@ -466,21 +489,20 @@ public class HRibbonGroup {
     // =========================================================================
     // GETTERS ET SETTERS - CONFIGURATION DES EN-TÊTES (NOUVEAU)
     // =========================================================================
-    
     /**
-     * Retourne la couleur de fond spécifique de l'en-tête de ce groupe.
-     * Si null, la couleur par défaut du ruban doit être utilisée.
-     * 
+     * Retourne la couleur de fond spécifique de l'en-tête de ce groupe. Si
+     * null, la couleur par défaut du ruban doit être utilisée.
+     *
      * @return la couleur de fond de l'en-tête, ou null si non définie
      */
     public Color getHeaderBackground() {
         return headerBackground;
     }
-    
+
     /**
-     * Définit une couleur de fond spécifique pour l'en-tête de ce groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
-     * 
+     * Définit une couleur de fond spécifique pour l'en-tête de ce groupe. Si
+     * null, la couleur par défaut du ruban sera utilisée.
+     *
      * @param headerBackground la nouvelle couleur de fond de l'en-tête
      */
     public void setHeaderBackground(Color headerBackground) {
@@ -490,21 +512,21 @@ public class HRibbonGroup {
             firePropertyChange("headerBackground", old, headerBackground);
         }
     }
-    
+
     /**
-     * Retourne la couleur du texte spécifique de l'en-tête de ce groupe.
-     * Si null, la couleur par défaut du ruban doit être utilisée.
-     * 
+     * Retourne la couleur du texte spécifique de l'en-tête de ce groupe. Si
+     * null, la couleur par défaut du ruban doit être utilisée.
+     *
      * @return la couleur du texte de l'en-tête, ou null si non définie
      */
     public Color getHeaderForeground() {
         return headerForeground;
     }
-    
+
     /**
-     * Définit une couleur de texte spécifique pour l'en-tête de ce groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
-     * 
+     * Définit une couleur de texte spécifique pour l'en-tête de ce groupe. Si
+     * null, la couleur par défaut du ruban sera utilisée.
+     *
      * @param headerForeground la nouvelle couleur du texte de l'en-tête
      */
     public void setHeaderForeground(Color headerForeground) {
@@ -514,21 +536,21 @@ public class HRibbonGroup {
             firePropertyChange("headerForeground", old, headerForeground);
         }
     }
-    
+
     /**
-     * Retourne la couleur de bordure spécifique de l'en-tête de ce groupe.
-     * Si null, la couleur par défaut du ruban doit être utilisée.
-     * 
+     * Retourne la couleur de bordure spécifique de l'en-tête de ce groupe. Si
+     * null, la couleur par défaut du ruban doit être utilisée.
+     *
      * @return la couleur de bordure de l'en-tête, ou null si non définie
      */
     public Color getHeaderBorderColor() {
         return headerBorderColor;
     }
-    
+
     /**
-     * Définit une couleur de bordure spécifique pour l'en-tête de ce groupe.
-     * Si null, la couleur par défaut du ruban sera utilisée.
-     * 
+     * Définit une couleur de bordure spécifique pour l'en-tête de ce groupe. Si
+     * null, la couleur par défaut du ruban sera utilisée.
+     *
      * @param headerBorderColor la nouvelle couleur de bordure de l'en-tête
      */
     public void setHeaderBorderColor(Color headerBorderColor) {
@@ -538,21 +560,21 @@ public class HRibbonGroup {
             firePropertyChange("headerBorderColor", old, headerBorderColor);
         }
     }
-    
+
     /**
-     * Retourne la taille de police spécifique de l'en-tête de ce groupe.
-     * Si null, la taille par défaut du ruban doit être utilisée.
-     * 
+     * Retourne la taille de police spécifique de l'en-tête de ce groupe. Si
+     * null, la taille par défaut du ruban doit être utilisée.
+     *
      * @return la taille de police en points, ou null si non définie
      */
     public Integer getHeaderFontSize() {
         return headerFontSize;
     }
-    
+
     /**
-     * Définit une taille de police spécifique pour l'en-tête de ce groupe.
-     * Si null, la taille par défaut du ruban sera utilisée.
-     * 
+     * Définit une taille de police spécifique pour l'en-tête de ce groupe. Si
+     * null, la taille par défaut du ruban sera utilisée.
+     *
      * @param headerFontSize la nouvelle taille de police en points
      */
     public void setHeaderFontSize(Integer headerFontSize) {
@@ -562,21 +584,21 @@ public class HRibbonGroup {
             firePropertyChange("headerFontSize", old, headerFontSize);
         }
     }
-    
+
     /**
-     * Retourne l'indicateur de police en gras spécifique de l'en-tête de ce groupe.
-     * Si null, le paramètre par défaut du ruban doit être utilisée.
-     * 
+     * Retourne l'indicateur de police en gras spécifique de l'en-tête de ce
+     * groupe. Si null, le paramètre par défaut du ruban doit être utilisée.
+     *
      * @return true si la police doit être en gras, null si non défini
      */
     public Boolean getHeaderFontBold() {
         return headerFontBold;
     }
-    
+
     /**
-     * Définit si la police de l'en-tête doit être en gras.
-     * Si null, le paramètre par défaut du ruban sera utilisé.
-     * 
+     * Définit si la police de l'en-tête doit être en gras. Si null, le
+     * paramètre par défaut du ruban sera utilisé.
+     *
      * @param headerFontBold true pour police en gras, false pour normal
      */
     public void setHeaderFontBold(Boolean headerFontBold) {
@@ -586,21 +608,21 @@ public class HRibbonGroup {
             firePropertyChange("headerFontBold", old, headerFontBold);
         }
     }
-    
+
     /**
-     * Retourne la couleur de fond spécifique de l'en-tête au survol.
-     * Si null, la couleur par défaut du ruban doit être utilisée.
-     * 
+     * Retourne la couleur de fond spécifique de l'en-tête au survol. Si null,
+     * la couleur par défaut du ruban doit être utilisée.
+     *
      * @return la couleur de fond au survol, ou null si non définie
      */
     public Color getHeaderHoverBackground() {
         return headerHoverBackground;
     }
-    
+
     /**
-     * Définit une couleur de fond spécifique pour l'en-tête au survol.
-     * Si null, la couleur par défaut du ruban sera utilisée.
-     * 
+     * Définit une couleur de fond spécifique pour l'en-tête au survol. Si null,
+     * la couleur par défaut du ruban sera utilisée.
+     *
      * @param headerHoverBackground la nouvelle couleur de fond au survol
      */
     public void setHeaderHoverBackground(Color headerHoverBackground) {
@@ -610,21 +632,21 @@ public class HRibbonGroup {
             firePropertyChange("headerHoverBackground", old, headerHoverBackground);
         }
     }
-    
+
     /**
-     * Retourne la couleur de fond spécifique de l'en-tête en sélection.
-     * Si null, la couleur par défaut du ruban doit être utilisée.
-     * 
+     * Retourne la couleur de fond spécifique de l'en-tête en sélection. Si
+     * null, la couleur par défaut du ruban doit être utilisée.
+     *
      * @return la couleur de fond en sélection, ou null si non définie
      */
     public Color getHeaderSelectedBackground() {
         return headerSelectedBackground;
     }
-    
+
     /**
-     * Définit une couleur de fond spécifique pour l'en-tête en sélection.
-     * Si null, la couleur par défaut du ruban sera utilisée.
-     * 
+     * Définit une couleur de fond spécifique pour l'en-tête en sélection. Si
+     * null, la couleur par défaut du ruban sera utilisée.
+     *
      * @param headerSelectedBackground la nouvelle couleur de fond en sélection
      */
     public void setHeaderSelectedBackground(Color headerSelectedBackground) {
@@ -634,21 +656,21 @@ public class HRibbonGroup {
             firePropertyChange("headerSelectedBackground", old, headerSelectedBackground);
         }
     }
-    
+
     /**
-     * Retourne le rayon des coins arrondis spécifique de l'en-tête.
-     * Si null, le rayon par défaut du ruban doit être utilisée.
-     * 
+     * Retourne le rayon des coins arrondis spécifique de l'en-tête. Si null, le
+     * rayon par défaut du ruban doit être utilisée.
+     *
      * @return le rayon des coins en pixels, ou null si non défini
      */
     public Integer getHeaderCornerRadius() {
         return headerCornerRadius;
     }
-    
+
     /**
-     * Définit un rayon des coins arrondis spécifique pour l'en-tête.
-     * Si null, le rayon par défaut du ruban sera utilisé.
-     * 
+     * Définit un rayon des coins arrondis spécifique pour l'en-tête. Si null,
+     * le rayon par défaut du ruban sera utilisé.
+     *
      * @param headerCornerRadius le nouveau rayon des coins en pixels
      */
     public void setHeaderCornerRadius(Integer headerCornerRadius) {
@@ -658,7 +680,7 @@ public class HRibbonGroup {
             firePropertyChange("headerCornerRadius", old, headerCornerRadius);
         }
     }
-    
+
     // =========================================================================
     // GESTION DES ÉCOUTEURS (PATTERN OBSERVER)
     // =========================================================================
@@ -706,6 +728,173 @@ public class HRibbonGroup {
             changeSupport = new SwingPropertyChangeSupport(this);
         }
         return changeSupport;
+    }
+
+    /**
+     * Indique si le groupe peut être collapsé.
+     */
+    public boolean isCollapsible() {
+        return collapsible;
+    }
+
+    /**
+     * Configure si le groupe est collapsible.
+     */
+    public void setCollapsible(boolean collapsible) {
+        this.collapsible = collapsible;
+    }
+
+    /**
+     * Largeur (px) à utiliser pour le groupe lorsqu'il est collapsé.
+     */
+    public int getCollapseWidth() {
+        return Math.max(0, collapseWidth);
+    }
+
+    /**
+     * Définit la collapseWidth (px).
+     */
+    public void setCollapseWidth(int collapseWidth) {
+        this.collapseWidth = Math.max(0, collapseWidth);
+    }
+
+    /**
+     * Modifie l'état collapsed. Ne gère PAS le reparenting ; c'est le rôle de
+     * l'OverflowManager.
+     */
+    public void setCollapsed(boolean collapsed) {
+        this.collapsed = collapsed;
+    }
+
+    /**
+     * Retourne le niveau de collapse actuel du groupe.
+     *
+     * @return le niveau de collapse (NORMAL ou COLLAPSED)
+     */
+    public CollapseLevel getCurrentLevel() {
+        return currentLevel;
+    }
+
+    /**
+     * Définit le niveau de collapse du groupe. Notifie les écouteurs du
+     * changement.
+     *
+     * @param level le nouveau niveau de collapse
+     */
+    public void setCurrentLevel(CollapseLevel level) {
+        if (level == null) {
+            throw new IllegalArgumentException("CollapseLevel cannot be null");
+        }
+
+        if (this.currentLevel != level) {
+            CollapseLevel oldLevel = this.currentLevel;
+            this.currentLevel = level;
+
+            // Notifier les écouteurs si le support est initialisé
+            if (changeSupport != null) {
+                changeSupport.firePropertyChange("currentLevel", oldLevel, level);
+            }
+        }
+    }
+
+    /**
+     * Retourne la largeur du groupe en mode collapsed.
+     *
+     * @return largeur en pixels (par défaut 80)
+     */
+    public int getCollapsedWidth() {
+        return collapsedWidth;
+    }
+
+    /**
+     * Définit la largeur du groupe en mode collapsed.
+     *
+     * @param width largeur en pixels (doit être > 0)
+     */
+    public void setCollapsedWidth(int width) {
+        if (width <= 0) {
+            throw new IllegalArgumentException("Collapsed width must be positive");
+        }
+
+        if (this.collapsedWidth != width) {
+            int oldWidth = this.collapsedWidth;
+            this.collapsedWidth = width;
+
+            if (changeSupport != null) {
+                changeSupport.firePropertyChange("collapsedWidth", oldWidth, width);
+            }
+        }
+    }
+
+    /**
+     * Retourne le composant affiché en mode collapsed (généralement un
+     * JComboBox).
+     *
+     * @return le composant collapsed ou null si pas encore créé
+     */
+    public RibbonOverflowButton getCollapsedButton() {
+        return collapsedButton;
+    }
+
+    /**
+     * Définit le composant affiché en mode collapsed.
+     *
+     * @param button
+     */
+    public void setCollapsedButton(RibbonOverflowButton button) {
+        this.collapsedButton = button;
+    }
+
+    public Component getCollapsedComponent() {
+        return collapsedButton;
+    }
+
+    public void setCollapsedComponent(Component component) {
+        if (component instanceof RibbonOverflowButton) {
+            this.collapsedButton = (RibbonOverflowButton) component;
+        }
+    }
+
+    /**
+     * Vérifie si le groupe est actuellement collapsed.
+     *
+     * @return true si le groupe est en mode COLLAPSED
+     */
+    public boolean isCollapsed() {
+        return currentLevel == CollapseLevel.COLLAPSED;
+    }
+
+    /**
+     * Vérifie si le groupe est actuellement en mode normal.
+     *
+     * @return true si le groupe est en mode NORMAL
+     */
+    public boolean isNormal() {
+        return currentLevel == CollapseLevel.NORMAL;
+    }
+
+    /**
+     * Passe le groupe au niveau collapsed. Raccourci pour
+     * setCurrentLevel(CollapseLevel.COLLAPSED).
+     */
+    public void collapse() {
+        setCurrentLevel(CollapseLevel.COLLAPSED);
+    }
+
+    /**
+     * Passe le groupe au niveau normal. Raccourci pour
+     * setCurrentLevel(CollapseLevel.NORMAL).
+     */
+    public void expand() {
+        setCurrentLevel(CollapseLevel.NORMAL);
+    }
+
+    /**
+     * Invalide le composant collapsed en cache. Force la recréation du
+     * JComboBox au prochain affichage.
+     */
+    public void invalidateCollapsedButton() {
+        this.collapsedButton = null;
     }
 
     // =========================================================================

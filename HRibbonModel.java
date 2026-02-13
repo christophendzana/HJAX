@@ -11,53 +11,67 @@ package rubban;
 public interface HRibbonModel {
 
     /**
-     * Returns the number of group in the model. A
-     * <code>HRibbon</code> uses this method to determine how many groups it
-     * should display.  This method should be quick, as it
-     * is called frequently during rendering.
+     * Returns the number of group in the model. A <code>HRibbon</code> uses
+     * this method to determine how many groups it should display. This method
+     * should be quick, as it is called frequently during rendering.
      *
      * @return the number of groups in the model
      * @see #getGroupCount
      */
     public int getGroupCount();
-    
+
     /**
-     * Returns the name of the group at <code>groupIndex</code>.  This is used
-     * to initialize the ribbon's group header name.  Note: this name does
-     * not need to be unique; two groups in a ribbon can have the same name.
+     * Returns the name of the group at <code>groupIndex</code>. This is used to
+     * initialize the ribbon's group header name. Note: this name does not need
+     * to be unique; two groups in a ribbon can have the same name.
      *
-     * @param   groupIndex     the index of the group
-     * @return  the name of the group
+     * @param groupIndex the index of the group
+     * @return the name of the group
      */
     public Object getGroupIdentifier(int groupIndex);
 
     /**
      * Returns the Object at this <code>position</code> in the group at this
      * <code>groupIndex</code>
+     *
      * @param position
      * @param groupIndex
-     * @return 
+     * @return
      */
     public Object getValueAt(int position, int groupIndex);
-    
+
     /**
-     * Returns the Object at this <code>position</code> in the group have this 
+     * Returns the Object at this <code>position</code> in the group have this
      * name <code>groupIndex</code>
+     *
      * @param position
      * @param groupName
-     * @return 
+     * @return
      */
-    public Object getValueAt(int position, Object groupIdentifier);     
-    
+    public Object getValueAt(int position, Object groupIdentifier);
+
     public void setValueAt(Object value, int position, int groupIndex);
-    
+
     public int getValueCount(Object groupIdentifier);
 
     public int getValueCount(int groupIndex);
-    
+
     public void setValueAt(Object value, int position, Object groupIdentifier);
-    
+
     public void addRibbonModelListener(HRibbonModelListener l);
-    
-    public void removeModelListener (HRibbonModelListener l);
+
+    public void removeModelListener(HRibbonModelListener l);
+
+    /**
+     * Retourne le numéro de version du modèle.
+     *
+     * Ce compteur est incrémenté à CHAQUE modification du modèle (ajout,
+     * suppression, déplacement, modification de valeur). Permet à
+     * RibbonOverflowButton) de détecter si le modèle a changé depuis leur
+     * dernière synchronisation.
+     *
+     * @return la version actuelle (commence à 0, incrémentée à chaque
+     * modification)
+     */
+    long getVersion();
 }

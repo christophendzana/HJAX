@@ -54,7 +54,7 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
     /**
      * Largeur par défaut d'un groupe lorsqu'aucune préférence n'est définie
      * Utilisée comme fallback quand group.getPreferredWidth() <= 0
-     * Valeur : 150 pixels (largeur raisonnable pour un groupe typique)
+     * Valeur : 150 pixels 
      */
     private static final int DEFAULT_GROUP_WIDTH = 150;
     
