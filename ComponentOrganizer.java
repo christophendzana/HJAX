@@ -29,6 +29,8 @@ import rubban.HRibbonModel;
 import rubban.Ribbon;
 import rubban.HRibbonGroup;
 import rubban.HRibbonGroupModel;
+import rubban.HRibbonModelEvent;
+import rubban.HRibbonModelListener;
 import rubban.RibbonOverflowButton;
 
 /**
@@ -48,408 +50,491 @@ import rubban.RibbonOverflowButton;
  * @see rubban.Ribbon#addComponentToContainer(Component)
  * @see rubban.GroupRenderer
  */
-public class ComponentOrganizer {
-
+public class ComponentOrganizer implements HRibbonModelListener {
+    
     // =========================================================================
-    // CLASSES INTERNES POUR LA GESTION DU CACHE ET DES MÉTADONNÉES
+    // CLASSE INTERNE POUR LA CLÉ DE CACHE
     // =========================================================================
     /**
-     * Clé de cache - Combinaison unique pour identifier un composant
-     *
-     * STRUCTURE DE LA CLÉ : - groupIndex : Index du groupe dans le ruban -
-     * position : Position dans le groupe (ligne) - value : Valeur objet à
-     * afficher (utilise equals() pour comparaison)
-     *
-     * UTILISATION : Permet de réutiliser un composant si la même valeur
-     * apparaît à la même position Évite la recréation inutile de composants
-     * identiques
-     *
-     * DESIGN PATTERN : VALUE OBJECT (objet valeur)
+     * La clé utilise toujours groupIndex et position, mais maintenant
+     * ces valeurs sont mises à jour dynamiquement quand le modèle change.     
      */
     private static final class CacheKey {
-
-        /**
-         * Index du groupe dans le modèle HRibbon
-         */
-        final int groupIndex;
-
-        /**
-         * Position verticale dans le groupe (numéro de ligne)
-         */
-        final int position;
-
-        /**
-         * Valeur objet à afficher (peut être null)
-         */
+        int groupIndex;  
+        int position;   
         final Object value;
-
-        /**
-         * Constructeur de la clé de cache
-         *
-         * @param groupIndex index du groupe (0-based)
-         * @param position position dans le groupe (0-based)
-         * @param value valeur à afficher (peut être null)
-         */
+        
         CacheKey(int groupIndex, int position, Object value) {
             this.groupIndex = groupIndex;
             this.position = position;
             this.value = value;
         }
-
+        
         /**
-         * Implémentation de equals() pour la comparaison de clés
-         *
-         * @param o objet à comparer
-         * @return true si les clés sont équivalentes
-         *
-         * LOGIQUE DE COMPARAISON : 1. Référence identique → true 2. Type
-         * différent → false 3. Même groupIndex, position et value.equals() →
-         * true
+         * Met à jour la position (utilisé lors des insertions/suppressions)
          */
+        void updatePosition(int newPosition) {
+            this.position = newPosition;
+        }
+        
+        /**
+         * Met à jour le groupe (utilisé lors des déplacements entre groupes)
+         */
+        void updateGroup(int newGroupIndex) {
+            this.groupIndex = newGroupIndex;
+        }
+        
         @Override
         public boolean equals(Object o) {
-            // Optimisation : même référence mémoire
-            if (this == o) {
-                return true;
-            }
-
-            // Vérification du type
-            if (!(o instanceof CacheKey)) {
-                return false;
-            }
-
-            // Comparaison détaillée
+            if (this == o) return true;
+            if (!(o instanceof CacheKey)) return false;
             CacheKey ck = (CacheKey) o;
-            return groupIndex == ck.groupIndex
-                    && position == ck.position
-                    && Objects.equals(value, ck.value); // Null-safe comparison
+            return groupIndex == ck.groupIndex 
+                && position == ck.position 
+                && Objects.equals(value, ck.value);
         }
-
-        /**
-         * Implémentation de hashCode() cohérente avec equals()
-         *
-         * @return code de hachage calculé à partir des trois champs
-         *
-         * CONTRAT JAVA : - Si deux objets sont égaux (equals() retourne true),
-         * ils doivent avoir le même hashCode() - L'inverse n'est pas
-         * obligatoire (collisions possibles)
-         */
+        
         @Override
         public int hashCode() {
             return Objects.hash(groupIndex, position, value);
         }
     }
-
-    /**
-     * Métadonnées d'un composant - Informations sur son origine
-     *
-     * UTILITÉ : - Permet de retracer l'origine d'un composant dans le ruban -
-     * Utilisé pour les événements, la sélection, le débogage - Structure
-     * immuable (safety thread)
-     *
-     * DESIGN PATTERN : DATA HOLDER (porteur de données)
-     */
+    
+    // =========================================================================
+    // MÉTADONNÉES D'UN COMPOSANT
+    // =========================================================================
     public static final class ComponentData {
-
-        /**
-         * Index du groupe source
-         */
         public final int groupIndex;
-
-        /**
-         * Position dans le groupe source
-         */
         public final int position;
-
-        /**
-         * Valeur objet d'origine
-         */
         public final Object value;
-
-        /**
-         * Constructeur des métadonnées de composant
-         *
-         * @param groupIndex index du groupe d'origine
-         * @param position position dans le groupe
-         * @param value valeur objet d'origine
-         */
+        
         public ComponentData(int groupIndex, int position, Object value) {
             this.groupIndex = groupIndex;
             this.position = position;
             this.value = value;
         }
     }
-
-    /**
-     * Résultat de la collecte de composants - Structure de retour
-     *
-     * CONTENU : - componentsByGroup : Map groupIndex → Liste des composants du
-     * groupe - componentInfoMap : Map Component → Métadonnées du composant
-     *
-     * UTILISATION : Retourné par collectComponents() pour fournir une vue
-     * organisée des composants sans les ajouter physiquement au conteneur
-     */
+    
+    // =========================================================================
+    // RÉSULTAT DE COLLECTE
+    // =========================================================================
     public static final class ComponentCollectionResult {
-
-        /**
-         * Composants organisés par groupe (index → liste)
-         */
         public final Map<Integer, List<Component>> componentsByGroup;
-
-        /**
-         * Métadonnées associées à chaque composant
-         */
         public final Map<Component, ComponentData> componentInfoMap;
-
-        /**
-         * Constructeur du résultat de collecte
-         *
-         * @param componentsByGroup map des composants par groupe
-         * @param componentInfoMap map des métadonnées par composant
-         */
+        
         ComponentCollectionResult(Map<Integer, List<Component>> componentsByGroup,
-                Map<Component, ComponentData> componentInfoMap) {
+                                  Map<Component, ComponentData> componentInfoMap) {
             this.componentsByGroup = componentsByGroup;
             this.componentInfoMap = componentInfoMap;
         }
     }
-
+    
     // =========================================================================
     // VARIABLES D'INSTANCE
     // =========================================================================
-    /**
-     * Cache des composants créés - Optimisation des performances
-     *
-     * STRUCTURE : CacheKey → Component
-     *
-     * AVANTAGES : - Évite la recréation de composants identiques - Réduit
-     * l'empreinte mémoire - Améliore les performances lors des redessinages
-     *
-     * IMPORTANT : Le cache doit être vidé lorsque le modèle change
-     *
-     * @see #clearCache()
-     */
     private final Map<CacheKey, Component> cache = new HashMap<>();
-
+    private Ribbon currentRibbon;  // Référence vers le ruban pour créer des composants
+    
     // =========================================================================
     // CONSTRUCTEUR
     // =========================================================================
-    /**
-     * Constructeur par défaut
-     *
-     * Initialise un nouvel organisateur de composants avec un cache vide
-     */
-    public ComponentOrganizer() {
-        // Cache initialisé automatiquement par new HashMap<>()
+    public ComponentOrganizer() {        
     }
-
-    // =========================================================================
-    // MÉTHODES PUBLIQUES DE GESTION DU CACHE
-    // =========================================================================
+    
     /**
-     * Vide le cache des composants créés
-     *
-     * QUAND UTILISER : - Lorsque le modèle HRibbon change (nouvelles données) -
-     * Lorsque le renderer change (nouveau style d'affichage) - Lors d'un
-     * nettoyage mémoire
-     *
-     * EFFET : Tous les composants devront être recréés au prochain appel de
-     * collectComponents()
+     * À appeler quand le composant est attaché à un ruban.S'abonne aux événements du modèle.
+     * @param ribbon
      */
+    public void install(Ribbon ribbon) {
+        if (ribbon == null) return;
+        
+        // Se désabonner de l'ancien modèle si nécessaire
+        if (currentRibbon != null && currentRibbon.getModel() != null) {
+            currentRibbon.getModel().removeModelListener(this);
+        }
+        
+        this.currentRibbon = ribbon;
+        
+        // S'abonner au nouveau modèle
+        if (ribbon.getModel() != null) {
+            ribbon.getModel().addRibbonModelListener(this);
+        }
+    }
+    
+    /**
+     * À appeler quand le composant est détaché.
+     */
+    public void uninstall() {
+        if (currentRibbon != null && currentRibbon.getModel() != null) {
+            currentRibbon.getModel().removeModelListener(this);
+        }
+        currentRibbon = null;
+        clearCache(); // On vide le cache car plus de contexte
+    }
+    
+    // =========================================================================
+    // GESTION DU CACHE
+    // =========================================================================
     public void clearCache() {
         cache.clear();
     }
-
+    
     // =========================================================================
-    // MÉTHODE PRINCIPALE DE COLLECTE
+    // COLLECTE PRINCIPALE (utilisée par le LayoutManager)
     // =========================================================================
-    /**
-     * Collecte tous les composants du modèle sans les ajouter physiquement
-     *
-     * FONCTIONNEMENT : 1. Parcourt tous les groupes du modèle 2. Pour chaque
-     * valeur, obtient ou crée le composant correspondant 3. Organise les
-     * composants dans des structures de données 4. Ne modifie pas l'arbre Swing
-     * (pas d'add() au parent)
-     *
-     * CONTRAINTE THREAD : Doit être appelé sur l'Event Dispatch Thread (EDT)
-     *
-     * @param ribbon le Ruban contenant le renderer et la configuration
-     * @param model le modèle HRibbon contenant les données à afficher
-     * @return ComponentCollectionResult avec composants organisés et
-     * métadonnées
-     * @throws IllegalStateException si appelé hors de l'EDT
-     *
-     * @see SwingUtilities#isEventDispatchThread()
-     */
     public ComponentCollectionResult collectComponents(final Ribbon ribbon, final HRibbonModel model) {
-        // VÉRIFICATION DU THREAD - Swing est single-threaded
         if (!SwingUtilities.isEventDispatchThread()) {
-            throw new IllegalStateException(
-                    "ComponentOrganizer.collectComponents must be called on the EDT"
-            );
+            throw new IllegalStateException("ComponentOrganizer.collectComponents must be called on the EDT");
         }
-
-        // Structures de résultats vides par défaut
+        
+        // S'assurer qu'on écoute le bon modèle
+        if (this.currentRibbon != ribbon) {
+            install(ribbon);
+        }
+        
         Map<Integer, List<Component>> componentsByGroup = new HashMap<>();
         Map<Component, ComponentData> componentInfoMap = new HashMap<>();
-
-        // CAS LIMITE : Paramètres invalides
+        
         if (ribbon == null || model == null) {
             return new ComponentCollectionResult(componentsByGroup, componentInfoMap);
         }
-
-        // Récupération du renderer 
+        
         GroupRenderer renderer = ribbon.getGroupRenderer();
-
-        // Récupération du groupModel pour vérifier l'état collapsed
         HRibbonGroupModel groupModel = ribbon.getGroupModel();
-
-        // PARCOURS DE TOUS LES GROUPES
+        
         final int groupCount = model.getGroupCount();
         for (int gi = 0; gi < groupCount; gi++) {
-
-            // Liste pour stocker les composants pour ce groupe
             List<Component> list = new ArrayList<>();
-
-            // Récupérer le groupe pour vérifier son état
-            HRibbonGroup group = null;
-            if (groupModel != null) {
-                group = groupModel.getHRibbonGroup(gi);
-            }
-
-            // ============ NOUVEAU : GÉRER LE COMBOBOX SI COLLAPSED ============
+            HRibbonGroup group = (groupModel != null) ? groupModel.getHRibbonGroup(gi) : null;
+            
+            // Gestion des groupes collapsed 
             if (group != null && group.isCollapsed()) {
-                // Créer ou récupérer le RibbonOverflowButton
                 Component collapsedComp = group.getCollapsedComponent();
-
                 if (collapsedComp == null) {
                     CollapsedGroupRenderer collapsedRenderer = new CollapsedGroupRenderer();
                     RibbonOverflowButton btn = collapsedRenderer.createCollapsedButton(ribbon, group, gi);
                     group.setCollapsedButton(btn);
                     collapsedComp = btn;
                 }
-
-                // Ajouter le OverflowButton à la liste
                 list.add(collapsedComp);
-
-                // Métadonnées : position = -1 pour indiquer "groupe collapsed"
                 componentInfoMap.put(collapsedComp, new ComponentData(gi, -1, group.getHeaderValue()));
             }
-
-            // ============ TOUJOURS COLLECTER LES COMPOSANTS NORMAUX ============
-            // Même si le groupe est collapsed, on collecte les composants normaux
-            // Le LayoutManager décidera de leur visibilité
+            
+            // Collecte des composants normaux - on utilise le cache existant
             int valueCount = model.getValueCount(gi);
             for (int pos = 0; pos < valueCount; pos++) {
                 Object value = model.getValueAt(pos, gi);
+                if (value == null) continue;
+                
                 Component comp = null;
-
-                // IGNORER LES VALEURS NULLES
-                if (value == null) {
-                    continue;
-                }
-
-                // CAS 1 : VALEUR DÉJÀ COMPOSANT
+                
                 if (value instanceof Component) {
                     comp = (Component) value;
-                } // CAS 2 : VALEUR OBJET (NÉCESSITE UN RENDERER)
-                else {
+                } else {
+                    // Recherche dans le cache avec la clé actuelle
                     CacheKey key = new CacheKey(gi, pos, value);
                     comp = cache.get(key);
-
-                    if (comp == null) {
-                        if (renderer != null) {
-                            try {
-                                comp = renderer.getGroupComponent(ribbon, value, gi, pos, false, false);
-                            } catch (Throwable t) {
-                                comp = null;
-                            }
+                    
+                    // Si pas dans le cache, on le crée
+                    if (comp == null && renderer != null) {
+                        try {
+                            comp = renderer.getGroupComponent(ribbon, value, gi, pos, false, false);
+                        } catch (Throwable t) {
+                            comp = null;
                         }
-
                         if (comp != null) {
                             cache.put(key, comp);
                         }
                     }
                 }
-
-                // AJOUT DU COMPOSANT AUX RÉSULTATS
+                
                 if (comp != null) {
                     list.add(comp);
                     componentInfoMap.put(comp, new ComponentData(gi, pos, value));
                 }
             }
-
-            // AJOUT DE LA LISTE À LA MAP (même si vide)
+            
             componentsByGroup.put(gi, list);
         }
-
-        // RETOUR DU RÉSULTAT COMPLET
+        
         return new ComponentCollectionResult(componentsByGroup, componentInfoMap);
     }
-
+    
     // =========================================================================
-    // MÉTHODE UTILITAIRE DE CRÉATION/OBTENTION
+    // MÉTHODES DE CRÉATION INDIVIDUELLE
     // =========================================================================
-    /**
-     * Obtient ou crée un composant pour une valeur spécifique
-     *
-     * UTILISATION TYPIQUE : - Création individuelle de composants (hors
-     * collecte complète) - Mise à jour incrémentale - Gestion d'événements
-     * spécifiques
-     *
-     * CONTRAINTE THREAD : Doit être appelé sur l'Event Dispatch Thread (EDT)
-     *
-     * @param ribbon le Ruban contenant le renderer
-     * @param value la valeur à transformer en composant
-     * @param groupIndex index du groupe d'origine
-     * @param position position dans le groupe
-     * @return le Component correspondant, ou null si échec
-     * @throws IllegalStateException si appelé hors de l'EDT
-     */
     public Component getOrCreateComponent(final Ribbon ribbon, final Object value,
-            final int groupIndex, final int position) {
-        // VÉRIFICATION DU THREAD
+                                         final int groupIndex, final int position) {
         if (!SwingUtilities.isEventDispatchThread()) {
-            throw new IllegalStateException(
-                    "ComponentOrganizer.getOrCreateComponent must be called on the EDT"
-            );
+            throw new IllegalStateException("ComponentOrganizer.getOrCreateComponent must be called on the EDT");
         }
-
-        // CAS LIMITE : VALEUR NULLE
-        if (value == null) {
-            return null;
-        }
-
-        // CAS 1 : DÉJÀ UN COMPOSANT
+        
+        if (value == null) return null;
+        
         if (value instanceof Component) {
             return (Component) value;
         }
-
-        // CAS 2 : VALEUR OBJET → TRANSFORMATION NÉCESSAIRE
+        
         GroupRenderer renderer = ribbon != null ? ribbon.getGroupRenderer() : null;
         CacheKey key = new CacheKey(groupIndex, position, value);
-
-        // RECHERCHE DANS LE CACHE
+        
         Component comp = cache.get(key);
-        if (comp != null) {
-            return comp;
-        }
-
-        // CRÉATION PAR LE RENDERER
+        if (comp != null) return comp;
+        
         if (renderer != null) {
             try {
                 comp = renderer.getGroupComponent(ribbon, value, groupIndex, position, false, false);
             } catch (Throwable t) {
-                // Gestion robuste des erreurs
                 comp = null;
             }
         }
-
-        // MISE EN CACHE SI CRÉATION RÉUSSIE
+        
         if (comp != null) {
             cache.put(key, comp);
         }
-
+        
         return comp;
+    }
+    
+    // =========================================================================
+    // IMPLÉMENTATION DE HRibbonModelListener
+    // =========================================================================
+    
+    @Override
+    public void ribbonChanged(HRibbonModelEvent e) {
+        if (currentRibbon == null) return;
+        
+        switch (e.getType()) {
+            case HRibbonModelEvent.INSERT:
+                handleInsert(e);
+                break;
+            case HRibbonModelEvent.DELETE:
+                handleDelete(e);
+                break;
+            case HRibbonModelEvent.MOVE:
+                handleMove(e);
+                break;
+            case HRibbonModelEvent.UPDATE:
+                handleUpdate(e);
+                break;
+            default:
+                // En cas de doute, on vide tout (sécurité)
+                cache.clear();
+        }
+    }
+    
+    /**
+     * Une insertion décale toutes les positions suivantes vers la droite.
+     * On parcourt le cache et on met à jour les clés concernées.
+     */
+    private void handleInsert(HRibbonModelEvent e) {
+    int group = e.getGroupIndex();
+    int fromPos = e.getPosition();
+    
+    System.out.println("=== handleInsert CRÉATION ===");
+    System.out.println("  groupe: " + group);
+    System.out.println("  position: " + fromPos);
+    
+    // 1. Décaler les clés existantes vers la droite
+    List<CacheKey> toUpdate = new ArrayList<>();
+    for (CacheKey key : cache.keySet()) {
+        if (key.groupIndex == group && key.position >= fromPos) {
+            toUpdate.add(key);
+        }
+    }
+    
+    for (CacheKey oldKey : toUpdate) {
+        Component comp = cache.remove(oldKey);
+        if (comp != null) {
+            CacheKey newKey = new CacheKey(group, oldKey.position + 1, oldKey.value);
+            cache.put(newKey, comp);
+        }
+    }
+    
+    // 2. Créer le nouveau composant
+    if (currentRibbon == null || currentRibbon.getModel() == null) {
+        System.out.println("  ⚠️ currentRibbon ou modèle null");
+        return;
+    }
+    
+    Object value = currentRibbon.getModel().getValueAt(fromPos, group);
+    if (value == null) {
+        System.out.println("  ⚠️ valeur null à la position " + fromPos);
+        return;
+    }
+    
+    Component newComp = null;
+    
+    if (value instanceof Component) {
+        // Cas 1 : la valeur est déjà un composant
+        newComp = (Component) value;
+        System.out.println("  valeur déjà composant: " + value.getClass().getSimpleName());
+    } else {
+        // Cas 2 : utiliser le renderer
+        GroupRenderer renderer = currentRibbon.getGroupRenderer();
+        if (renderer != null) {
+            try {
+                newComp = renderer.getGroupComponent(
+                    currentRibbon, value, group, fromPos, false, false
+                );
+                System.out.println("  composant créé via renderer: " + 
+                    (newComp != null ? newComp.getClass().getSimpleName() : "null"));
+            } catch (Throwable t) {
+                System.out.println(" erreur renderer: " + t.getMessage());
+                newComp = null;
+            }
+        }
+    }
+    
+    if (newComp != null) {
+        CacheKey newKey = new CacheKey(group, fromPos, value);
+        cache.put(newKey, newComp);
+        System.out.println("composant ajouté au cache. Taille cache: " + cache.size());
+    } else {
+        System.out.println(" échec création composant");
+    }
+}
+
+    
+    /**
+     * Une suppression décale toutes les positions suivantes vers la gauche.
+     * On supprime aussi l'entrée correspondant à la valeur supprimée.
+     */
+    private void handleDelete(HRibbonModelEvent e) {
+        int group = e.getGroupIndex();
+        int fromPos = e.getPosition(); // Position supprimée
+        
+        // 1. Supprimer l'entrée correspondant à la valeur supprimée
+        // Malheureusement, on ne connaît pas la valeur ici (pas dans l'événement)
+        // On doit donc chercher par groupe/position
+        CacheKey toRemove = null;
+        for (CacheKey key : cache.keySet()) {
+            if (key.groupIndex == group && key.position == fromPos) {
+                toRemove = key;
+                break;
+            }
+        }
+        if (toRemove != null) {
+            cache.remove(toRemove);
+        }
+        
+        // 2. Décaler les positions suivantes
+        List<CacheKey> toUpdate = new ArrayList<>();
+        for (CacheKey key : cache.keySet()) {
+            if (key.groupIndex == group && key.position > fromPos) {
+                toUpdate.add(key);
+            }
+        }
+        
+        for (CacheKey oldKey : toUpdate) {
+            Component comp = cache.remove(oldKey);
+            if (comp != null) {
+                CacheKey newKey = new CacheKey(group, oldKey.position - 1, oldKey.value);
+                cache.put(newKey, comp);
+            }
+        }
+        
+    }
+    
+    /**
+     * Un déplacement : on change juste la clé du composant concerné.
+     * C'est LE gros avantage de cette approche : pas de nouveau composant !
+     */
+    private void handleMove(HRibbonModelEvent e) {
+    int group = e.getGroupIndex();
+    int fromPos = e.getPosition();
+    int toPos = e.getToPosition();
+    
+//    System.out.println("  groupe: " + group + ", from:" + fromPos + " → to:" + toPos);
+    
+    // 1. Récupérer le composant à déplacer
+    CacheKey movedKey = null;
+    Component movedComp = null;
+    
+    for (Map.Entry<CacheKey, Component> entry : cache.entrySet()) {
+        CacheKey key = entry.getKey();
+        if (key.groupIndex == group && key.position == fromPos) {
+            movedKey = key;
+            movedComp = entry.getValue();
+            break;
+        }
+    }
+    
+    if (movedComp == null) {        
+        return;
+    }
+    
+    // 2. Collecter TOUS les composants à décaler AVANT de modifier le cache
+    List<CacheKey> toShift = new ArrayList<>();
+    List<Component> shiftedComponents = new ArrayList<>();
+    
+    if (fromPos < toPos) {
+        // Déplacement vers la droite : from+1 ... toPos se décalent à gauche
+        for (CacheKey key : cache.keySet()) {
+            if (key.groupIndex == group && key.position > fromPos && key.position <= toPos) {
+                toShift.add(key);
+                shiftedComponents.add(cache.get(key));
+            }
+        }
+    } else {
+        // Déplacement vers la gauche : toPos ... from-1 se décalent à droite
+        for (CacheKey key : cache.keySet()) {
+            if (key.groupIndex == group && key.position >= toPos && key.position < fromPos) {
+                toShift.add(key);
+                shiftedComponents.add(cache.get(key));
+            }
+        }
+    }
+    
+    // 3. SUPPRIMER toutes les clés concernées (y compris celle du composant déplacé)
+    cache.remove(movedKey);
+    for (CacheKey key : toShift) {
+        cache.remove(key);
+    }
+    
+    // 4. AJOUTER les nouvelles clés dans le bon ordre
+    if (fromPos < toPos) {
+        // Déplacement vers la droite
+        for (int i = 0; i < toShift.size(); i++) {
+            CacheKey oldKey = toShift.get(i);
+            Component c = shiftedComponents.get(i);
+            CacheKey newKey = new CacheKey(group, oldKey.position - 1, oldKey.value);
+            cache.put(newKey, c);
+        }
+        // Ajouter le composant déplacé à sa nouvelle position
+        CacheKey newMovedKey = new CacheKey(group, toPos, movedKey.value);
+        cache.put(newMovedKey, movedComp);
+    } else {
+        // Déplacement vers la gauche
+        for (int i = 0; i < toShift.size(); i++) {
+            CacheKey oldKey = toShift.get(i);
+            Component c = shiftedComponents.get(i);
+            CacheKey newKey = new CacheKey(group, oldKey.position + 1, oldKey.value);
+            cache.put(newKey, c);
+        }
+        // Ajouter le composant déplacé à sa nouvelle position
+        CacheKey newMovedKey = new CacheKey(group, toPos, movedKey.value);
+        cache.put(newMovedKey, movedComp);
+    }
+}
+    
+    /**
+     * Une mise à jour : on peut soit recréer le composant, soit le mettre à jour.
+     * Par simplicité, on le supprime du cache (il sera recréé au prochain layout).
+     */
+    private void handleUpdate(HRibbonModelEvent e) {
+        int group = e.getGroupIndex();
+        int pos = e.getPosition();
+        
+        CacheKey toRemove = null;
+        for (CacheKey key : cache.keySet()) {
+            if (key.groupIndex == group && key.position == pos) {
+                toRemove = key;
+                break;
+            }
+        }
+        if (toRemove != null) {
+            cache.remove(toRemove);
+        }
     }
 }

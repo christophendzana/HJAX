@@ -1,7 +1,9 @@
 package rubban;
 
+import hcomponents.HButton;
 import hcomponents.HCheckBox;
 import hcomponents.HLabel;
+import hcomponents.HTextArea;
 import hcomponents.HTextField;
 import hcomponents.vues.HLabelOrientation;
 import java.awt.Color;
@@ -253,15 +255,16 @@ public class DefaultGroupRenderer implements GroupRenderer {
      */
     private Component createStringComponent(String text) {
         // Optimisation pour les textes courts
-        if (text.length() <= 50) {
-            defaultLabel.setText(text);
-            defaultLabel.setIcon(null);
-            defaultLabel.setToolTipText(text.length() > 20 ? text : null);
-            return defaultLabel;
+        if (text.length() <= 50) {            
+            HLabel l = new HLabel();
+            l.setText(text);
+            l.setIcon(null);
+            l.setToolTipText(text.length() > 20 ? text : null);
+            return l;
         }
         
         // Pour les textes longs, utiliser un JTextArea scrollable
-        JTextArea textArea = new JTextArea(text);
+        HTextArea textArea = new HTextArea(text);
         textArea.setLineWrap(true);
         textArea.setWrapStyleWord(true);
         textArea.setEditable(false);
@@ -281,11 +284,12 @@ public class DefaultGroupRenderer implements GroupRenderer {
      * @return un label avec le nombre formaté
      */
     private Component createNumberComponent(Number number) {
-        defaultLabel.setText(numberFormat.format(number));
-        defaultLabel.setIcon(null);
-        defaultLabel.setHorizontalAlignment(SwingConstants.RIGHT);
-        defaultLabel.setToolTipText("Valeur : " + number);
-        return defaultLabel;
+        HLabel l = new HLabel();
+        l.setText(numberFormat.format(number));
+        l.setIcon(null);
+        l.setHorizontalAlignment(SwingConstants.RIGHT);
+        l.setToolTipText("Valeur : " + number);
+        return l;
     }
     
     /**
@@ -296,10 +300,11 @@ public class DefaultGroupRenderer implements GroupRenderer {
      * @return une checkbox en lecture seule
      */
     private Component createBooleanComponent(Boolean bool) {
-        defaultCheckBox.setSelected(bool);
-        defaultCheckBox.setText(bool ? "Oui" : "Non");
-        defaultCheckBox.setEnabled(true); 
-        return defaultCheckBox;
+        HCheckBox c = new HCheckBox();
+        c.setSelected(bool);
+        c.setText(bool ? "Oui" : "Non");
+        c.setEnabled(true); 
+        return c;
     }
     
     /**
@@ -310,11 +315,12 @@ public class DefaultGroupRenderer implements GroupRenderer {
      * @return un label centré avec l'icône
      */
     private Component createIconComponent(Icon icon) {
-        defaultLabel.setText("");
-        defaultLabel.setIcon(icon);
-        defaultLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        defaultLabel.setVerticalAlignment(SwingConstants.CENTER);
-        return defaultLabel;
+        HLabel l = new HLabel();
+        l.setText("");
+        l.setIcon(icon);
+        l.setHorizontalAlignment(SwingConstants.CENTER);
+        l.setVerticalAlignment(SwingConstants.CENTER);
+        return l;
     }
     
     /**
@@ -337,7 +343,7 @@ public class DefaultGroupRenderer implements GroupRenderer {
      * @return un bouton avec infos du fichier
      */
     private Component createFileComponent(File file) {
-        JButton button = new JButton(file.getName());
+        HButton button = new HButton(file.getName());
         button.setToolTipText("<html>Chemin : " + file.getAbsolutePath() + 
                              "<br>Taille : " + (file.length() / 1024) + " KB" +
                              "<br>Modifié : " + new Date(file.lastModified()) + "</html>");
@@ -362,10 +368,11 @@ public class DefaultGroupRenderer implements GroupRenderer {
      * @return un label avec la date formatée
      */
     private Component createDateComponent(Date date) {
-        defaultLabel.setText(dateFormat.format(date));
-        defaultLabel.setToolTipText(date.toString());
-        defaultLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        return defaultLabel;
+        HLabel l = new HLabel();
+        l.setText(dateFormat.format(date));
+        l.setToolTipText(date.toString());
+        l.setHorizontalAlignment(SwingConstants.CENTER);
+        return l;
     }
     
     /**
@@ -387,9 +394,10 @@ public class DefaultGroupRenderer implements GroupRenderer {
             }
         }
         
-        defaultLabel.setText(text);
-        defaultLabel.setToolTipText("Classe : " + value.getClass().getName());
-        return defaultLabel;
+        HLabel l = new HLabel();
+        l.setText(text);
+        l.setToolTipText("Classe : " + value.getClass().getName());
+        return l;
     }
     
     // =========================================================================

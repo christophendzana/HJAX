@@ -155,6 +155,12 @@ public class HRibbonGroup {
     private Color background;
 
     /**
+     * Préfix par défaut auquel sera ajouté le groupe index pour créer les
+     * groupIdentifier initial par défaut
+     */
+    private static String defaultGroupNamePrefix = "Groupe ";
+
+    /**
      * Gestionnaire des écouteurs PropertyChangeListener, notifie les
      * changements de propriétés (largeur, padding, etc.) aux composants
      * intéressés.
@@ -177,27 +183,55 @@ public class HRibbonGroup {
     }
 
     /**
-     * Constructeur avec identifiant de groupe.
+     * Constructeur avec identifiant de groupe. Si l'identifiant est null, le
+     * groupe utilisera un nom par défaut basé sur son futur index dans le
+     * modèle.
      *
      * @param groupIdentifier l'identifiant liant ce groupe à une colonne du
      * modèle
-     * @throws IllegalArgumentException si groupIdentifier est null
      */
     public HRibbonGroup(Object groupIdentifier) {
         this(groupIdentifier, -1);
     }
 
     /**
-     * Constructeur complet avec identifiant et index modèle.
+     * Constructeur avec index modèle seulement. L'identifiant du groupe sera
+     * généré automatiquement sous la forme "Groupe X" où X = modelIndex + 1.
+     *
+     * @param modelIndex l'index de la colonne dans HRibbonModel
+     */
+    public HRibbonGroup(int modelIndex) {
+        this(null, modelIndex);  // Délègue au constructeur principal
+    }
+
+    /**
+     * Constructeur complet avec identifiant et index modèle. Si l'identifiant
+     * est null, un nom par défaut est généré : - Si modelIndex >= 0 : "Groupe
+     * X" (où X = modelIndex + 1) - Sinon : "Groupe ?" (en attendant d'être
+     * indexé)
      *
      * @param groupIdentifier l'identifiant du groupe dans le modèle
      * @param modelIndex l'index de la colonne dans HRibbonModel
      */
     public HRibbonGroup(Object groupIdentifier, int modelIndex) {
-        this.groupIdentifier = groupIdentifier;
+        // 1. Gestion de l'identifiant
+        if (groupIdentifier == null) {
+            if (modelIndex >= 0) {
+                this.groupIdentifier = defaultGroupNamePrefix + (modelIndex + 1);
+            } else {
+                this.groupIdentifier = defaultGroupNamePrefix + "?";
+            }
+        } else {
+            this.groupIdentifier = groupIdentifier;
+        }
+
+        // 2. Initialisation de l'headerValue avec l'identifiant
+        this.headerValue = this.groupIdentifier;
+
+        // 3. Index et dimensions
         this.modelIndex = modelIndex;
-        this.preferredWidth = 180; // Largeur par défaut raisonnable
-        this.width = this.preferredWidth; // Initialise la largeur actuelle
+        this.preferredWidth = 180;
+        this.width = this.preferredWidth;
         this.minWidth = 80;
     }
 
@@ -254,6 +288,16 @@ public class HRibbonGroup {
         }
     }
 
+    /**
+ * Modifie le préfixe utilisé pour générer les noms de groupe par défaut.
+ * Par défaut : "Groupe "
+ */
+public static void setDefaultGroupNamePrefix(String prefix) {
+    if (prefix != null) {
+        defaultGroupNamePrefix = prefix;
+    }
+}
+    
     /**
      * Retourne l'index de ce groupe dans le HRibbonModel.
      *

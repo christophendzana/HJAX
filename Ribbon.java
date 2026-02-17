@@ -8,12 +8,13 @@ import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
 import javax.swing.*;
-import javax.swing.Timer;
 import javax.swing.event.*;
 import javax.swing.plaf.ComponentUI;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
+import java.util.List;
+import rubban.layout.ComponentOrganizer;
 
 /**
  *
@@ -231,6 +232,8 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     private OverflowProxyFactory overflowProxyFactory = new DefaultOverflowProxyFactory();
 
+    private ComponentOrganizer componentOrganizer;
+
     // =========================================================================
     // CONSTRUCTEURS
     // =========================================================================
@@ -303,6 +306,9 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         // CRÉATION DU LAYOUTMANAGER
         this.layout = new HRibbonLayoutManager(this);
         setLayout(this.layout);
+
+        this.componentOrganizer = new ComponentOrganizer();  // ← NOUVEAU
+        this.componentOrganizer.install(this);
 
         // S'inscrit comme listener des modèles
         this.model.addRibbonModelListener(this);
@@ -470,7 +476,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         }
         this.groupRenderer = renderer;
         // Force une mise à jour de l'affichage
-        syncComponentsWithModel();
+//        syncComponentsWithModel();
         revalidate();
         repaint();
     }
@@ -614,6 +620,11 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             this.model = model;
             model.addRibbonModelListener(this);
 
+            if (componentOrganizer != null) {
+            componentOrganizer.uninstall();    // Se désabonne de l'ancien modèle
+            componentOrganizer.install(this);  // S'abonne au nouveau modèle
+        }
+            
             // Notifie le changement (comme JTable)
             ribbonChanged(new HRibbonModelEvent(model));
 
@@ -720,59 +731,63 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Synchronise les composants affichés avec le modèle de données. Cette
      * méthode est appelée lorsqu'un changement est détecté dans le modèle.
      */
-    private void syncComponentsWithModel() {
-        if (syncingWithModel || model == null || groupRenderer == null) {
-            return;
-        }
+//    private void syncComponentsWithModel() {
+//        if (syncingWithModel || model == null || groupRenderer == null) {
+//            return;
+//        }
+//
+//        syncingWithModel = true;
+//
+//        try {
+//            // VIDER LE CACHE ANCIEN
+//            Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
+//            Set<Component> expectedComponents = new HashSet<>();
+//
+//            // 1. PARCOURIR TOUT LE MODÈLE
+//            for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
+//                int valueCount = model.getValueCount(groupIndex);
+//                for (int position = 0; position < valueCount; position++) {
+//                    Object value = model.getValueAt(position, groupIndex);
+//
+//                    // 2. CRÉER OU RÉCUPÉRER LE COMPONENT
+//                    Component component = createComponentForValue(value, groupIndex, position);
+//
+//                    if (component != null) {
+//                        // 3. AJOUTER AU CACHE
+//                        newComponentInfoMap.put(component,
+//                                new ComponentInfo(groupIndex, position, value));
+//                        expectedComponents.add(component);
+//                    }
+//                }
+//            }
+//
+//            // 4. IDENTIFIER LES CHANGEMENTS
+//            Set<Component> toRemove = new HashSet<>(displayedComponents);
+//            toRemove.removeAll(expectedComponents);
+//
+//            Set<Component> toAdd = new HashSet<>(expectedComponents);
+//            toAdd.removeAll(displayedComponents);
+//
+//            // 5. APPLIQUER LES CHANGEMENTS
+//            for (Component comp : toRemove) {
+//                removeComponentFromContainer(comp);
+//            }
+//
+//            for (Component comp : toAdd) {
+//                addComponentToContainer(comp);
+//            }
+//
+//            // 6. METTRE À JOUR LES CACHES
+//            displayedComponents = expectedComponents;
+//            componentInfoMap = newComponentInfoMap;
+//
+//        } finally {
+//            syncingWithModel = false;
+//        }
+//    }
 
-        syncingWithModel = true;
-
-        try {
-            // VIDER LE CACHE ANCIEN
-            Map<Component, ComponentInfo> newComponentInfoMap = new HashMap<>();
-            Set<Component> expectedComponents = new HashSet<>();
-
-            // 1. PARCOURIR TOUT LE MODÈLE
-            for (int groupIndex = 0; groupIndex < model.getGroupCount(); groupIndex++) {
-                int valueCount = model.getValueCount(groupIndex);
-                for (int position = 0; position < valueCount; position++) {
-                    Object value = model.getValueAt(position, groupIndex);
-
-                    // 2. CRÉER OU RÉCUPÉRER LE COMPONENT
-                    Component component = createComponentForValue(value, groupIndex, position);
-
-                    if (component != null) {
-                        // 3. AJOUTER AU CACHE
-                        newComponentInfoMap.put(component,
-                                new ComponentInfo(groupIndex, position, value));
-                        expectedComponents.add(component);
-                    }
-                }
-            }
-
-            // 4. IDENTIFIER LES CHANGEMENTS
-            Set<Component> toRemove = new HashSet<>(displayedComponents);
-            toRemove.removeAll(expectedComponents);
-
-            Set<Component> toAdd = new HashSet<>(expectedComponents);
-            toAdd.removeAll(displayedComponents);
-
-            // 5. APPLIQUER LES CHANGEMENTS
-            for (Component comp : toRemove) {
-                removeComponentFromContainer(comp);
-            }
-
-            for (Component comp : toAdd) {
-                addComponentToContainer(comp);
-            }
-
-            // 6. METTRE À JOUR LES CACHES
-            displayedComponents = expectedComponents;
-            componentInfoMap = newComponentInfoMap; // ← METTRE À JOUR LE CACHE
-
-        } finally {
-            syncingWithModel = false;
-        }
+    public ComponentOrganizer getComponentOrganizer() {
+        return componentOrganizer;
     }
 
     /**
@@ -805,7 +820,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     @Override
     public void ribbonChanged(HRibbonModelEvent e) {
         // Synchronise d'abord les composants avec le modèle
-        syncComponentsWithModel();
+//        syncComponentsWithModel();
 
         // Ensuite, gère les changements spécifiques
         if (e.isGlobalChange()) {
@@ -829,7 +844,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Gère un changement global (toutes données).
      */
     private void handleGlobalChange() {
-        // La synchronisation a déjà été faite par syncComponentsWithModel()
         // Il ne reste qu'à gérer la création des groupes si nécessaire
         if (autoCreateGroupsFromModel && groupModel != null) {
             createGroupsFromModel();
@@ -840,7 +854,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Gère les changements au niveau groupe (ajout/suppression/déplacement).
      */
     private void handleGroupChange(HRibbonModelEvent e) {
-        // La synchronisation a déjà été faite par syncComponentsWithModel()
         // Gestion spécifique des groupes pour l'auto-création
         if (autoCreateGroupsFromModel && groupModel != null) {
             int groupIndex = e.getGroupIndex();
@@ -866,7 +879,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Gère les changements au niveau valeur (composant).
      */
     private void handleValueChange(HRibbonModelEvent e) {
-        // La synchronisation a déjà été faite par syncComponentsWithModel()
         // Pas d'action supplémentaire nécessaire
         // Les composants ont déjà été ajoutés/retirés
     }
@@ -936,26 +948,60 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         }
     }
 
-    /**
-     * Retire tous les composants d'un groupe.
-     */
-    private void removeAllComponentsFromGroup(int groupIndex) {
-        // Trouve tous les composants de ce groupe et les retire
-        // Note: Cette implémentation nécessite de savoir quel composant appartient à quel groupe
-        // Pour l'instant, nous allons simplifier et rafraîchir tout
-        // Une optimisation serait d'ajouter un mapping groupe->composants
-        handleGlobalChange(); // Solution temporaire
-    }
+//    /**
+// * Supprime tous les composants d'un groupe spécifique du ruban.
+// * 
+// * Cette méthode :
+// * 1. Supprime les composants physiquement du conteneur
+// * 2. Retire les entrées correspondantes du cache de ComponentOrganizer
+// * 3. Met à jour le modèle (supprime toutes les valeurs du groupe)
+// * 
+// * @param groupIndex l'index du groupe à vider
+// * @throws IndexOutOfBoundsException si groupIndex est invalide
+// */
+//public void removeAllComponentsFromGroup(int groupIndex) {
+//    // 1. Vérification de l'index
+//    if (groupIndex < 0 || groupIndex >= groupModel.getGroupCount()) {
+//        throw new IndexOutOfBoundsException("Invalid group index: " + groupIndex);
+//    }
+//    
+//    // 2. Supprimer les composants physiques
+//    if (componentOrganizer != null) {
+//        // Parcourir tous les composants du cache et supprimer ceux du groupe
+//        List<Component> toRemove = new ArrayList<>();
+//        
+//        // Récupérer la liste des composants de ce groupe depuis le dernier layout
+//        Map<Integer, List<Component>> componentsByGroup = 
+//            (layout != null) ? layout.getComponentsByGroup() : null;
+//            
+//        if (componentsByGroup != null) {
+//            List<Component> groupComponents = componentsByGroup.get(groupIndex);
+//            if (groupComponents != null) {
+//                for (Component comp : groupComponents) {
+//                    if (comp != null && comp.getParent() == this) {
+//                        toRemove.add(comp);
+//                    }
+//                }
+//            }
+//        }
+//        
+//        // Supprimer physiquement
+//        for (Component comp : toRemove) {
+//            removeComponentSafely(comp);
+//        }
+//    }
+//    
+//    // 3. Vider le groupe dans le modèle
+//    if (model instanceof DefaultHRibbonModel) {
+//        ((DefaultHRibbonModel) model).removeAllValues(groupIndex);
+//    }
+//    
+//    // 4. Forcer un rafraîchissement
+//    revalidate();
+//    repaint();
+//}
 
-    /**
-     * Retire un composant spécifique à une position dans un groupe.
-     */
-    private void removeComponentAt(int position, int groupIndex) {
-        // Pour trouver le bon composant, nous devons parcourir tous les composants
-        // et vérifier s'ils correspondent à cette position/groupe
-        // Solution temporaire : rafraîchir tout
-        handleGlobalChange();
-    }
+  
 
     /**
      * Rafraîchit l'affichage d'un composant.
@@ -1131,7 +1177,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
             defaultModel.addValue(component, groupIndex); // Component est un Object
             // Le modèle notifiera HRibbon via ribbonChanged()
-            // qui appellera syncComponentsWithModel()
         } else {
             throw new UnsupportedOperationException(
                     "Model does not support adding components directly");
@@ -1152,8 +1197,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (model instanceof DefaultHRibbonModel) {
             DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
             defaultModel.addValue(component, groupIdentifier);
-            // Le modèle notifiera HRibbon via ribbonChanged()
-            // qui appellera syncComponentsWithModel()
+            
         } else {
             throw new UnsupportedOperationException(
                     "Model does not support adding components directly");
@@ -2355,6 +2399,11 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     @Override
     public void removeNotify() {
         uninstallResizeListener();
+        
+        if (componentOrganizer != null) {
+        componentOrganizer.uninstall();
+    }
+        
         super.removeNotify();
     }
 

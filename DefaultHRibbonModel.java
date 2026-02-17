@@ -190,11 +190,9 @@ private long version = 0;
             throw new IllegalArgumentException("Value cannot be null");
         }
 
-        int index = findFirstGroupIndex(groupIdentifier);
-        if (index >= 0) {
-            ArrayList<Object> group = dataGroup.get(index);
-            addValue(value, group.size());
-        }
+        int index = findFirstGroupIndex(groupIdentifier);        
+            addValue(value, index);
+        
     }
 
     @Override
