@@ -127,12 +127,12 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
      * Distribue les largeurs disponibles entre tous les groupes du ruban
      * 
      * ALGORITHME GÉNÉRAL :
-     * 1. Vérifier les paramètres d'entrée (null, groupes vides)
-     * 2. Calculer l'espace disponible après soustraction des marges
-     * 3. Choisir le mode de distribution (égal vs intelligent)
-     * 4. Appliquer l'algorithme de distribution correspondant
-     * 5. Appliquer les contraintes min/max de chaque groupe
-     * 6. Garantir des largeurs minimales raisonnables
+     * 1.Vérifier les paramètres d'entrée (null, groupes vides)
+ 2. Calculer l'espace disponible après soustraction des marges
+ 3. Choisir le mode de distribution (égal vs intelligent)
+ 4. Appliquer l'algorithme de distribution correspondant
+ 5. Appliquer les contraintes min/max de chaque groupe
+ 6. Garantir des largeurs minimales raisonnables
      * 
      * @param ctx Contexte de layout contenant :
      *            - Alignement des en-têtes (headerAlignment)
@@ -146,8 +146,6 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
      * @return Tableau d'entiers de taille groupModel.getGroupCount()
      *         Chaque élément représente la largeur totale allouée au groupe correspondant
      *         (inclut l'espace pour l'en-tête si alignement WEST/EAST)
-     * 
-     * @throws Aucune exception levée, retourne un tableau vide pour les cas invalides
      */
     @Override
     public int[] distributeWidths(HRibbonLayoutContext ctx, 
@@ -155,12 +153,12 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
                                   int availableWidth) {
         // ÉTAPE 1 : VÉRIFICATION DES PARAMÈTRES D'ENTRÉE
         if (groupModel == null) {
-            return new int[0]; // Pas de modèle → pas de groupes
+            return new int[0]; // Pas de modèle -> pas de groupes
         }
         
         final int groupCount = groupModel.getGroupCount();
         if (groupCount == 0) {
-            return new int[0]; // Modèle vide → pas de groupes
+            return new int[0]; // Modèle vide -> pas de groupes
         }
         
         // ÉTAPE 2 : INITIALISATION DES RÉSULTATS

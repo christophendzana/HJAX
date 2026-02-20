@@ -4,6 +4,9 @@
  */
 package rubban;
 
+import hcomponents.ArrowIcon;
+import hcomponents.HButton;
+import hcomponents.vues.HButtonStyle;
 import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
@@ -13,7 +16,8 @@ import javax.swing.plaf.ComponentUI;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
-import java.util.List;
+import javax.swing.Timer;
+import rubban.layout.CollapseLevel;
 import rubban.layout.ComponentOrganizer;
 
 /**
@@ -95,7 +99,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Index du groupe en cours d'édition (si édition supportée).
      */
-    protected transient int editingColumn;
+    protected transient int editingGroupIndex;
 
     /**
      * Table des renderers par classe de composant. Comme dans JTable pour le
@@ -115,28 +119,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     private transient boolean isLayoutInProgress = false;
 
-    /**
-     * Le ruban remplit toujours la hauteur du viewport.
-     */
-    private boolean fillsViewportHeight;
-
-    /**
-     * Suivi de la sélection de groupes.
-     */
-    private boolean groupSelectionAdjusting;
-
-    /**
-     * Ensemble des composants actuellement affichés dans le ruban. Utilisé pour
-     * synchroniser l'affichage avec le modèle.
-     */
-    private Set<Component> displayedComponents = new HashSet<>();
-
-    /**
-     * Indique si une synchronisation avec le modèle est en cours. Empêche les
-     * boucles de notification récursives.
-     */
-    private boolean syncingWithModel = false;
-
     private GroupRenderer groupRenderer;
 
     private int headerMargin = 0;
@@ -154,22 +136,10 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     private PropertyChangeListener groupPropertyChangeListener;
 
-    public enum HeightPolicy {
-        PREFERRED_ONLY, // Le Ribbon impose sa hauteur calculée (par défaut)
-        FILL_PARENT, // Le Ribbon s'étire pour remplir la hauteur du parent
-        FIXED           // Hauteur fixe définie par setFixedHeight(...)
-    }
-
     /**
-     * Politique de hauteur appliquée au Ribbon (default = impose sa hauteur)
+     * Hauteur maximale du ruban
      */
-    private HeightPolicy heightPolicy = HeightPolicy.PREFERRED_ONLY;
-
-    /**
-     * Hauteur fixe (en pixels) utilisée si heightPolicy == FIXED. -1 = non
-     * défini
-     */
-    private int fixedHeight = -1;
+    private int maxHeight = 300;
 
     /**
      * Couleur de fond par défaut pour tous les en-têtes du ruban. Utilisée
@@ -233,6 +203,61 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private OverflowProxyFactory overflowProxyFactory = new DefaultOverflowProxyFactory();
 
     private ComponentOrganizer componentOrganizer;
+
+    /**
+     * États possibles du ruban.
+     */
+    public enum RibbonState {
+        EXPANDED, // Ruban déplié (affichage normal)
+        COLLAPSED   // Ruban réduit (bouton seulement)
+    }
+
+    // =========================================================================
+    // VARIABLES POUR LA GESTION DES ETATS EXPAND AND COLLAPSED DU RUBAN
+    // =========================================================================
+    private RibbonState currentState = RibbonState.EXPANDED;
+    private boolean autoCollapseEnabled = false;
+    private int collapsedHeight = 40; // Hauteur par défaut quand réduit
+    private Component collapsedButton; // Bouton personnalisé 
+
+    // =========================================================================
+// DÉTECTION AUTOMATIQUE DU COLLAPSE
+// =========================================================================
+    /**
+     * Flag qui indique si on est en train de modifier l'état du ruban. Sert à
+     * éviter les boucles infinies : quand on change l'état nous-mêmes, on ne
+     * veut pas que le listener réagisse à ce changement.
+     */
+    private boolean isAdjustingState = false;
+
+    /**
+     * Listener qui surveille les changements de taille du parent. Si le parent
+     * devient trop petit, on collapse automatiquement. Si le parent redevient
+     * assez grand, on expand automatiquement.
+     */
+    private transient ComponentListener parentResizeListener;
+
+    /**
+     * Tableau qui sauvegarde l'état (collapsed/expanded) de chaque groupe avant
+     * de réduire le ruban. Permet de restaurer l'état exact au retour.
+     */
+    private CollapseLevel[] savedGroupStates;
+
+    // =========================================================================
+    //ANIMATION COLLAPSED RIBBON
+    // =========================================================================
+    private Timer collapseAnimator;
+    private int startHeight;
+    private int targetHeight;
+    private long animationStartTime;
+    private static final int ANIMATION_DURATION = 200;
+
+
+    private int referenceExpandedHeight = -1;
+
+    private Component defaultCollapseButton;
+
+    private Icon iconRibbonOverflowButton = null;
 
     // =========================================================================
     // CONSTRUCTEURS
@@ -307,7 +332,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         this.layout = new HRibbonLayoutManager(this);
         setLayout(this.layout);
 
-        this.componentOrganizer = new ComponentOrganizer();  // ← NOUVEAU
+        this.componentOrganizer = new ComponentOrganizer();
         this.componentOrganizer.install(this);
 
         // S'inscrit comme listener des modèles
@@ -387,6 +412,9 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         return new DefaultListSelectionModel();
     }
 
+    /**
+     * Crée le Groupe Renderer par défaut.
+     */
     protected GroupRenderer createDefaultGroupRenderer() {
         return new DefaultGroupRenderer();
     }
@@ -487,17 +515,17 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 //    public void removeGroup(HRibbonGroup group) {
 //        groupModel.removeGroup(group);
 //    }
-//    /**
-//     * Déplace un groupe à une nouvelle position.
-//     */
-//    public void moveGroup(int groupIndex, int targetIndex) {
-//        if (groupIndex < 0 || groupIndex >= groupModel.getGroupCount()
-//                || targetIndex < 0 || targetIndex >= groupModel.getGroupCount()) {
-//            throw new IllegalArgumentException("Indice de groupe invalide");
-//        }
-//
-//        groupModel.moveGroup(groupIndex, targetIndex);
-//    }
+    /**
+     * Déplace un groupe à une nouvelle position.
+     */
+    public void moveGroup(int groupIndex, int targetIndex) {
+        if (groupIndex < 0 || groupIndex >= groupModel.getGroupCount()
+                || targetIndex < 0 || targetIndex >= groupModel.getGroupCount()) {
+            throw new IllegalArgumentException("Indice de groupe invalide");
+        }
+
+        groupModel.moveGroup(groupIndex, targetIndex);
+    }
     /**
      * Retourne l'index du groupe à la position du point.
      */
@@ -558,8 +586,8 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Retourne l'espacement entre les composants dans un groupe.
      */
-    public int getComponentSpacing(HRibbonGroup group) {
-        return group.getComponentSpacing();
+    public int getComponentMargin(HRibbonGroup group) {
+        return group.getComponentMargin();
     }
 
     // =========================================================================
@@ -575,22 +603,25 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             return super.getPreferredSize();
         }
 
-        // 2) Calcul habituel via le LayoutManager si présent
+        // 2) Calcul via le LayoutManager si présent
         Dimension base;
         if (layout != null) {
             base = layout.preferredLayoutSize(this);
         } else {
-            base = new Dimension(400, 80);
+            base = new Dimension(getParent().getWidth(), 120);
         }
 
-        // 3) Appliquer la politique de hauteur FIXED si demandée
-        if (heightPolicy == HeightPolicy.FIXED) {
-            int h = (fixedHeight > 0) ? fixedHeight : base.height;
-            return new Dimension(base.width, h);
+        // 3) Largeur = celle du parent (si disponible)
+        int width = base.width;
+        Container parent = getParent();
+        if (parent != null) {
+            width = parent.getWidth(); // Prend toute la largeur du parent
         }
 
-        // Sinon, renvoyer la taille calculée
-        return base;
+        // 4) Appliquer la limite maximale de hauteur
+        int height = Math.min(base.height, maxHeight);
+
+        return new Dimension(width, height);
     }
 
     /**
@@ -621,10 +652,10 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             model.addRibbonModelListener(this);
 
             if (componentOrganizer != null) {
-            componentOrganizer.uninstall();    // Se désabonne de l'ancien modèle
-            componentOrganizer.install(this);  // S'abonne au nouveau modèle
-        }
-            
+                componentOrganizer.uninstall();    // Se désabonne de l'ancien modèle
+                componentOrganizer.install(this);  // S'abonne au nouveau modèle
+            }
+
             // Notifie le changement (comme JTable)
             ribbonChanged(new HRibbonModelEvent(model));
 
@@ -785,7 +816,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 //            syncingWithModel = false;
 //        }
 //    }
-
     public ComponentOrganizer getComponentOrganizer() {
         return componentOrganizer;
     }
@@ -893,7 +923,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     void addComponentToContainer(Component component) {
         if (component != null && component.getParent() != this) {
             super.add(component); // Appel à JComponent.add()
-            displayedComponents.add(component);
         }
     }
 
@@ -903,7 +932,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private void removeComponentFromContainer(Component component) {
         if (component != null && component.getParent() == this) {
             super.remove(component); // Appel à JComponent.remove()
-            displayedComponents.remove(component);
         }
     }
 
@@ -928,7 +956,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         for (Component comp : components) {
             super.remove(comp);
         }
-        displayedComponents.clear();
     }
 
     /**
@@ -1000,22 +1027,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 //    revalidate();
 //    repaint();
 //}
-
-  
-
-    /**
-     * Rafraîchit l'affichage d'un composant.
-     */
-    private void refreshComponentAt(int position, int groupIndex) {
-        // Invalide le composant pour forcer un repaint
-        Object value = model.getValueAt(position, groupIndex);
-        if (value instanceof Component) {
-            Component comp = (Component) value;
-            comp.revalidate();
-            comp.repaint();
-        }
-    }
-
     /**
      * Gère le déplacement d'un groupe (réindexation des composants).
      */
@@ -1074,9 +1085,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     // =========================================================================
     @Override
     public void groupAdded(HRibbonGroupEvent e) {
-        if (isEditing()) {
-            stopEditing();
-        }
 
         // CHANGEMENTS DU NOUVEAU GROUPE
         HRibbonGroup group = groupModel.getHRibbonGroup(e.getToIndex());
@@ -1094,9 +1102,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     @Override
     public void groupRemoved(HRibbonGroupEvent e) {
-        if (isEditing()) {
-            stopEditing();
-        }
 
         // NETTOYER LE HEADER DE CE GROUPE (si on a un cache)
         if (layout != null) {
@@ -1113,9 +1118,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     @Override
     public void groupMoved(HRibbonGroupEvent e) {
-        if (isEditing()) {
-            stopEditing();
-        }
 
         if (layout != null) {
             layout.invalidateLayout(this);
@@ -1153,100 +1155,92 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     }
 
     /**
-     * Arrête l'édition en cours.
+     * Définit la hauteur maximale que peut prendre le ruban.
+     *
+     * @param maxHeight hauteur en pixels (doit être > 0)
      */
-    public void stopEditing() {
-        // À compléter quand l'édition sera implémentée
+    public void setMaxHeight(int maxHeight) {
+        if (maxHeight <= 0) {
+            throw new IllegalArgumentException("Max height must be positive");
+        }
+        this.maxHeight = maxHeight;
+        revalidate();
+        repaint();
     }
 
-    // =========================================================================
+    /**
+     * Retourne la hauteur maximale du ruban.
+     */
+    public int getMaxHeight() {
+        return maxHeight;
+    }
+
+// =========================================================================
 // MÉTHODES PUBLIQUES POUR MANIPULER LES DONNÉES
 // =========================================================================
+//   
     /**
-     * Ajoute un composant à un groupe.
+     * Ajoute ou insère une valeur dans un groupe.
      *
-     * @param component le composant à ajouter
-     * @param groupIndex l'index du groupe
+     * @param value la valeur à ajouter/insérer
+     * @param position la position d'insertion (-1 pour ajout à la fin)
+     * @param groupIndex l'index du groupe cible
      */
-    public void addComponent(Component component, int groupIndex) {
-        if (component == null) {
-            throw new IllegalArgumentException("Component cannot be null");
-        }
-
-        if (model instanceof DefaultHRibbonModel) {
-            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-            defaultModel.addValue(component, groupIndex); // Component est un Object
-            // Le modèle notifiera HRibbon via ribbonChanged()
-        } else {
-            throw new UnsupportedOperationException(
-                    "Model does not support adding components directly");
-        }
-    }
-
-    /**
-     * Ajoute un composant à un groupe identifié par son nom.
-     *
-     * @param component le composant à ajouter
-     * @param groupIdentifier l'identifiant du groupe
-     */
-    public void addComponent(Component component, Object groupIdentifier) {
-        if (component == null) {
-            throw new IllegalArgumentException("Component cannot be null");
-        }
-
-        if (model instanceof DefaultHRibbonModel) {
-            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-            defaultModel.addValue(component, groupIdentifier);
-            
-        } else {
-            throw new UnsupportedOperationException(
-                    "Model does not support adding components directly");
-        }
-    }
-
-    public void addValue(Object value, int groupIndex) {
+    public void addValue(Object value, int position, int groupIndex) {
         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
 
-        if (model instanceof DefaultHRibbonModel) {
-            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-            defaultModel.addValue(value, groupIndex);
+        if (position == -1) {
+            model.addValue(value, groupIndex);
+        } else if (position == -1 && groupIndex == -1) {
+            model.addValue(value, getLastModifiedGroupIndex());
         } else {
-            throw new UnsupportedOperationException(
-                    "Model does not support adding values");
+            model.insertValueAt(value, position, groupIndex);
         }
     }
 
-    public void insertValue(Object value, int position, int groupIndex) {
+    public void addValue(Object value, int position, Object groupIdentifier) {
         if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
 
-        if (model instanceof DefaultHRibbonModel) {
-            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-            defaultModel.insertValueAt(value, position, groupIndex);
+        if (position == -1) {
+            model.addValue(value, groupIdentifier);
+        } else if (position == -1 && groupIdentifier == null) {
+            model.addValue(value, getLastModifiedGroupIndex());
         } else {
-            throw new UnsupportedOperationException(
-                    "Model does not support inserting values");
+            model.insertValueAt(value, position, groupIdentifier);
         }
     }
 
     /**
-     * Déplace un composant dans un groupe.
+     * Retourne l'index du dernier groupe ayant subi une modification.
      *
-     * @param oldPosition position actuelle
-     * @param newPosition nouvelle position
-     * @param groupIndex index du groupe
+     * Le principe est simple : on parcourt les enfants du ruban du plus récent
+     * au plus ancien (la liste est dans l'ordre d'ajout). Dès qu'on trouve un
+     * composant qui est dans notre cache componentInfoMap, on récupère son
+     * groupe. C'est forcément le groupe du dernier composant modifié.
+     *
+     * @return l'index du groupe, ou -1 si aucun groupe trouvé
      */
-    public void moveComponent(int oldPosition, int newPosition, int groupIndex) {
-        if (model instanceof DefaultHRibbonModel) {
-            DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
-            defaultModel.moveValue(oldPosition, newPosition, groupIndex);
-        } else {
-            throw new UnsupportedOperationException(
-                    "Model does not support moving components");
+    private int getLastModifiedGroupIndex() {
+        // Récupérer tous les enfants du ruban dans l'ordre d'ajout
+        Component[] enfants = getComponents();
+
+        // Parcourir de la fin (le plus récent) vers le début (le plus ancien)
+        for (int i = enfants.length - 1; i >= 0; i--) {
+            Component comp = enfants[i];
+
+            // Chercher si ce composant est dans notre cache
+            ComponentInfo info = componentInfoMap.get(comp);
+            if (info != null) {
+                return info.groupIndex; // Trouvé ! C'est le dernier groupe modifié
+            }
         }
+
+        // Aucun composant trouvé dans le cache
+        return -1;
     }
 
     /**
@@ -1326,12 +1320,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (groupIdentifier == null) {
             throw new IllegalArgumentException("Group identifier cannot be null");
         }
-
-        if (model instanceof DefaultHRibbonModel) {
-            ((DefaultHRibbonModel) model).addGroup(groupIdentifier);
-            // Le reste est géré automatiquement par les listeners
-            return;
-        }
+        model.addGroup(groupIdentifier);
     }
 
     /**
@@ -1393,23 +1382,23 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         return false;
     }
 
-    /**
-     * Déplace un groupe vers une nouvelle position.
-     *
-     * @param oldIndex position actuelle du groupe
-     * @param newIndex nouvelle position du groupe
-     * @throws IndexOutOfBoundsException si un index est invalide
-     */
-    public void moveGroup(int oldIndex, int newIndex) {
-        if (groupModel != null) {
-            if (oldIndex < 0 || oldIndex >= groupModel.getGroupCount()
-                    || newIndex < 0 || newIndex >= groupModel.getGroupCount()) {
-                throw new IndexOutOfBoundsException(
-                        "Invalid group index: old=" + oldIndex + ", new=" + newIndex);
-            }
-            groupModel.moveGroup(oldIndex, newIndex);
-        }
-    }
+//    /**
+//     * Déplace un groupe vers une nouvelle position.
+//     *
+//     * @param oldIndex position actuelle du groupe
+//     * @param newIndex nouvelle position du groupe
+//     * @throws IndexOutOfBoundsException si un index est invalide
+//     */
+//    public void moveGroup(int oldIndex, int newIndex) {
+//        if (groupModel != null) {
+//            if (oldIndex < 0 || oldIndex >= groupModel.getGroupCount()
+//                    || newIndex < 0 || newIndex >= groupModel.getGroupCount()) {
+//                throw new IndexOutOfBoundsException(
+//                        "Invalid group index: old=" + oldIndex + ", new=" + newIndex);
+//            }
+//            groupModel.moveGroup(oldIndex, newIndex);
+//        }
+//    }
 
     /**
      * Déplace un groupe identifié par son nom vers une nouvelle position.
@@ -1537,9 +1526,9 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     }
 
     /**
-     * Retourne les indices des groupes sélectionnés.
+     * Retourne les indexes des groupes sélectionnés.
      *
-     * @return tableau des indices sélectionnés
+     * @return tableau des indexes sélectionnés
      */
     public int[] getSelectedGroupIndices() {
         return groupModel != null ? groupModel.getSelectionHRibbonGroup() : new int[0];
@@ -1587,7 +1576,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * @param groupIndex index du groupe
      * @return true si le composant a été trouvé et retiré
      */
-    public boolean removeComponent(Component component, int groupIndex) {
+    public boolean removeValue(Component component, int groupIndex) {
         if (model instanceof DefaultHRibbonModel) {
             DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
             defaultModel.removeValue(component, groupIndex);
@@ -1603,7 +1592,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * @param groupIndex index du groupe
      * @return le composant, ou null si non trouvé
      */
-    public Component getComponent(int position, int groupIndex) {
+    public Component getValue(int position, int groupIndex) {
         if (model != null) {
             Object value = model.getValueAt(position, groupIndex);
             return (value instanceof Component) ? (Component) value : null;
@@ -1617,7 +1606,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * @param groupIndex index du groupe
      * @return nombre de composants
      */
-    public int getComponentCount(int groupIndex) {
+    public int getvalueCount(int groupIndex) {
         return model != null ? model.getValueCount(groupIndex) : 0;
     }
 
@@ -1628,7 +1617,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * @param groupIndex index du groupe
      * @return true si le composant est dans le groupe
      */
-    public boolean containsComponent(Component component, int groupIndex) {
+    public boolean containsValue(Component component, int groupIndex) { // <-- A modifer un objet value en paramètre
         if (model instanceof DefaultHRibbonModel) {
             DefaultHRibbonModel defaultModel = (DefaultHRibbonModel) model;
             return defaultModel.containsValue(component, groupIndex);
@@ -1897,91 +1886,15 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         }
     }
 
-    /**
-     * Définit si le Ribbon doit forcer le contenu à remplir la hauteur
-     * disponible. Par défaut : false (le contenu utilise sa hauteur préférée
-     * calculée).
-     *
-     * @param fills true pour forcer le remplissage vertical, false pour limiter
-     * la hauteur au preferredSize calculé
-     */
-    public void setFillsViewportHeight(boolean fills) {
-        if (this.fillsViewportHeight != fills) {
-            this.fillsViewportHeight = fills;
-            // Invalider le layout / redessiner
-            if (layout != null) {
-                layout.invalidateLayout(this);
-            }
-            revalidate();
-            repaint();
-        }
-    }
-
-    /**
-     * Indique si le Ribbon remplit la hauteur disponible.
-     *
-     * @return true si le contenu est étiré pour remplir la hauteur du parent
-     */
-    public boolean isFillsViewportHeight() {
-        return fillsViewportHeight;
-    }
-
-    public boolean getFillsViewportHeight() {
-        return isFillsViewportHeight();
-    }
-
     @Override
     public Dimension getMaximumSize() {
-        Dimension pref = getPreferredSize();
-        if (pref == null) {
-            return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
-        }
+        return super.getMaximumSize();
 
-        switch (heightPolicy) {
-            case FILL_PARENT:
-                // Autoriser l'étirement vertical si la politique le demande
-                return new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE);
-            case FIXED:
-                // Largeur infinie, hauteur limitée à la fixedHeight (ou preferred si non défini)
-                int fixedH = fixedHeight > 0 ? fixedHeight : pref.height;
-                return new Dimension(Integer.MAX_VALUE, fixedH);
-            case PREFERRED_ONLY:
-            default:
-                // Largeur infinie, hauteur limitée à la preferredHeight
-                return new Dimension(Integer.MAX_VALUE, pref.height);
-        }
     }
 
     @Override
     public Dimension getMinimumSize() {
-        Dimension pref = getPreferredSize();
-        if (pref == null) {
-            return super.getMinimumSize();
-        }
-        // On garantit une largeur minimum raisonnable mais la hauteur suit la politique (ou preferredHeight).
-        int minWidth = 50;
-        int minHeight;
-        if (heightPolicy == HeightPolicy.FIXED && fixedHeight > 0) {
-            minHeight = fixedHeight;
-        } else {
-            minHeight = pref.height;
-        }
-        return new Dimension(minWidth, minHeight);
-    }
-
-    public void setHeightPolicy(HeightPolicy policy) {
-        if (policy == null) {
-            throw new IllegalArgumentException("HeightPolicy cannot be null");
-        }
-        if (this.heightPolicy != policy) {
-            this.heightPolicy = policy;
-            // Invalider layout et redessiner pour appliquer la nouvelle politique
-            if (layout != null) {
-                layout.invalidateLayout(this);
-            }
-            revalidate();
-            repaint();
-        }
+        return super.getMinimumSize();
     }
 
     /**
@@ -2012,35 +1925,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     public OverflowProxyFactory getOverflowProxyFactory() {
         return overflowProxyFactory;
-    }
-
-    public HeightPolicy getHeightPolicy() {
-        return this.heightPolicy;
-    }
-
-    /**
-     * Définit une hauteur fixe utilisée lorsque heightPolicy == FIXED.
-     *
-     * @param height hauteur en pixels (>= 0)
-     */
-    public void setFixedHeight(int height) {
-        if (height < 0) {
-            throw new IllegalArgumentException("Fixed height must be >= 0");
-        }
-        if (this.fixedHeight != height) {
-            this.fixedHeight = height;
-            if (this.heightPolicy == HeightPolicy.FIXED) {
-                if (layout != null) {
-                    layout.invalidateLayout(this);
-                }
-                revalidate();
-                repaint();
-            }
-        }
-    }
-
-    public int getFixedHeight() {
-        return this.fixedHeight;
     }
 
     /**
@@ -2127,6 +2011,314 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             this.defaultHeaderBackground = color;
             repaint(); // Redessine le ruban pour appliquer les changements
         }
+    }
+
+    // =========================================================================
+// BOUTON DE COLLAPSE
+// =========================================================================
+    /**
+     * Définit un bouton personnalisé pour le mode COLLAPSED. Si null, le bouton
+     * par défaut sera utilisé.
+     */
+    public void setCollapsedButton(Component button) {
+        // Retirer l'ancien bouton s'il existe
+        if (this.collapsedButton != null && this.collapsedButton.getParent() == this) {
+            remove(this.collapsedButton);
+        }
+
+        this.collapsedButton = button;
+
+        // Si on est en mode COLLAPSED, forcer la mise à jour
+        if (currentState == RibbonState.COLLAPSED) {
+            revalidate();
+            repaint();
+        }
+    }
+
+    /**
+     * Crée le bouton de collapse par défaut.
+     */
+    private Component createDefaultCollapsedButton() {
+        HButton button = new HButton(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5)); 
+        button.setButtonStyle(HButtonStyle.PRIMARY);
+        button.setToolTipText("Réduire le ruban");
+
+        // Action : expand le ruban
+        button.addActionListener(e -> {
+            if (getRibbonState() == RibbonState.COLLAPSED) {
+                setRibbonState(RibbonState.EXPANDED);
+            } else {
+                setRibbonState(RibbonState.COLLAPSED);
+            }
+        });
+
+        return button;
+    }
+
+    /**
+     * Retourne le bouton de collapse (le crée si nécessaire).
+     */
+    Component getCollapseButton() {
+        if (collapsedButton != null) {
+            return collapsedButton; // Bouton personnalisé
+        }
+        if (defaultCollapseButton == null) {
+            defaultCollapseButton = createDefaultCollapsedButton();
+        }
+        return defaultCollapseButton;
+    }
+
+    /**
+     * Crée et configure le listener de redimensionnement du parent. Ce listener
+     * n'est pas activé tant que autoCollapseEnabled = false.
+     */
+    private void installParentResizeListener() {
+        // Éviter de créer plusieurs fois le listener
+        if (parentResizeListener != null) {
+            return;
+        }
+
+        parentResizeListener = new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                // 1. Vérifier si la fonction auto est activée
+                if (!autoCollapseEnabled) {
+                    return;
+                }
+
+                // 2. Vérifier qu'on n'est pas déjà en train d'ajuster
+                //    Sinon on créerait une boucle infinie
+                if (isAdjustingState) {
+                    return;
+                }
+
+                // 3. Récupérer le parent et ses dimensions
+                Container parent = getParent();
+                if (parent == null) {
+                    return;
+                }
+
+                int parentHeight = parent.getHeight();
+                int preferredHeight = getPreferredSize().height;
+
+                // 4. Prendre la décision de collapse ou expand
+                isAdjustingState = true; // ← On verrouille pour éviter la boucle
+                try {
+                    // Sauvegarder la hauteur EXPANDED la 1ère fois
+                    if (referenceExpandedHeight == -1) {
+                        referenceExpandedHeight = getPreferredSize().height;
+                    }
+
+                    if (parentHeight < preferredHeight && currentState == RibbonState.EXPANDED) {
+                        // Collapse immédiat si pas assez d'espace
+                        setRibbonState(RibbonState.COLLAPSED);
+                        
+
+                    } else if (parentHeight >= referenceExpandedHeight && currentState == RibbonState.COLLAPSED) {
+                        // Expand si l'espace redevient suffisant pour la hauteur normale
+                        setRibbonState(RibbonState.EXPANDED);
+                    }
+                } finally {
+                    // 5. Dans tous les cas, on déverrouille
+                    isAdjustingState = false;
+                }
+            }
+        };
+    }
+
+    /**
+     * Définit l'état du ruban (EXPANDED ou COLLAPSED).
+     */
+    /**
+     */
+    public void setRibbonState(RibbonState state) {
+        if (state == null || this.currentState == state) {
+            return;
+        }
+
+        RibbonState old = this.currentState;
+        this.currentState = state;
+
+                    HButton button = (HButton) this.getCollapseButton();
+
+        int newHeight;
+        if (state == RibbonState.COLLAPSED) {
+            saveGroupStates();
+            newHeight = collapsedHeight;
+            
+            button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.DOWN, 0.4f, 5));
+            button.setToolTipText("Etendre le ruban");
+            for (Component comp : getComponents()) {
+        comp.setVisible(false);
+    }
+        } else {
+            for (Component comp : getComponents()) {
+        comp.setVisible(true);
+            }
+            restoreGroupStates();
+            // Utiliser la hauteur de référence sauvegardée
+            newHeight = (referenceExpandedHeight != -1) ? referenceExpandedHeight : getPreferredSize().height;
+                        button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
+
+        }
+
+        // Lancer l'animation vers la nouvelle hauteur
+        animateHeight(newHeight);
+
+        firePropertyChange("ribbonState", old, state);
+        // Pas besoin de revalidate/repaint ici, l'animation s'en charge
+    }
+
+    /**
+     * Anime la transition entre la hauteur actuelle et la nouvelle hauteur.
+     */
+    private void animateHeight(int newHeight) {
+//    // Si une animation est déjà en cours, l'arrêter
+//    if (collapseAnimator != null && collapseAnimator.isRunning()) {
+//        collapseAnimator.stop();
+//    }
+
+        startHeight = getHeight();
+        targetHeight = newHeight;
+        animationStartTime = System.currentTimeMillis();
+
+        if (collapseAnimator == null) {
+            collapseAnimator = new Timer(10, e -> {
+                long elapsed = System.currentTimeMillis() - animationStartTime;
+                float progress = Math.min(1f, (float) elapsed / ANIMATION_DURATION);
+
+                int currentHeight = startHeight + (int) ((targetHeight - startHeight) * progress);
+
+                // On modifie la taille préférée, pas la taille directe
+                setPreferredSize(new Dimension(getWidth(), currentHeight));
+                revalidate(); // Demande au parent de se réorganiser
+
+                if (progress >= 1f) {
+                    ((Timer) e.getSource()).stop();
+                    // S'assurer qu'on arrive exactement à la hauteur cible
+                    setPreferredSize(new Dimension(getWidth(), targetHeight));
+                    revalidate();
+                }
+            });
+        }
+
+        collapseAnimator.start();
+    }
+
+    /**
+     * Retourne l'état actuel du ruban.
+     */
+    public RibbonState getRibbonState() {
+        return currentState;
+    }
+
+    /**
+     * Active/désactive le collapse automatique basé sur l'espace disponible.
+     */
+    public void setAutoCollapseEnabled(boolean enabled) {
+        this.autoCollapseEnabled = enabled;
+    }
+
+    /**
+     * Retourne true si le collapse automatique est activé.
+     */
+    public boolean isAutoCollapseEnabled() {
+        return autoCollapseEnabled;
+    }
+
+    /**
+     * Définit la hauteur du ruban quand il est réduit (COLLAPSED).
+     */
+    public void setCollapsedHeight(int height) {
+        this.collapsedHeight = Math.max(20, height);
+        if (currentState == RibbonState.COLLAPSED) {
+            revalidate();
+        }
+    }
+
+    /**
+     * Retourne la hauteur du ruban en mode réduit.
+     */
+    public int getCollapsedHeight() {
+        return collapsedHeight;
+    }
+
+    /**
+     * Sauvegarde l'état actuel de tous les groupes. Appelé automatiquement
+     * avant de passer en mode COLLAPSED.
+     */
+    private void saveGroupStates() {
+        if (groupModel == null) {
+            return;
+        }
+
+        int groupCount = groupModel.getGroupCount();
+        savedGroupStates = new CollapseLevel[groupCount];
+
+        for (int i = 0; i < groupCount; i++) {
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
+            if (group != null) {
+                savedGroupStates[i] = group.getCurrentLevel();
+            }
+        }
+    }
+
+    /**
+     * Restaure l'état des groupes tel qu'il était avant le collapse. Appelé
+     * automatiquement après un retour en mode EXPANDED.
+     */
+    private void restoreGroupStates() {
+        if (groupModel == null || savedGroupStates == null) {
+            return;
+        }
+
+        int groupCount = Math.min(groupModel.getGroupCount(), savedGroupStates.length);
+
+        for (int i = 0; i < groupCount; i++) {
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
+            if (group != null && savedGroupStates[i] != null) {
+                group.setCurrentLevel(savedGroupStates[i]);
+            }
+        }
+
+        // 
+        savedGroupStates = null;
+    }
+
+    /**
+     * Appelé quand le composant est ajouté à un parent.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify(); // Important : appeler la méthode parente d'abord
+
+        Container parent = getParent();
+
+        if (parent != null) {
+            installParentResizeListener(); // Créer le listener si pas déjà fait
+            parent.addComponentListener(parentResizeListener); // S'abonner
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        // 1. Nettoyer le listener de redimensionnement adaptatif (collapse manuel)
+        uninstallResizeListener();
+
+        // 2. Nettoyer le listener du parent (collapse automatique)
+        Container parent = getParent();
+        if (parent != null && parentResizeListener != null) {
+            parent.removeComponentListener(parentResizeListener);
+            parentResizeListener = null;
+        }
+
+        // 3. Nettoyer le ComponentOrganizer
+        if (componentOrganizer != null) {
+            componentOrganizer.uninstall();
+        }
+
+        // 4. Appel parent (obligatoire)
+        super.removeNotify();
     }
 
     /**
@@ -2344,6 +2536,14 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         return baseFont.deriveFont(style, (float) size);
     }
 
+    public Icon getIconRibbonOverflowButton() {
+        return iconRibbonOverflowButton;
+    }
+
+    public void setIconRibbonOverflowButton(Icon icon) {
+
+    }
+
     /**
      * Installe le listener qui détecte les changements de taille du parent.
      * Déclenche un nouveau layout quand le conteneur est redimensionné.
@@ -2364,7 +2564,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
                     try {
                         isLayoutInProgress = true;
-
                         // Déclencher un nouveau layout
                         // Le HRibbonLayoutManager va gérer le collapse/expand automatiquement
                         revalidate();
@@ -2396,16 +2595,16 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Override de removeNotify pour nettoyer les ressources. Appelé quand le
      * composant est retiré de son conteneur parent.
      */
-    @Override
-    public void removeNotify() {
-        uninstallResizeListener();
-        
-        if (componentOrganizer != null) {
-        componentOrganizer.uninstall();
-    }
-        
-        super.removeNotify();
-    }
+//    @Override
+//    public void removeNotify() {
+//        uninstallResizeListener();
+//
+//        if (componentOrganizer != null) {
+//            componentOrganizer.uninstall();
+//        }
+//
+//        super.removeNotify();
+//    }
 
     /*
  * NOTES :

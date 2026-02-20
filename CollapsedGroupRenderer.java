@@ -18,10 +18,14 @@
  */
 package rubban.layout;
 
+import hcomponents.ArrowIcon;
 import hcomponents.vues.HButtonStyle;
 import rubban.*;
 import javax.swing.*;
 import java.awt.*;
+import static javax.swing.SwingConstants.CENTER;
+import static javax.swing.SwingConstants.EAST;
+import static javax.swing.SwingConstants.NORTH;
 
 public class CollapsedGroupRenderer {
 
@@ -31,12 +35,14 @@ public class CollapsedGroupRenderer {
      * @param ribbon le ruban parent
      * @param group le groupe à représenter
      * @param groupIndex l'index du groupe
+     * @param icon
      * @return un bouton configuré, contenant déjà les proxies des composants
      */
     public RibbonOverflowButton createCollapsedButton(
             Ribbon ribbon,
             HRibbonGroup group,
-            int groupIndex) {
+            int groupIndex,
+            Icon icon) {
 
         if (ribbon == null || group == null) {
             throw new IllegalArgumentException("Ribbon and group cannot be null");
@@ -56,13 +62,18 @@ public class CollapsedGroupRenderer {
         // ============================================================
         // 2. CRÉATION DU BOUTON VIDE
         // ============================================================
-        RibbonOverflowButton button = new RibbonOverflowButton(headerValue.toString());
+        RibbonOverflowButton button = new RibbonOverflowButton(headerValue.toString() );
         button.setButtonStyle(HButtonStyle.FIELD);
         button.setPreferredSize(new Dimension(
             group.getCollapsedWidth(),
-            button.getPreferredSize().height
+            button.getPreferredSize().height +50
         ));
-        
+        button.setVerticalAlignment(EAST);
+        if (icon == null) {
+            button.setIcon(new ArrowIcon(Color.yellow, ArrowIcon.Direction.DOWN, 0.4f, 5));            
+        }else{
+            button.setIcon(icon);
+        }
         // Lier le bouton à son groupe (indispensable pour le rebuild)
         button.setGroupIndex(groupIndex);
 
@@ -123,4 +134,14 @@ public class CollapsedGroupRenderer {
 
         return button;
     }
+    
+    public RibbonOverflowButton createCollapsedButton(
+            Ribbon ribbon,
+            HRibbonGroup group,
+            int groupIndex) {
+                
+            return  createCollapsedButton(ribbon, group, groupIndex, null);
+        
+            }
+    
 }

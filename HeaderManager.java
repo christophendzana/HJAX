@@ -117,10 +117,10 @@ public class HeaderManager {
      * 
      * @see SwingUtilities#isEventDispatchThread()
      */
-    public Map<Integer, Component> updateAndPositionHeaders(final Ribbon ribbon,
-                                                           final HRibbonLayoutContext ctx,
-                                                           final HRibbonGroupModel groupModel,
-                                                           final Rectangle[] groupBounds) {
+    public Map<Integer, Component> updateAndPositionHeaders( Ribbon ribbon,
+                                                           HRibbonLayoutContext ctx,
+                                                            HRibbonGroupModel groupModel,
+                                                            Rectangle[] groupBounds) {
         // VÉRIFICATION DU THREAD - Swing est single-threaded
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException(
@@ -157,7 +157,6 @@ public class HeaderManager {
         int headerAlignment = ctx.getHeaderAlignment();
         int headerWidth = ctx.getHeaderWidth();
         int headerMargin = ctx.getHeaderMargin();
-        Insets insets = ribbon.getInsets(); // Marges du ruban (non utilisées ici mais disponibles)
         
         // ÉTAPE 4 : PARCOURS DE TOUS LES GROUPES COURANTS
         for (int i = 0; i < groupBounds.length; i++) {

@@ -25,11 +25,11 @@ public class DefaultHRibbonModel extends AbstractHRibbonModel {
     private ArrayList<Object> groupIdentifiers;
 
     /**
- * Compteur de version du modèle.
- * Incrémenté à chaque modification pour détecter les changements.
- */
-private long version = 0;
-    
+     * Compteur de version du modèle. Incrémenté à chaque modification pour
+     * détecter les changements.
+     */
+    private long version = 0;
+
     /**
      * Constructeur par défaut. Crée un modèle vide.
      */
@@ -141,7 +141,41 @@ private long version = 0;
             }
         }
         return null;
+    }    
+        
+    @Override
+    public void addValue(Object value, Object groupIdentifier) {
+        if (value == null) {
+            throw new IllegalArgumentException("Value cannot be null");
+        }
+
+        int index = findFirstGroupIndex(groupIdentifier);
+        addValue(value, index);
     }
+    
+    /**
+     * Ajoute une valeur au groupe à l'index donné.
+     *
+     * @param value valeur à ajouter
+     * @param groupIndex index du groupe
+     */
+    @Override
+    public void addValue(Object value, int groupIndex) {
+        if (value == null) {
+            throw new IllegalArgumentException("Value cannot be null");
+        }
+        
+        if (groupIndex < 0) {
+            throw new IllegalArgumentException("groupIndex cannot be negative");
+        }
+        
+        if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
+            ArrayList<Object> group = dataGroup.get(groupIndex);
+            group.add(value);
+            version++;
+            fireValueAdded(groupIndex, group.size() - 1);
+        }
+    }    
 
     @Override
     public void setValueAt(Object value, int position, Object groupIdentifier) {
@@ -154,7 +188,7 @@ private long version = 0;
 
         try {
             dataGroup.get(index).set(position, value);
-           
+
         } catch (IndexOutOfBoundsException e) {
             if (index == -1) {
                 throw new ArrayStoreException("groupIdentifier not exist");
@@ -181,40 +215,9 @@ private long version = 0;
             if (position >= 0 && position < group.size()) {
                 group.set(position, value);
                 fireValueUpdated(groupIndex, position);
+            }else{
+                 throw new IndexOutOfBoundsException("Position: " + position + ", Size: " + group.size());
             }
-        }
-    }
-
-    public void addValue(Object value, Object groupIdentifier) {
-        if (value == null) {
-            throw new IllegalArgumentException("Value cannot be null");
-        }
-
-        int index = findFirstGroupIndex(groupIdentifier);        
-            addValue(value, index);
-        
-    }
-
-    @Override
-public long getVersion() {
-    return version;
-}
-    
-    /**
-     * Ajoute une valeur au groupe à l'index donné.
-     *
-     * @param value valeur à ajouter
-     * @param groupIndex index du groupe
-     */
-    public void addValue(Object value, int groupIndex) {
-         if (value == null) {
-            throw new IllegalArgumentException("Value cannot be null");
-        }
-        if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
-            ArrayList<Object> group = dataGroup.get(groupIndex);
-            group.add(value);
-            version++; 
-            fireValueAdded(groupIndex, group.size() - 1);
         }
     }
 
@@ -233,17 +236,17 @@ public long getVersion() {
      * @param groupIndex index du groupe
      */
     public void insertValueAt(Object value, int position, int groupIndex) {
-         if (value == null) {
+        if (value == null) {
             throw new IllegalArgumentException("Value cannot be null");
         }
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (position < 0 || position > group.size()) {
                 throw new IndexOutOfBoundsException(
-                    "Position: " + position + ", Size: " + group.size());
+                        "Position: " + position + ", Size: " + group.size());
             }
             group.add(position, value);
-            version++;  
+            version++;
             fireValueAdded(groupIndex, position);
         }
     }
@@ -266,12 +269,12 @@ public long getVersion() {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (position >= 0 && position < group.size()) {
                 group.remove(position);
-                version++;  
+                version++;
                 fireValueRemoved(groupIndex, position);
             }
         }
     }
-    
+
 //    public void removeValueAt(Object value, Object groupIdentifier){
 //       int index = findFirstGroupIndex(groupIdentifier);
 //        if (index >= 0) {
@@ -290,7 +293,6 @@ public long getVersion() {
 //            eventBus.fireValueRemoved(new ValueRemovedEvent(this, groupIndex, value));
 //        }
 //    }
-
     public void removeValue(Object value, Object groupIdentifier) {
         int index = findFirstGroupIndex(groupIdentifier);
         if (index >= 0) {
@@ -309,9 +311,9 @@ public long getVersion() {
         if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             int position = group.indexOf(value);
-            if (position >= 0) {                
+            if (position >= 0) {
                 removeValueAt(position, groupIndex);
-                version++;  
+                version++;
                 fireValueRemoved(groupIndex, position);
             }
         }
@@ -334,35 +336,8 @@ public long getVersion() {
             ArrayList<Object> group = dataGroup.get(groupIndex);
             if (!group.isEmpty()) {
                 group.clear();
-                version++;  
-                fireGroupValuesChanged(groupIndex); 
-            }
-        }
-    }
-
-    public void moveValue(int oldPosition, int newPosition, Object groupIdentifier) {
-        int index = findFirstGroupIndex(groupIdentifier);
-        if (index >= 0) {
-            moveValue(oldPosition, newPosition, index);
-        }
-    }
-
-    /**
-     * Déplace une valeur dans le groupe à l'index donné.
-     *
-     * @param oldPosition ancienne position
-     * @param newPosition nouvelle position
-     * @param groupIndex index du groupe
-     */
-    public void moveValue(int oldPosition, int newPosition, int groupIndex) {
-        if (groupIndex >= 0 && groupIndex < dataGroup.size()) {
-            ArrayList<Object> group = dataGroup.get(groupIndex);
-            if (oldPosition >= 0 && oldPosition < group.size()
-                    && newPosition >= 0 && newPosition < group.size()) {
-                Object value = group.remove(oldPosition);
-                group.add(newPosition, value);
-                version++;  
-                fireValueMoved(groupIndex, oldPosition, newPosition);
+                version++;
+                fireGroupValuesChanged(groupIndex);
             }
         }
     }
@@ -393,7 +368,6 @@ public long getVersion() {
         return false;
     }
 
-    
     /**
      * Retourne le nom du groupe à l'index donné.
      *
@@ -413,14 +387,15 @@ public long getVersion() {
      *
      * @param groupIdentifier nom du groupe
      */
+    @Override
     public void addGroup(Object groupIdentifier) {
         if (groupIdentifier == null) {
             throw new IllegalArgumentException("Group name cannot be null");
         }
         groupIdentifiers.add(groupIdentifier);
         dataGroup.add(new ArrayList<>());
-        version++; 
-        fireGroupAdded(groupIdentifiers.size() - 1);        
+        version++;
+        fireGroupAdded(groupIdentifiers.size() - 1);
     }
 
     /**
@@ -432,7 +407,7 @@ public long getVersion() {
         if (groupIndex >= 0 && groupIndex < groupIdentifiers.size()) {
             groupIdentifiers.remove(groupIndex);
             dataGroup.remove(groupIndex);
-            version++;  
+            version++;
             fireGroupRemoved(groupIndex);
         }
     }
@@ -455,7 +430,7 @@ public long getVersion() {
      * @param groupIdentifier nom du groupe à chercher
      * @return index du groupe ou -1 si non trouvé
      */
-    private int findFirstGroupIndex(Object groupIdentifier) {
+    public int findFirstGroupIndex(Object groupIdentifier) {
         if (groupIdentifier == null) {
             return -1;
         }
@@ -466,5 +441,11 @@ public long getVersion() {
         }
         return -1;
     }
+    
+    @Override
+    public long getVersion() {
+        return version;
+    }
+
 
 }

@@ -214,7 +214,7 @@ public class PreferredSizeCalculator {
             // ÉTAPE 3 : EXTRACTION DES PARAMÈTRES DE MISE EN PAGE DU GROUPE
             int padding = Math.max(0, group.getPadding());        // Marge interne
             int innerWidth = Math.max(contentWidth - padding * 2, 1); // Largeur interne disponible
-            int spacing = Math.max(0, group.getComponentSpacing()); // Espacement entre composants
+            int spacing = Math.max(0, group.getComponentMargin()); // Espacement entre composants
             
             // ÉTAPE 4 : OBTENTION DU NOMBRE DE VALEURS DANS CE GROUPE
             int valueCount = model.getValueCount(gi);

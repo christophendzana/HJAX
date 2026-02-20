@@ -70,7 +70,7 @@ public class HRibbonGroup {
     // =========================================================================
     /**
      * Niveau de collapse actuel du groupe. Détermine si le groupe est affiché
-     * normalement ou réduit en JComboBox.
+     * normalement ou réduit.
      */
     private CollapseLevel currentLevel = CollapseLevel.NORMAL;
 
@@ -93,7 +93,7 @@ public class HRibbonGroup {
     /**
      * Espacement horizontal entre les composants Swing à l'intérieur du groupe.
      */
-    private int componentSpacing = 2;
+    private int componentMargin = 2;
 
     /**
      * Marge interne (padding) du groupe, entre la bordure et les composants.
@@ -513,8 +513,8 @@ public static void setDefaultGroupNamePrefix(String prefix) {
      *
      * @return l'espacement en pixels
      */
-    public int getComponentSpacing() {
-        return componentSpacing;
+    public int getComponentMargin() {
+        return componentMargin;
     }
 
     /**
@@ -522,11 +522,11 @@ public static void setDefaultGroupNamePrefix(String prefix) {
      *
      * @param spacing le nouvel espacement en pixels
      */
-    public void setComponentSpacing(int spacing) {
-        if (this.componentSpacing != spacing) {
-            int old = this.componentSpacing;
-            this.componentSpacing = spacing;
-            firePropertyChange("componentSpacing", old, spacing);
+    public void setComponentMargin(int spacing) {
+        if (this.componentMargin != spacing) {
+            int old = this.componentMargin;
+            this.componentMargin = spacing;
+            firePropertyChange("componentMargin", old, spacing);
         }
     }
 

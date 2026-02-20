@@ -1,7 +1,6 @@
 package rubban;
 
 import java.awt.*;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import javax.swing.*;
@@ -58,38 +57,51 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         }
 
         Ribbon hRibbon = (Ribbon) parent;
+        Insets insets = parent.getInsets();
+
+        int collapseBtnWidth = 60; // Largeur arbitraire, à ajuster
+        int collapseBtnHeight = 30;
+
+        int posX = parent.getWidth() - collapseBtnWidth - (insets != null ? insets.right : 0) - 5;
+        int posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0) - 5;
+
+        Component collapseBtn = hRibbon.getCollapseButton();
+
+        if (hRibbon.getRibbonState() == Ribbon.RibbonState.COLLAPSED) {
+            // Mode COLLAPSED : bouton en haut à droite du ruban réduit
+            if (collapseBtn != null) {
+                if (collapseBtn.getParent() != hRibbon) {
+                    hRibbon.addComponentToContainer(collapseBtn);
+                }
+                
+                collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
+                collapseBtn.setVisible(true);                
+            }
+            return;
+        } else {
+            // Mode EXPANDED : bouton en bas à droite du ruban complet
+            // ← NOUVEAU : repositionner le bouton
+            posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0) - 5;
+
+            if (collapseBtn != null) {
+                if (collapseBtn.getParent() != hRibbon) {
+                    hRibbon.addComponentToContainer(collapseBtn);
+                }
+                collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
+                collapseBtn.setVisible(true);
+            }
+        }
+
         HRibbonModel model = hRibbon.getModel();
         HRibbonGroupModel groupModel = hRibbon.getGroupModel();
         if (model == null || groupModel == null) {
             return;
         }
 
-        // Parcourir tous les groupes et supprimer les OverflowButton des groupes normaux
-        // AVANT de commencer le layout pour éviter les fantômes
-        if (groupModel != null) {
-            int groupCount = groupModel.getGroupCount();
-            for (int i = 0; i < groupCount; i++) {
-                HRibbonGroup group = groupModel.getHRibbonGroup(i);
-                if (group != null && !group.isCollapsed()) {
-                    // Ce groupe est en mode NORMAL
-
-                    RibbonOverflowButton oldButton = group.getCollapsedButton();
-                    if (oldButton != null) {
-                        if (oldButton.getParent() == hRibbon) {
-                            hRibbon.removeComponentSafely(oldButton);
-                        }
-                        group.setCollapsedButton(null);
-                    }
-                }
-            }
-        }
-
         groupBoundsCache = null;
         componentsByGroupCache = null;
 
-        Insets insets = parent.getInsets();
         int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 0);
-        int availableHeight = parent.getHeight() - (insets != null ? (insets.top + insets.bottom) : 0);
 
         int headerAlignment = hRibbon.getHeaderAlignment();
         boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
@@ -99,7 +111,6 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         HRibbonLayoutContext ctx = new HRibbonLayoutContext(
                 headerAlignment,
                 hRibbon.getHeaderWidth(),
-                hRibbon.isFillsViewportHeight(),
                 widthDistributor.isEqualDistribution(),
                 groupMargin,
                 hRibbon.getHeaderMargin()
@@ -113,22 +124,12 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         // ============ ÉTAPE 1 : CALCULER LES LARGEURS NORMALES ============
         int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, groupModel, availableWidth);
 
-        // ============ ÉTAPE 2 : CALCULER LA LARGEUR TOTALE SI TOUT ÉTAIT NORMAL ============
-        int totalNormalWidth = 0;
-        for (int i = 0; i < normalGroupWidths.length; i++) {
-            totalNormalWidth += normalGroupWidths[i];
-            if (i < normalGroupWidths.length - 1) {
-                totalNormalWidth += groupMargin;
-            }
-        }
-
-        // ============ ÉTAPE 3 : CONSTRUIRE LA MAP DES LARGEURS NORMALES ============
         Map<Integer, Integer> normalWidths = new HashMap<>();
         for (int i = 0; i < normalGroupWidths.length; i++) {
             normalWidths.put(i, normalGroupWidths[i]);
         }
 
-        // ============ ÉTAPE 4 : DÉTERMINER LES ACTIONS DE RESIZE ============
+        // ============ ÉTAPE 2 : DÉTERMINER LES ACTIONS DE RESIZE ============
         List<ResizeAction> resizeActions = resizeManager.calculateResizeActions(
                 groupModel,
                 availableWidth,
@@ -136,7 +137,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 groupMargin
         );
 
-        // ============ ÉTAPE 5 : APPLIQUER LES ACTIONS DE RESIZE ============
+        // ============ ÉTAPE 3 : APPLIQUER LES ACTIONS DE RESIZE ============
         for (ResizeAction action : resizeActions) {
             if (action.isCollapse()) {
                 resizeManager.collapseGroup(hRibbon, action.getGroupIndex());
@@ -145,7 +146,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
             }
         }
 
-        // ============ ÉTAPE 6 : CALCULER LES LARGEURS FINALES ============
+        // ============ ÉTAPE 4 : CALCULER LES LARGEURS FINALES ============
         int[] groupWidths = new int[groupCount];
         for (int i = 0; i < groupCount; i++) {
             HRibbonGroup g = groupModel.getHRibbonGroup(i);
@@ -157,24 +158,13 @@ public class HRibbonLayoutManager implements LayoutManager2 {
             }
         }
 
-        // ============ ÉTAPE 7 : CALCUL DE LA HAUTEUR DU RUBAN ============
-        
-        int ribbonHeight;
-        Ribbon.HeightPolicy policy = hRibbon.getHeightPolicy();
+        // ============ ÉTAPE 5 : CALCUL DE LA HAUTEUR DU RUBAN ============
+        int ribbonHeight = preferredCalculator.computeRequiredContentHeight(
+                hRibbon, ctx, normalGroupWidths, model, groupModel
+        );
+        ribbonHeight = Math.max(ribbonHeight, 1);
 
-        if (policy == Ribbon.HeightPolicy.FIXED) {
-            ribbonHeight = Math.max(0, availableHeight);
-        } else {
-            ribbonHeight = preferredCalculator.computeRequiredContentHeight(
-                    hRibbon, ctx, normalGroupWidths, model, groupModel
-            );
-            ribbonHeight = Math.max(ribbonHeight, 1);
-            if (hRibbon.isFillsViewportHeight()) {
-                ribbonHeight = Math.max(ribbonHeight, availableHeight);
-            }
-        }
-
-        // ============ ÉTAPE 8 : CALCUL DES RECTANGLES DE CONTENU ============
+        // ============ ÉTAPE 6 : CALCUL DES RECTANGLES DE CONTENU ============
         int headerMargin = ctx.getHeaderMargin();
         int contentHeightPerGroup;
         if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
@@ -207,13 +197,13 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         }
         groupBoundsCache = groupBounds;
 
-        // ============ ÉTAPE 9 : POSITION DES HEADERS ============
+        // ============ ÉTAPE 7 : POSITION DES HEADERS ============
         headerManager.updateAndPositionHeaders(hRibbon, ctx, groupModel, groupBounds);
 
-        // ============ ÉTAPE 10 : COLLECTE DES COMPOSANTS ============
+        // ============ ÉTAPE 8 : COLLECTE DES COMPOSANTS ============
         ComponentOrganizer.ComponentCollectionResult coll = componentOrganizer.collectComponents(hRibbon, model);
 
-        // ============ ÉTAPE 11 : GESTION DE LA VISIBILITÉ ET AJOUT AU CONTENEUR ============
+        // ============ ÉTAPE 9 : GESTION DE LA VISIBILITÉ ET AJOUT AU CONTENEUR ============
         for (Map.Entry<Integer, List<Component>> e : coll.componentsByGroup.entrySet()) {
             Integer gi = e.getKey();
             List<Component> comps = e.getValue();
@@ -261,7 +251,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
 
         componentsByGroupCache = coll.componentsByGroup;
 
-        // ============ ÉTAPE 12 : LAYOUT DES COMPOSANTS DANS CHAQUE GROUPE ============
+        // ============ ÉTAPE 10 : ALIGNEMENT DES COMPOSANT DANS SON GROUPE 
         for (int gi = 0; gi < groupBounds.length; gi++) {
             Rectangle groupRect = groupBounds[gi];
             List<Component> comps = componentsByGroupCache.get(gi);
@@ -284,20 +274,11 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                     btn.setBounds(groupRect.x, y, group.getCollapsedWidth(), btnHeight);
                 }
             } else {
-                // Groupe normal : layout multi-lignes habituel
-                // Filtrer pour ne layouter que les composants visibles
-                List<Component> visibleComps = new ArrayList<>();
-                for (Component c : comps) {
-                    if (c.isVisible()) {
-                        visibleComps.add(c);
-                    }
-                }
-                
-                if (!visibleComps.isEmpty()) {
-                    lineWrapper.layoutComponentsInGroup(
-                            visibleComps, groupRect, group.getPadding(), group.getComponentSpacing()
-                    );
-                }
+                // Groupe normal : layout multi-lignes normal              
+                lineWrapper.layoutComponentsInGroup(
+                        comps, groupRect, group.getPadding(), group.getComponentMargin()
+                );
+
             }
         }
     }
@@ -335,7 +316,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 continue;
             }
             int padding = (g != null) ? Math.max(0, g.getPadding()) : 0;
-            int spacing = (g != null) ? Math.max(0, g.getComponentSpacing()) : 0;
+            int spacing = (g != null) ? Math.max(0, g.getComponentMargin()) : 0;
             int valueCount = model.getValueCount(i);
             int totalWidth = 0;
             for (int pos = 0; pos < valueCount; pos++) {
@@ -409,7 +390,6 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         HRibbonLayoutContext ctx = new HRibbonLayoutContext(
                 hRibbon.getHeaderAlignment(),
                 hRibbon.getHeaderWidth(),
-                hRibbon.isFillsViewportHeight(),
                 widthDistributor.isEqualDistribution(),
                 groupModel.getHRibbonGroupMarggin(),
                 hRibbon.getHeaderMargin()
@@ -526,76 +506,75 @@ public class HRibbonLayoutManager implements LayoutManager2 {
      * Construit une map des largeurs normales (non-collapsed) pour chaque
      * groupe.
      */
-    private Map<Integer, Integer> buildNormalWidthsMap(
-            Ribbon hRibbon,
-            HRibbonGroupModel groupModel,
-            HRibbonModel model,
-            int groupCount,
-            int headerAlignment) {
-
-        Map<Integer, Integer> normalWidths = new HashMap<>();
-        int headerWidth = hRibbon.getHeaderWidth();
-        GroupRenderer renderer = hRibbon.getGroupRenderer();
-
-        for (int i = 0; i < groupCount; i++) {
-            HRibbonGroup g = groupModel.getHRibbonGroup(i);
-
-            // Si le groupe a une largeur préférée explicite
-            if (g != null && g.getPreferredWidth() > 0) {
-                int gw = g.getPreferredWidth();
-
-                // Ajouter l'espace pour le header si latéral
-                if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                    gw += headerWidth;
-                }
-
-                normalWidths.put(i, Math.max(gw, 20));
-                continue;
-            }
-
-            // Sinon, calculer la largeur selon les composants
-            int padding = (g != null) ? Math.max(0, g.getPadding()) : 0;
-            int spacing = (g != null) ? Math.max(0, g.getComponentSpacing()) : 0;
-            int valueCount = model.getValueCount(i);
-            int totalWidth = 0;
-
-            for (int pos = 0; pos < valueCount; pos++) {
-                Object value = model.getValueAt(pos, i);
-                Dimension pref = null;
-
-                if (value instanceof Component) {
-                    pref = ((Component) value).getPreferredSize();
-                } else if (renderer != null) {
-                    try {
-                        Component mc = renderer.getGroupComponent(hRibbon, value, i, pos, false, false);
-                        if (mc != null) {
-                            pref = mc.getPreferredSize();
-                        }
-                    } catch (Throwable t) {
-                        pref = null;
-                    }
-                }
-
-                if (pref == null) {
-                    pref = new Dimension(50, 24);
-                }
-                if (totalWidth > 0) {
-                    totalWidth += spacing;
-                }
-                totalWidth += pref.width;
-            }
-
-            int gw = totalWidth + padding * 2;
-            if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                gw += headerWidth;
-            }
-
-            normalWidths.put(i, Math.max(gw, 20));
-        }
-
-        return normalWidths;
-    }
-
+//    private Map<Integer, Integer> buildNormalWidthsMap(
+//            Ribbon hRibbon,
+//            HRibbonGroupModel groupModel,
+//            HRibbonModel model,
+//            int groupCount,
+//            int headerAlignment) {
+//
+//        Map<Integer, Integer> normalWidths = new HashMap<>();
+//        int headerWidth = hRibbon.getHeaderWidth();
+//        GroupRenderer renderer = hRibbon.getGroupRenderer();
+//
+//        for (int i = 0; i < groupCount; i++) {
+//            HRibbonGroup g = groupModel.getHRibbonGroup(i);
+//
+//            // Si le groupe a une largeur préférée explicite
+//            if (g != null && g.getPreferredWidth() > 0) {
+//                int gw = g.getPreferredWidth();
+//
+//                // Ajouter l'espace pour le header si latéral
+//                if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
+//                    gw += headerWidth;
+//                }
+//
+//                normalWidths.put(i, Math.max(gw, 20));
+//                continue;
+//            }
+//
+//            // Sinon, calculer la largeur selon les composants
+//            int padding = (g != null) ? Math.max(0, g.getPadding()) : 0;
+//            int spacing = (g != null) ? Math.max(0, g.getComponentSpacing()) : 0;
+//            int valueCount = model.getValueCount(i);
+//            int totalWidth = 0;
+//
+//            for (int pos = 0; pos < valueCount; pos++) {
+//                Object value = model.getValueAt(pos, i);
+//                Dimension pref = null;
+//
+//                if (value instanceof Component) {
+//                    pref = ((Component) value).getPreferredSize();
+//                } else if (renderer != null) {
+//                    try {
+//                        Component mc = renderer.getGroupComponent(hRibbon, value, i, pos, false, false);
+//                        if (mc != null) {
+//                            pref = mc.getPreferredSize();
+//                        }
+//                    } catch (Throwable t) {
+//                        pref = null;
+//                    }
+//                }
+//
+//                if (pref == null) {
+//                    pref = new Dimension(50, 24);
+//                }
+//                if (totalWidth > 0) {
+//                    totalWidth += spacing;
+//                }
+//                totalWidth += pref.width;
+//            }
+//
+//            int gw = totalWidth + padding * 2;
+//            if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
+//                gw += headerWidth;
+//            }
+//
+//            normalWidths.put(i, Math.max(gw, 20));
+//        }
+//
+//        return normalWidths;
+//    }
     public void removeHeaderForGroup(int groupIndex) {
         headerManager.removeHeaderForGroup(ribbon, groupIndex);
     }

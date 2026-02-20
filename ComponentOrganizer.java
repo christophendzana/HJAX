@@ -45,10 +45,7 @@ import rubban.RibbonOverflowButton;
  * PRINCIPE D'ARCHITECTURE : - Le Ribbon reste responsable de l'ajout physique
  * des composants au conteneur - ComponentOrganizer ne fait que la logique de
  * création et d'organisation - Séparation claire des préoccupations (Separation
- * of Concerns)
- *
- * @see rubban.Ribbon#addComponentToContainer(Component)
- * @see rubban.GroupRenderer
+ * of Concerns) 
  */
 public class ComponentOrganizer implements HRibbonModelListener {
     
@@ -182,7 +179,8 @@ public class ComponentOrganizer implements HRibbonModelListener {
     // =========================================================================
     // COLLECTE PRINCIPALE (utilisée par le LayoutManager)
     // =========================================================================
-    public ComponentCollectionResult collectComponents(final Ribbon ribbon, final HRibbonModel model) {
+    public ComponentCollectionResult collectComponents(Ribbon ribbon, HRibbonModel model) {
+        
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("ComponentOrganizer.collectComponents must be called on the EDT");
         }
@@ -212,7 +210,15 @@ public class ComponentOrganizer implements HRibbonModelListener {
                 Component collapsedComp = group.getCollapsedComponent();
                 if (collapsedComp == null) {
                     CollapsedGroupRenderer collapsedRenderer = new CollapsedGroupRenderer();
-                    RibbonOverflowButton btn = collapsedRenderer.createCollapsedButton(ribbon, group, gi);
+                    
+                    RibbonOverflowButton btn = null;
+                    
+                    if (ribbon.getIconRibbonOverflowButton() == null) {
+                        btn = collapsedRenderer.createCollapsedButton(ribbon, group, gi);
+                    }else{
+                        btn = collapsedRenderer.createCollapsedButton(ribbon, group, gi,ribbon.getIconRibbonOverflowButton());
+                    }                    
+                    
                     group.setCollapsedButton(btn);
                     collapsedComp = btn;
                 }
@@ -310,10 +316,7 @@ public class ComponentOrganizer implements HRibbonModelListener {
                 break;
             case HRibbonModelEvent.DELETE:
                 handleDelete(e);
-                break;
-            case HRibbonModelEvent.MOVE:
-                handleMove(e);
-                break;
+                break;            
             case HRibbonModelEvent.UPDATE:
                 handleUpdate(e);
                 break;
@@ -435,88 +438,6 @@ public class ComponentOrganizer implements HRibbonModelListener {
         }
         
     }
-    
-    /**
-     * Un déplacement : on change juste la clé du composant concerné.
-     * C'est LE gros avantage de cette approche : pas de nouveau composant !
-     */
-    private void handleMove(HRibbonModelEvent e) {
-    int group = e.getGroupIndex();
-    int fromPos = e.getPosition();
-    int toPos = e.getToPosition();
-    
-//    System.out.println("  groupe: " + group + ", from:" + fromPos + " → to:" + toPos);
-    
-    // 1. Récupérer le composant à déplacer
-    CacheKey movedKey = null;
-    Component movedComp = null;
-    
-    for (Map.Entry<CacheKey, Component> entry : cache.entrySet()) {
-        CacheKey key = entry.getKey();
-        if (key.groupIndex == group && key.position == fromPos) {
-            movedKey = key;
-            movedComp = entry.getValue();
-            break;
-        }
-    }
-    
-    if (movedComp == null) {        
-        return;
-    }
-    
-    // 2. Collecter TOUS les composants à décaler AVANT de modifier le cache
-    List<CacheKey> toShift = new ArrayList<>();
-    List<Component> shiftedComponents = new ArrayList<>();
-    
-    if (fromPos < toPos) {
-        // Déplacement vers la droite : from+1 ... toPos se décalent à gauche
-        for (CacheKey key : cache.keySet()) {
-            if (key.groupIndex == group && key.position > fromPos && key.position <= toPos) {
-                toShift.add(key);
-                shiftedComponents.add(cache.get(key));
-            }
-        }
-    } else {
-        // Déplacement vers la gauche : toPos ... from-1 se décalent à droite
-        for (CacheKey key : cache.keySet()) {
-            if (key.groupIndex == group && key.position >= toPos && key.position < fromPos) {
-                toShift.add(key);
-                shiftedComponents.add(cache.get(key));
-            }
-        }
-    }
-    
-    // 3. SUPPRIMER toutes les clés concernées (y compris celle du composant déplacé)
-    cache.remove(movedKey);
-    for (CacheKey key : toShift) {
-        cache.remove(key);
-    }
-    
-    // 4. AJOUTER les nouvelles clés dans le bon ordre
-    if (fromPos < toPos) {
-        // Déplacement vers la droite
-        for (int i = 0; i < toShift.size(); i++) {
-            CacheKey oldKey = toShift.get(i);
-            Component c = shiftedComponents.get(i);
-            CacheKey newKey = new CacheKey(group, oldKey.position - 1, oldKey.value);
-            cache.put(newKey, c);
-        }
-        // Ajouter le composant déplacé à sa nouvelle position
-        CacheKey newMovedKey = new CacheKey(group, toPos, movedKey.value);
-        cache.put(newMovedKey, movedComp);
-    } else {
-        // Déplacement vers la gauche
-        for (int i = 0; i < toShift.size(); i++) {
-            CacheKey oldKey = toShift.get(i);
-            Component c = shiftedComponents.get(i);
-            CacheKey newKey = new CacheKey(group, oldKey.position + 1, oldKey.value);
-            cache.put(newKey, c);
-        }
-        // Ajouter le composant déplacé à sa nouvelle position
-        CacheKey newMovedKey = new CacheKey(group, toPos, movedKey.value);
-        cache.put(newMovedKey, movedComp);
-    }
-}
     
     /**
      * Une mise à jour : on peut soit recréer le composant, soit le mettre à jour.
