@@ -22,7 +22,7 @@ import java.util.HashMap;
  * GroupWidthDistributor - GroupBoundsCalculator - HeaderManager -
  * ComponentOrganizer - LineWrapper - PreferredSizeCalculator
  *
- * Remarques : - Ce manager conserve des caches simples (groupBoundsCache,
+ * Ce manager conserve des caches simples (groupBoundsCache,
  * componentsByGroupCache) qui sont invalidés via invalidateLayout(...).
  */
 public class HRibbonLayoutManager implements LayoutManager2 {
@@ -59,6 +59,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         Ribbon hRibbon = (Ribbon) parent;
         Insets insets = parent.getInsets();
 
+        // Positionnement tu boutton collapse du Ruban
         int collapseBtnWidth = 60; // Largeur arbitraire, à ajuster
         int collapseBtnHeight = 30;
 
@@ -73,14 +74,12 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 if (collapseBtn.getParent() != hRibbon) {
                     hRibbon.addComponentToContainer(collapseBtn);
                 }
-                
                 collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
-                collapseBtn.setVisible(true);                
+                collapseBtn.setVisible(true);
             }
             return;
-        } else {
-            // Mode EXPANDED : bouton en bas à droite du ruban complet
-            // ← NOUVEAU : repositionner le bouton
+        } else {            // Mode EXPANDED : bouton en bas à droite du ruban complet
+
             posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0) - 5;
 
             if (collapseBtn != null) {
@@ -101,19 +100,23 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         groupBoundsCache = null;
         componentsByGroupCache = null;
 
-        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 0);
+        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5);
 
         int headerAlignment = hRibbon.getHeaderAlignment();
         boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
         int headerHeight = headersVisible ? hRibbon.getHeaderHeight() : 0;
         int groupMargin = groupModel.getHRibbonGroupMarggin();
+        int defaultGroupWidth = hRibbon.getDefaultGroupWidth();
+        int absoluteGroupMin = hRibbon.getDefaultAbsoluteGroupWidth();
 
         HRibbonLayoutContext ctx = new HRibbonLayoutContext(
                 headerAlignment,
                 hRibbon.getHeaderWidth(),
-                widthDistributor.isEqualDistribution(),
                 groupMargin,
-                hRibbon.getHeaderMargin()
+                hRibbon.getHeaderMargin(),
+                defaultGroupWidth,
+                absoluteGroupMin,
+                hRibbon.getUseOnlyWidth()
         );
 
         int groupCount = groupModel.getGroupCount();
@@ -167,32 +170,45 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         // ============ ÉTAPE 6 : CALCUL DES RECTANGLES DE CONTENU ============
         int headerMargin = ctx.getHeaderMargin();
         int contentHeightPerGroup;
-        if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
-            contentHeightPerGroup = Math.max(0, ribbonHeight - (headersVisible ? (headerHeight + headerMargin) : 0));
+
+        if (headerAlignment == Ribbon.HEADER_NORTH
+                || headerAlignment == Ribbon.HEADER_SOUTH) {
+            // Les headers prennent de la hauteur : on la déduit de l'espace disponible
+            int headerSpace = headersVisible ? (headerHeight + headerMargin) : 0;
+            contentHeightPerGroup = Math.max(0, ribbonHeight - headerSpace);
         } else {
+            // Les headers ne prennent pas de hauteur : espace complet disponible
             contentHeightPerGroup = Math.max(0, ribbonHeight);
         }
 
+        int baseTopInset = (insets != null) ? insets.top : 0;
+
+        int contentY = (headerAlignment == Ribbon.HEADER_NORTH)
+                ? baseTopInset + headerHeight + headerMargin // Sous l'en-tête
+                : baseTopInset;
+
         Rectangle[] groupBounds = boundsCalculator.calculateGroupBounds(
-                ctx, groupWidths, groupModel, insets, contentHeightPerGroup, headerHeight
+                ctx,
+                groupWidths,
+                groupModel,
+                insets,
+                contentHeightPerGroup,
+                contentY
         );
         if (groupBounds == null) {
             groupBounds = new Rectangle[groupCount];
         }
 
-        int baseTopInset = (insets != null) ? insets.top : 0;
         for (int i = 0; i < groupBounds.length; i++) {
             Rectangle r = groupBounds[i];
+
             if (r == null) {
-                r = new Rectangle(0, baseTopInset, (i < groupWidths.length ? groupWidths[i] : 0), contentHeightPerGroup);
-                groupBounds[i] = r;
+                int width = (i < groupWidths.length) ? groupWidths[i] : 0;
+                groupBounds[i] = new Rectangle(0, contentY, width, contentHeightPerGroup);
+
             } else {
                 r.height = contentHeightPerGroup;
-                if (headerAlignment == Ribbon.HEADER_NORTH) {
-                    r.y = baseTopInset + headerHeight + headerMargin;
-                } else {
-                    r.y = baseTopInset;
-                }
+                r.y = contentY;
             }
         }
         groupBoundsCache = groupBounds;
@@ -283,77 +299,9 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         }
     }
 
-    /**
-     * Construit estimatedGroupWidths basé sur preferredWidth sinon somme des
-     * preferredSize composants.
-     */
-    private int[] buildEstimatedGroupWidthsForPreferred(Ribbon hRibbon, HRibbonGroupModel groupModel, HRibbonModel model, int groupCount) {
-        int[] estimatedGroupWidths = new int[groupCount];
-        int headerAlignment = hRibbon.getHeaderAlignment();
-        int headerWidth = hRibbon.getHeaderWidth();
-        GroupRenderer renderer = hRibbon.getGroupRenderer();
-
-        if (!SwingUtilities.isEventDispatchThread()) {
-            for (int i = 0; i < groupCount; i++) {
-                HRibbonGroup g = groupModel.getHRibbonGroup(i);
-                int gw = (g != null && g.getPreferredWidth() > 0) ? g.getPreferredWidth() : 100;
-                if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                    gw += headerWidth;
-                }
-                estimatedGroupWidths[i] = Math.max(gw, 20);
-            }
-            return estimatedGroupWidths;
-        }
-
-        for (int i = 0; i < groupCount; i++) {
-            HRibbonGroup g = groupModel.getHRibbonGroup(i);
-            if (g != null && g.getPreferredWidth() > 0) {
-                int gw = g.getPreferredWidth();
-                if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                    gw += headerWidth;
-                }
-                estimatedGroupWidths[i] = Math.max(gw, 20);
-                continue;
-            }
-            int padding = (g != null) ? Math.max(0, g.getPadding()) : 0;
-            int spacing = (g != null) ? Math.max(0, g.getComponentMargin()) : 0;
-            int valueCount = model.getValueCount(i);
-            int totalWidth = 0;
-            for (int pos = 0; pos < valueCount; pos++) {
-                Object value = model.getValueAt(pos, i);
-                Dimension pref = null;
-                if (value instanceof Component) {
-                    pref = ((Component) value).getPreferredSize();
-                } else if (renderer != null) {
-                    try {
-                        Component mc = renderer.getGroupComponent(hRibbon, value, i, pos, false, false);
-                        if (mc != null) {
-                            pref = mc.getPreferredSize();
-                        }
-                    } catch (Throwable t) {
-                        pref = null;
-                    }
-                }
-                if (pref == null) {
-                    pref = new Dimension(50, 24);
-                }
-                if (totalWidth > 0) {
-                    totalWidth += spacing;
-                }
-                totalWidth += pref.width;
-            }
-            int gw = totalWidth + padding * 2;
-            if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                gw += headerWidth;
-            }
-            estimatedGroupWidths[i] = Math.max(gw, 20);
-        }
-        return estimatedGroupWidths;
-    }
-
     @Override
     public Dimension preferredLayoutSize(Container parent) {
-        /* unchanged behavior: compute preferred as ribbon total height */
+
         if (!(parent instanceof Ribbon)) {
             return new Dimension(0, 0);
         }
@@ -390,12 +338,14 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         HRibbonLayoutContext ctx = new HRibbonLayoutContext(
                 hRibbon.getHeaderAlignment(),
                 hRibbon.getHeaderWidth(),
-                widthDistributor.isEqualDistribution(),
                 groupModel.getHRibbonGroupMarggin(),
-                hRibbon.getHeaderMargin()
+                hRibbon.getHeaderMargin(),
+                hRibbon.getDefaultGroupWidth(),
+                hRibbon.getDefaultAbsoluteGroupWidth(),
+                hRibbon.getUseOnlyWidth()
         );
 
-        int[] estimatedGroupWidths = buildEstimatedGroupWidthsForPreferred(hRibbon, groupModel, model, groupCount);
+        int[] estimatedGroupWidths = preferredCalculator.estimateGroupWidths(ribbon, groupModel, model, ctx);
 
         int ribbonHeight;
         if (!SwingUtilities.isEventDispatchThread()) {
@@ -459,17 +409,6 @@ public class HRibbonLayoutManager implements LayoutManager2 {
 
     public Map<Integer, List<Component>> getComponentsByGroup() {
         return componentsByGroupCache;
-    }
-
-    public void setEqualDistribution(boolean equal) {
-        widthDistributor.setEqualDistribution(equal);
-        if (ribbon != null) {
-            ribbon.revalidate();
-        }
-    }
-
-    public boolean isEqualDistribution() {
-        return widthDistributor.isEqualDistribution();
     }
 
     @Override
