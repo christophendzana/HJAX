@@ -93,7 +93,7 @@ public class GroupBoundsCalculator {
                                             HRibbonGroupModel groupModel,
                                             Insets insets,
                                             int contentHeight,
-                                            int headerHeight) {
+                                            int contentY) {
         // VÉRIFICATION DES PARAMÈTRES D'ENTRÉE
         if (groupWidths == null) {
             return new Rectangle[0]; // Cas limite : pas de largeurs définies
@@ -165,14 +165,7 @@ public class GroupBoundsCalculator {
             }
             
             // ÉTAPE 3 : CALCUL DE LA POSITION Y
-            int y;
-            if (headerAlignment == Ribbon.HEADER_NORTH) {
-                // EN-TÊTE EN HAUT : laisser de l'espace pour l'en-tête + marge
-                y = topInset + headerHeight + headerMargin;
-            } else {
-                // AUTRES CAS : aligner sur le bord haut
-                y = topInset;
-            }
+            int y = contentY;
             
             // ÉTAPE 4 : CRÉATION DU RECTANGLE DE CONTENU
             rects[i] = new Rectangle(contentX, y, contentW, contentHeight);
