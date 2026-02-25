@@ -10,6 +10,7 @@ package rubban;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Rectangle;
 import java.util.Objects;
 import javax.swing.event.SwingPropertyChangeSupport;
 import rubban.layout.CollapseLevel;
@@ -50,15 +51,22 @@ public class HRibbonGroup {
      */
     private int preferredWidth;
 
-    /**
-     * Largeur minimale autorisée pour ce groupe. 0 = pas de minimum imposé.
-     */
-    private int minWidth = 50;
+  /**
+ * Largeur minimale du groupe en pixels.
+ * 
+ * Par défaut à 0 : la minWidth est calculée automatiquement comme
+ * la largeur du composant le plus large du groupe.
+ * 
+ * DÉCONSEILLÉ de modifier cette valeur manuellement via setMinWidth().
+ * Une valeur trop petite peut provoquer des chevauchements visuels
+ * ou rendre les composants illisibles lors du resize adaptatif.
+ */
+private int minWidth = 150;
 
     /**
      * Largeur maximale autorisée pour ce groupe. 0 = pas de maximum imposé.
      */
-    private int maxWidth = 0;
+    private int maxWidth = Integer.MAX_VALUE;
 
     /**
      * Indique si l'utilisateur peut redimensionner ce groupe via l'interface.
@@ -78,7 +86,7 @@ public class HRibbonGroup {
      * Largeur du groupe lorsqu'il est en mode COLLAPSED (JComboBox). Par défaut
      * 80 pixels.
      */
-    private int collapsedWidth = 80;
+    private int collapsedWidth = 82;
 
     /**
      * Composant affiché quand le groupe est collapsed (généralement un
@@ -160,6 +168,8 @@ public class HRibbonGroup {
      */
     private static String defaultGroupNamePrefix = "Groupe ";
 
+//    private Rectangle bound;
+
     /**
      * Gestionnaire des écouteurs PropertyChangeListener, notifie les
      * changements de propriétés (largeur, padding, etc.) aux composants
@@ -231,8 +241,8 @@ public class HRibbonGroup {
         // 3. Index et dimensions
         this.modelIndex = modelIndex;
         this.preferredWidth = 180;
-        this.width = this.preferredWidth;
-        this.minWidth = 80;
+        this.width = this.preferredWidth;  
+//        this.bound = new Rectangle();
     }
 
     // =========================================================================
@@ -264,6 +274,37 @@ public class HRibbonGroup {
         }
     }
 
+//    public int getX(){
+//        return this.bound.x;
+//    }
+//    
+//    public int getY(){
+//        return this.bound.y;
+//    }
+//    
+    public int getWidth(){
+        return width;
+    }
+    
+ 
+//    public void setBound( Rectangle bound ){        
+//        Rectangle old = this.bound;
+//        this.bound = bound;        
+//        firePropertyChange("bound", old, bound);
+//    }
+//    
+//    public void setX(int x){
+//        int old = this.bound.x;
+//        this.bound.x = x;
+//        firePropertyChange("bound.x", old, bound);
+//    }
+//    
+//    public void setY(int y){
+//        int old = this.bound.y;
+//        this.bound.y = y;
+//        firePropertyChange("bound.y", old, bound);
+//    }
+    
     /**
      * Retourne la valeur affichée dans l'en-tête du groupe. Si headerValue
      * n'est pas défini, retourne groupIdentifier.
@@ -289,15 +330,15 @@ public class HRibbonGroup {
     }
 
     /**
- * Modifie le préfixe utilisé pour générer les noms de groupe par défaut.
- * Par défaut : "Groupe "
- */
-public static void setDefaultGroupNamePrefix(String prefix) {
-    if (prefix != null) {
-        defaultGroupNamePrefix = prefix;
+     * Modifie le préfixe utilisé pour générer les noms de groupe par défaut.
+     * Par défaut : "Groupe "
+     */
+    public static void setDefaultGroupNamePrefix(String prefix) {
+        if (prefix != null) {
+            defaultGroupNamePrefix = prefix;
+        }
     }
-}
-    
+
     /**
      * Retourne l'index de ce groupe dans le HRibbonModel.
      *
@@ -349,9 +390,9 @@ public static void setDefaultGroupNamePrefix(String prefix) {
      *
      * @return la largeur en pixels
      */
-    public int getWidth() {
-        return width;
-    }
+//    public int getWidth() {
+//        return width;
+//    }
 
     /**
      * Définit la largeur actuelle du groupe et notifie les écouteurs. La
@@ -403,21 +444,24 @@ public static void setDefaultGroupNamePrefix(String prefix) {
      * @return la largeur minimale en pixels, 0 si aucune limite
      */
     public int getMinWidth() {
-        return minWidth;
+            return minWidth;
     }
 
     /**
-     * Définit la largeur minimale autorisée.
-     *
-     * @param minWidth la nouvelle largeur minimale en pixels
-     */
-    public void setMinWidth(int minWidth) {
-        if (this.minWidth != minWidth) {
-            int old = this.minWidth;
-            this.minWidth = minWidth;
-            firePropertyChange("minWidth", old, minWidth);
-        }
-    }
+ * Définit manuellement la largeur minimale du groupe.
+ * 
+ * ATTENTION : déconseillé. Par défaut, la minWidth est calculée
+ * automatiquement comme la largeur du composant le plus large
+ * du groupe, ce qui garantit un affichage correct en toutes
+ * circonstances. Forcer une valeur peut provoquer des chevauchements
+ * ou des composants tronqués lors du resize adaptatif.
+ * 
+ * @param minWidth la largeur minimale en pixels
+ */
+public void setMinWidth(int minWidth) {   
+      this.minWidth = minWidth;    
+    
+}
 
     /**
      * Retourne la largeur maximale autorisée.
@@ -733,7 +777,7 @@ public static void setDefaultGroupNamePrefix(String prefix) {
      *
      * @param listener l'écouteur à ajouter
      */
-    public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+     public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
         getChangeSupport().addPropertyChangeListener(listener);
     }
 
@@ -938,6 +982,7 @@ public static void setDefaultGroupNamePrefix(String prefix) {
      * JComboBox au prochain affichage.
      */
     public void invalidateCollapsedButton() {
+        this.collapsedButton.setVisible(false);
         this.collapsedButton = null;
     }
 
