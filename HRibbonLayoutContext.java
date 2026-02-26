@@ -16,22 +16,22 @@ public final class HRibbonLayoutContext {
     private final int headerMargin;
     private final int defaultGroupWidth;
     private final int AbsoluteGroupMin;
-    private final boolean UseOnlyWidth;
+
 
     public HRibbonLayoutContext(int headerAlignment,
                                 int headerWidth,
                                 int groupMargin,
                                 int headerMargin,
                                 int defaultGroupWidth,
-                                int AbsoluteGroupMin,
-                                boolean UseOnlyWidth) {
+                                int AbsoluteGroupMin
+                                ) {
         this.headerAlignment = headerAlignment;
         this.headerWidth = Math.max(0, headerWidth);
         this.groupMargin = Math.max(0, groupMargin);
         this.headerMargin = Math.max(0, headerMargin);
         this.defaultGroupWidth = Math.max(0, defaultGroupWidth);
         this.AbsoluteGroupMin = Math.max(0, AbsoluteGroupMin);
-        this.UseOnlyWidth = UseOnlyWidth;
+        
     }
 
     public int getHeaderAlignment() { return headerAlignment; }
@@ -40,7 +40,6 @@ public final class HRibbonLayoutContext {
     public int getHeaderMargin() { return headerMargin; }
     public int getDefautlGroupWidth(){ return defaultGroupWidth; }
     public int getAbsoluteGroupMin() { return AbsoluteGroupMin; }
-    public boolean getUseOnlywidth(){ return UseOnlyWidth; }    
     
     @Override
     public String toString() {

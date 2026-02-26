@@ -205,7 +205,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private ComponentOrganizer componentOrganizer;
 
     private int componentMargin = 5;
-    
+
     /**
      * États possibles du ruban.
      */
@@ -254,7 +254,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private long animationStartTime;
     private static final int ANIMATION_DURATION = 200;
 
-
     private int referenceExpandedHeight = -1;
 
     private Component defaultCollapseButton;
@@ -265,7 +264,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Width margin between each group
      */
     private int groupMargin = 12;
-    
+
     // =========================================================================
     // CONSTANTES DE CONFIGURATION
     // =========================================================================
@@ -274,22 +273,25 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Utilisée comme fallback quand group.getPreferredWidth() <= 0 Valeur : 150
      * pixels
      */
-    private static int DEFAULT_GROUP_WIDTH = 0; // static -> partagée entre toutes les instances de Ribbon
+    private static int DEFAULT_GROUP_WIDTH = 150; // static -> partagée entre toutes les instances de Ribbon
 
     /**
      * Largeur minimale absolue garantie pour tout groupe Empêche les groupes de
      * devenir invisibles ou trop étroits Valeur : 20 pixels (minimum pour
      * afficher un contenu minimal)
      */
-    private static int ABSOLUTE_MIN = 20;
-    
+    private static int ABSOLUTE_MIN = 120;
+
     /**
-     * Définit si l'espace disponible sera toujours entièrement utilisé par le 
-     * ruban. Si oui l'espace restant après que l'espace des groupes aient été 
-     * distribués, l'espace restant sera redistribuée entre les groupes flexibles.
-     * Les groupes flexibles sont ceux dont la largeur n'a pas été fixé.
+     * Définit si l'espace disponible sera toujours entièrement utilisé par le
+     * ruban. Si oui l'espace restant après que l'espace des groupes aient été
+     * distribués, l'espace restant sera redistribuée entre les groupes
+     * flexibles. Les groupes flexibles sont ceux dont la largeur n'a pas été
+     * fixé.
      */
-    private static boolean UseOnlyWidth = false; 
+    private static boolean UseEntireWidth = false;
+
+    private int ribbonHeight = 300;
     
     // =========================================================================
     // CONSTRUCTEURS
@@ -369,7 +371,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
         // S'inscrit comme listener des modèles
         this.model.addRibbonModelListener(this);
-        
+
         this.groupModel.addHRibbonGroupModelListener(this);
 
         this.autoCreateGroupsFromModel = true;
@@ -559,6 +561,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
         groupModel.moveGroup(groupIndex, targetIndex);
     }
+
     /**
      * Retourne l'index du groupe à la position du point.
      */
@@ -937,7 +940,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (component != null && component.getParent() != this) {
             super.add(component); // Appel à JComponent.add()            
         }
-        
+
     }
 
     /**
@@ -1157,10 +1160,10 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         repaint();
     }
 
-    public void setGroupWidth(int groupIndex, int width){
-        this.getGroup(groupIndex).setWidth(width);        
+    public void setGroupWidth(int groupIndex, int width) {
+        this.getGroup(groupIndex).setWidth(width);
     }
-    
+
     // =========================================================================
     // GESTION DE L'ÉDITION (pour le futur)
     // =========================================================================
@@ -1417,7 +1420,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 //            groupModel.moveGroup(oldIndex, newIndex);
 //        }
 //    }
-
     /**
      * Déplace un groupe identifié par son nom vers une nouvelle position.
      *
@@ -1945,6 +1947,14 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         return overflowProxyFactory;
     }
 
+    public int getRibbonHeight(){
+        return ribbonHeight;
+    }
+    
+    public void setRibbonHeight( int height ){
+        this.ribbonHeight = height;
+    }
+    
     /**
      * Retourne la hauteur de contenu préférée calculée par le
      * HRibbonLayoutManager.
@@ -2057,7 +2067,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      * Crée le bouton de collapse par défaut.
      */
     private Component createDefaultCollapsedButton() {
-        HButton button = new HButton(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5)); 
+        HButton button = new HButton(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
         button.setButtonStyle(HButtonStyle.PRIMARY);
         button.setToolTipText("Réduire le ruban");
 
@@ -2130,7 +2140,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                     if (parentHeight < preferredHeight && currentState == RibbonState.EXPANDED) {
                         // Collapse immédiat si pas assez d'espace
                         setRibbonState(RibbonState.COLLAPSED);
-                        
 
                     } else if (parentHeight >= referenceExpandedHeight && currentState == RibbonState.COLLAPSED) {
                         // Expand si l'espace redevient suffisant pour la hauteur normale
@@ -2157,26 +2166,26 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         RibbonState old = this.currentState;
         this.currentState = state;
 
-                    HButton button = (HButton) this.getCollapseButton();
+        HButton button = (HButton) this.getCollapseButton();
 
         int newHeight;
         if (state == RibbonState.COLLAPSED) {
             saveGroupStates();
             newHeight = collapsedHeight;
-            
+
             button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.DOWN, 0.4f, 5));
             button.setToolTipText("Etendre le ruban");
             for (Component comp : getComponents()) {
-        comp.setVisible(false);
-    }
+                comp.setVisible(false);
+            }
         } else {
             for (Component comp : getComponents()) {
-        comp.setVisible(true);
+                comp.setVisible(true);
             }
             restoreGroupStates();
             // Utiliser la hauteur de référence sauvegardée
             newHeight = (referenceExpandedHeight != -1) ? referenceExpandedHeight : getPreferredSize().height;
-                        button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
+            button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
 
         }
 
@@ -2223,14 +2232,14 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         collapseAnimator.start();
     }
 
-    public int getGlobalComponentMargin(){
+    public int getGlobalComponentMargin() {
         return componentMargin;
     }
-    
-    public void setGlobalComponentMargin(int margin){
+
+    public void setGlobalComponentMargin(int margin) {
         this.componentMargin = margin;
     }
-    
+
     /**
      * Retourne l'état actuel du ruban.
      */
@@ -2570,30 +2579,30 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         this.iconRibbonOverflowButton = icon;
     }
 
-    public int getDefaultGroupWidth(){
+    public int getDefaultGroupWidth() {
         return DEFAULT_GROUP_WIDTH;
     }
-    
-    public void setDefaultGroupWidth(int width){
+
+    public void setDefaultGroupWidth(int width) {
         this.DEFAULT_GROUP_WIDTH = width;
     }
-    
-    public int getDefaultAbsoluteGroupWidth(){
+
+    public int getDefaultAbsoluteGroupWidth() {
         return ABSOLUTE_MIN;
     }
-    
-    public void setDefaultAbsoluteGroupWidth(int width){
+
+    public void setDefaultAbsoluteGroupWidth(int width) {
         this.ABSOLUTE_MIN = width;
     }
-    
-    public boolean getUseOnlyWidth(){
-        return UseOnlyWidth;
+
+    public boolean getUseEntireWidth() {
+        return UseEntireWidth;
     }
-    
-    public void setUseOnlyWidth(boolean UseOnlyWidth){
-        this.UseOnlyWidth = UseOnlyWidth;
+
+    public void setUseEntireWidth(boolean UseEntireWidth) {
+        this.UseEntireWidth = UseEntireWidth;
     }
-    
+
     /**
      * Installe le listener qui détecte les changements de taille du parent.
      * Déclenche un nouveau layout quand le conteneur est redimensionné.
@@ -2640,7 +2649,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             removeComponentListener(resizeListener);
         }
     }
-    
+
     /**
      * Override de removeNotify pour nettoyer les ressources. Appelé quand le
      * composant est retiré de son conteneur parent.

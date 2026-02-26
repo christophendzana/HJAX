@@ -44,12 +44,17 @@ public class HRibbonGroup {
     /**
      * Largeur actuelle du groupe en pixels, telle affichée à l'écran.
      */
-    private int width;
+    private int width = -1 ;
 
+    /**
+     * hauteur actuelle du groupe en pixels
+     */
+    private int heigth;
+    
     /**
      * Largeur préférée du groupe en pixels, utilisée pour le calcul du layout.
      */
-    private int preferredWidth;
+    private int preferredWidth = -1;
 
   /**
  * Largeur minimale du groupe en pixels.
@@ -61,7 +66,7 @@ public class HRibbonGroup {
  * Une valeur trop petite peut provoquer des chevauchements visuels
  * ou rendre les composants illisibles lors du resize adaptatif.
  */
-private int minWidth = 150;
+private int minWidth = 120;
 
     /**
      * Largeur maximale autorisée pour ce groupe. 0 = pas de maximum imposé.
@@ -86,7 +91,7 @@ private int minWidth = 150;
      * Largeur du groupe lorsqu'il est en mode COLLAPSED (JComboBox). Par défaut
      * 80 pixels.
      */
-    private int collapsedWidth = 82;
+    private int collapsedWidth = 119;
 
     /**
      * Composant affiché quand le groupe est collapsed (généralement un
@@ -166,8 +171,8 @@ private int minWidth = 150;
      * Préfix par défaut auquel sera ajouté le groupe index pour créer les
      * groupIdentifier initial par défaut
      */
-    private static String defaultGroupNamePrefix = "Groupe ";
-
+    private static String defaultGroupNamePrefix = "Groupe ";    
+    
 //    private Rectangle bound;
 
     /**
@@ -240,9 +245,6 @@ private int minWidth = 150;
 
         // 3. Index et dimensions
         this.modelIndex = modelIndex;
-        this.preferredWidth = 180;
-        this.width = this.preferredWidth;  
-//        this.bound = new Rectangle();
     }
 
     // =========================================================================
@@ -285,6 +287,11 @@ private int minWidth = 150;
     public int getWidth(){
         return width;
     }
+    
+    public int getHeigth(){
+        return heigth;
+    }
+    
     
  
 //    public void setBound( Rectangle bound ){        
@@ -414,8 +421,14 @@ private int minWidth = 150;
             this.width = newWidth;
             firePropertyChange("width", old, newWidth);
         }
+        System.out.println("la valeur à été set");
+                
     }
 
+    public void setHeigth(int newHeigth) {
+        this.heigth = newHeigth;
+    }
+    
     /**
      * Retourne la largeur préférée du groupe pour le calcul du layout.
      *
@@ -996,9 +1009,7 @@ public void setMinWidth(int minWidth) {
      */
     @Override
     public String toString() {
-        return "HRibbonGroup[identifier=" + groupIdentifier
-                + ", modelIndex=" + modelIndex
-                + ", width=" + width
+        return "HRibbonGroup[identifier=" + groupIdentifier               
                 + ", preferred=" + preferredWidth + "]";
     }
 }

@@ -63,8 +63,8 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         int collapseBtnWidth = 60; // Largeur arbitraire, à ajuster
         int collapseBtnHeight = 30;
 
-        int posX = parent.getWidth() - collapseBtnWidth - (insets != null ? insets.right : 0) - 5;
-        int posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0) - 5;
+        int posX = parent.getWidth() - collapseBtnWidth - (insets != null ? insets.right : 0);
+        int posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0);
 
         Component collapseBtn = hRibbon.getCollapseButton();
 
@@ -80,7 +80,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
             return;
         } else {            // Mode EXPANDED : bouton en bas à droite du ruban complet
 
-            posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0) - 5;
+            posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0);
 
             if (collapseBtn != null) {
                 if (collapseBtn.getParent() != hRibbon) {
@@ -100,7 +100,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         groupBoundsCache = null;
         componentsByGroupCache = null;
 
-        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5);
+        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5) - collapseBtn.getWidth()-3;
 
         int headerAlignment = hRibbon.getHeaderAlignment();
         boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
@@ -115,8 +115,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 groupMargin,
                 hRibbon.getHeaderMargin(),
                 defaultGroupWidth,
-                absoluteGroupMin,
-                hRibbon.getUseOnlyWidth()
+                absoluteGroupMin
         );
 
         int groupCount = groupModel.getGroupCount();
@@ -125,6 +124,9 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         }
 
         // ============ ÉTAPE 1 : CALCULER LES LARGEURS NORMALES ============
+        //Calcul des tailles préférées avant la distribution
+        preferredCalculator.computeAndAssignPreferredWidths(ribbon, model, groupModel, groupCount, availableWidth, ctx);
+
         int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, groupModel, availableWidth);
 
         Map<Integer, Integer> normalWidths = new HashMap<>();
@@ -165,7 +167,6 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         int ribbonHeight = preferredCalculator.computeRequiredContentHeight(
                 hRibbon, ctx, normalGroupWidths, model, groupModel
         );
-        ribbonHeight = Math.max(ribbonHeight, 1);
 
         // ============ ÉTAPE 6 : CALCUL DES RECTANGLES DE CONTENU ============
         int headerMargin = ctx.getHeaderMargin();
@@ -341,8 +342,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 groupModel.getHRibbonGroupMarggin(),
                 hRibbon.getHeaderMargin(),
                 hRibbon.getDefaultGroupWidth(),
-                hRibbon.getDefaultAbsoluteGroupWidth(),
-                hRibbon.getUseOnlyWidth()
+                hRibbon.getDefaultAbsoluteGroupWidth()
         );
 
         int[] estimatedGroupWidths = preferredCalculator.estimateGroupWidths(ribbon, groupModel, model, ctx);

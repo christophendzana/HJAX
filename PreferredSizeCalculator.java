@@ -19,7 +19,7 @@ package rubban.layout;
 
 import java.awt.Component;
 import java.awt.Dimension;
-import java.util.ArrayList;
+import java.awt.Insets;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -159,138 +159,164 @@ public class PreferredSizeCalculator {
             return 0; // Paramètres invalides → hauteur 0
         }
 
-        // OBTENTION DU NOMBRE DE GROUPES
-        int groupCount = groupModel.getGroupCount();
-        if (groupCount == 0) {
-            return 0; // Pas de groupes → hauteur 0
-        }
-
-        // EXTRACTION DES PARAMÈTRES DE CONFIGURATION
         int headerAlignment = ctx.getHeaderAlignment();
         int headerMargin = ctx.getHeaderMargin();
         int headerHeight = ribbon.getHeaderHeight();
+        Insets insets = ribbon.getInsets();
 
-        // INITIALISATION DES OUTILS ET VARIABLES
-        LineWrapper lineWrapper = new LineWrapper(); // Pour simuler le wrapping
-        int maxTotalHeight = 0; // Hauteur maximale parmi tous les groupes
-        GroupRenderer renderer = ribbon.getGroupRenderer(); // Renderer pour créer les composants
+        int heightGroup = 0;
+        
+        if (headerAlignment == Ribbon.HEADER_EAST || headerAlignment == Ribbon.HEADER_WEST) {
 
-        // BOUCLE PRINCIPALE SUR TOUS LES GROUPES
-        for (int gi = 0; gi < groupCount; gi++) {
-            // RÉCUPÉRATION DU GROUPE COURANT
-            HRibbonGroup group = groupModel.getHRibbonGroup(gi);
-            if (group == null) {
-                continue; // Groupe invalide, passer au suivant
+            for (int gi = 0; gi < groupModel.getGroupCount(); gi++) {
+                 heightGroup = ribbon.getRibbonHeight() - (insets.top + insets.bottom + headerMargin);
+                HRibbonGroup group = groupModel.getHRibbonGroup(gi);
+                group.setHeigth(heightGroup);
+                return heightGroup;                
             }
-
-            // ÉTAPE 1 : CALCUL DE LA LARGEUR TOTALE DU GROUPE
-            int totalGroupWidth = (gi < groupWidths.length) ? Math.max(0, groupWidths[gi]) : 0;
-
-            // ÉTAPE 2 : CALCUL DE LA LARGEUR DE CONTENU DISPONIBLE
-            int contentWidth = totalGroupWidth;
-
-            // AJUSTEMENT POUR LES EN-TÊTES LATÉRAUX (WEST/EAST)
-            // Les en-têtes prennent de la place sur le côté
-            if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                // Soustraire la largeur de l'en-tête
-                contentWidth = Math.max(totalGroupWidth - ctx.getHeaderWidth(), 1);
+        }else{
+            for (int gi = 0; gi < groupModel.getGroupCount(); gi++) {
+                heightGroup = ribbon.getRibbonHeight() - (insets.top + insets.bottom + headerMargin + headerHeight);
+                HRibbonGroup group = groupModel.getHRibbonGroup(gi);
+                group.setHeigth(heightGroup);
+                return heightGroup;                
             }
-
-            // ÉTAPE 3 : EXTRACTION DES PARAMÈTRES DE MISE EN PAGE DU GROUPE
-            int padding = Math.max(0, group.getPadding());        // Marge interne
-            int innerWidth = Math.max(contentWidth - padding * 2, 1); // Largeur interne disponible
-            int spacing = Math.max(0, group.getComponentMargin()); // Espacement entre composants
-
-            // ÉTAPE 4 : OBTENTION DU NOMBRE DE VALEURS DANS CE GROUPE
-            int valueCount = model.getValueCount(gi);
-
-            // CAS SPÉCIAL : GROUPE VIDE (AUCUNE VALEUR)
-            if (valueCount <= 0) {
-                // Hauteur minimale = padding haut + bas
-                int groupTotalHeight = padding * 2;
-
-                // AJOUT DE LA HAUTEUR DE L'EN-TÊTE POUR LES ALIGNEMENTS HAUT/BAS
-                if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
-                    groupTotalHeight += headerHeight + headerMargin;
-                }
-
-                // MISE À JOUR DE LA HAUTEUR MAXIMALE
-                maxTotalHeight = Math.max(maxTotalHeight, groupTotalHeight);
-                continue; // Passer au groupe suivant
-            }
-
-            // ÉTAPE 5 : COLLECTE DES DIMENSIONS PRÉFÉRÉES DE TOUTES LES VALEURS
-            List<Dimension> preferredSizes = new ArrayList<>(valueCount);
-
-            for (int pos = 0; pos < valueCount; pos++) {
-                // RÉCUPÉRATION DE LA VALEUR
-                Object value = model.getValueAt(pos, gi);
-                Dimension pref = null;
-
-                // CAS 1 : VALEUR DÉJÀ COMPOSANT
-                // La valeur est déjà un Component → utiliser directement sa preferredSize
-                if (value instanceof Component) {
-                    pref = ((Component) value).getPreferredSize();
-                } // CAS 2 : VALEUR OBJET (NÉCESSITE UN RENDERER)
-                else {
-                    // RECHERCHE DANS LE CACHE
-                    pref = measureCache.get(value);
-
-                    // NON TROUVÉ DANS LE CACHE → CALCUL
-                    if (pref == null && renderer != null) {
-                        try {
-                            // CRÉATION TEMPORAIRE DU COMPOSANT VIA LE RENDERER
-                            Component mockComponent = renderer.getGroupComponent(
-                                    ribbon, value, gi, pos, false, false
-                            );
-
-                            // EXTRACTION DE LA DIMENSION PREFÉRÉE
-                            if (mockComponent != null) {
-                                pref = mockComponent.getPreferredSize();
-                            }
-
-                        } catch (Throwable t) {
-                            // GESTION ROBUSTE DES ERREURS
-                            // En cas d'erreur dans le renderer, utiliser la dimension par défaut
-                            pref = null;
-                        }
-
-                        // UTILISATION DE LA DIMENSION PAR DÉFAUT SI ÉCHEC
-                        if (pref == null) {
-                            pref = DEFAULT_DIM;
-                        }
-
-                        // MISE EN CACHE (COPIE DÉFENSIVE)
-                        measureCache.put(value, new Dimension(pref.width, pref.height));
-                    }
-                }
-
-                // FALLBACK : DIMENSION PAR DÉFAUT SI TOUT ÉCHOUE
-                if (pref == null) {
-                    pref = DEFAULT_DIM;
-                }
-
-                // AJOUT À LA LISTE (COPIE DÉFENSIVE)
-                preferredSizes.add(new Dimension(pref.width, pref.height));
-            }
-
-            // ÉTAPE 6 : SIMULATION DU WRAPPING ET CALCUL DE HAUTEUR
-            int contentHeight = lineWrapper.computeHeightForPreferences(
-                    preferredSizes, innerWidth, spacing, padding
-            );
-
-            // ÉTAPE 7 : AJOUT DE LA HAUTEUR DE L'EN-TÊTE SI NÉCESSAIRE
-            int groupTotalHeight = contentHeight;
-            if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
-                groupTotalHeight += headerHeight + headerMargin;
-            }
-
-            // ÉTAPE 8 : MISE À JOUR DE LA HAUTEUR MAXIMALE
-            maxTotalHeight = Math.max(maxTotalHeight, groupTotalHeight);
         }
-
+    
+        return heightGroup;
+        
+        
+//        // OBTENTION DU NOMBRE DE GROUPES
+//        int groupCount = groupModel.getGroupCount();
+//        if (groupCount == 0) {
+//            return 0; // Pas de groupes → hauteur 0
+//        }
+//
+//        // EXTRACTION DES PARAMÈTRES DE CONFIGURATION
+//        int headerAlignment = ctx.getHeaderAlignment();
+//        int headerMargin = ctx.getHeaderMargin();
+//        int headerHeight = ribbon.getHeaderHeight();
+//
+//        // INITIALISATION DES OUTILS ET VARIABLES
+//        LineWrapper lineWrapper = new LineWrapper(); // Pour simuler le wrapping
+//        int maxTotalHeight = 0; // Hauteur maximale parmi tous les groupes
+//        GroupRenderer renderer = ribbon.getGroupRenderer(); // Renderer pour créer les composants
+//
+//        // BOUCLE PRINCIPALE SUR TOUS LES GROUPES
+//        for (int gi = 0; gi < groupCount; gi++) {
+//            // RÉCUPÉRATION DU GROUPE COURANT
+//            HRibbonGroup group = groupModel.getHRibbonGroup(gi);
+//            if (group == null) {
+//                continue; // Groupe invalide, passer au suivant
+//            }
+//
+//            // ÉTAPE 1 : CALCUL DE LA LARGEUR TOTALE DU GROUPE
+//            int totalGroupWidth = (gi < groupWidths.length) ? Math.max(0, groupWidths[gi]) : 0;
+//
+//            // ÉTAPE 2 : CALCUL DE LA LARGEUR DE CONTENU DISPONIBLE
+//            int contentWidth = totalGroupWidth;
+//
+//            // AJUSTEMENT POUR LES EN-TÊTES LATÉRAUX (WEST/EAST)
+//            // Les en-têtes prennent de la place sur le côté
+//            if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
+//                // Soustraire la largeur de l'en-tête
+//                contentWidth = Math.max(totalGroupWidth - ctx.getHeaderWidth(), 1);
+//            }
+//
+//            // ÉTAPE 3 : EXTRACTION DES PARAMÈTRES DE MISE EN PAGE DU GROUPE
+//            int padding = Math.max(0, group.getPadding());        // Marge interne
+//            int innerWidth = Math.max(contentWidth - padding * 2, 1); // Largeur interne disponible
+//            int spacing = Math.max(0, group.getComponentMargin()); // Espacement entre composants
+//
+//            // ÉTAPE 4 : OBTENTION DU NOMBRE DE VALEURS DANS CE GROUPE
+//            int valueCount = model.getValueCount(gi);
+//
+//            // CAS SPÉCIAL : GROUPE VIDE (AUCUNE VALEUR)
+//            if (valueCount <= 0) {
+//                // Hauteur minimale = padding haut + bas
+//                int groupTotalHeight = padding * 2;
+//
+//                // AJOUT DE LA HAUTEUR DE L'EN-TÊTE POUR LES ALIGNEMENTS HAUT/BAS
+//                if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
+//                    groupTotalHeight += headerHeight + headerMargin;
+//                }
+//
+//                // MISE À JOUR DE LA HAUTEUR MAXIMALE
+//                maxTotalHeight = Math.max(maxTotalHeight, groupTotalHeight);
+//                continue; // Passer au groupe suivant
+//            }
+//
+//            // ÉTAPE 5 : COLLECTE DES DIMENSIONS PRÉFÉRÉES DE TOUTES LES VALEURS
+//            List<Dimension> preferredSizes = new ArrayList<>(valueCount);
+//
+//            for (int pos = 0; pos < valueCount; pos++) {
+//                // RÉCUPÉRATION DE LA VALEUR
+//                Object value = model.getValueAt(pos, gi);
+//                Dimension pref = null;
+//
+//                // CAS 1 : VALEUR DÉJÀ COMPOSANT
+//                // La valeur est déjà un Component → utiliser directement sa preferredSize
+//                if (value instanceof Component) {
+//                    pref = ((Component) value).getPreferredSize();
+//                } // CAS 2 : VALEUR OBJET (NÉCESSITE UN RENDERER)
+//                else {
+//                    // RECHERCHE DANS LE CACHE
+//                    pref = measureCache.get(value);
+//
+//                    // NON TROUVÉ DANS LE CACHE → CALCUL
+//                    if (pref == null && renderer != null) {
+//                        try {
+//                            // CRÉATION TEMPORAIRE DU COMPOSANT VIA LE RENDERER
+//                            Component mockComponent = renderer.getGroupComponent(
+//                                    ribbon, value, gi, pos, false, false
+//                            );
+//
+//                            // EXTRACTION DE LA DIMENSION PREFÉRÉE
+//                            if (mockComponent != null) {
+//                                pref = mockComponent.getPreferredSize();
+//                            }
+//
+//                        } catch (Throwable t) {
+//                            // GESTION ROBUSTE DES ERREURS
+//                            // En cas d'erreur dans le renderer, utiliser la dimension par défaut
+//                            pref = null;
+//                        }
+//
+//                        // UTILISATION DE LA DIMENSION PAR DÉFAUT SI ÉCHEC
+//                        if (pref == null) {
+//                            pref = DEFAULT_DIM;
+//                        }
+//
+//                        // MISE EN CACHE (COPIE DÉFENSIVE)
+//                        measureCache.put(value, new Dimension(pref.width, pref.height));
+//                    }
+//                }
+//
+//                // FALLBACK : DIMENSION PAR DÉFAUT SI TOUT ÉCHOUE
+//                if (pref == null) {
+//                    pref = DEFAULT_DIM;
+//                }
+//
+//                // AJOUT À LA LISTE (COPIE DÉFENSIVE)
+//                preferredSizes.add(new Dimension(pref.width, pref.height));
+//            }
+//
+//            // ÉTAPE 6 : SIMULATION DU WRAPPING ET CALCUL DE HAUTEUR
+//            int contentHeight = lineWrapper.computeHeightForPreferences(
+//                    preferredSizes, innerWidth, spacing, padding
+//            );
+//
+//            // ÉTAPE 7 : AJOUT DE LA HAUTEUR DE L'EN-TÊTE SI NÉCESSAIRE
+//            int groupTotalHeight = contentHeight;
+//            if (headerAlignment == Ribbon.HEADER_NORTH || headerAlignment == Ribbon.HEADER_SOUTH) {
+//                groupTotalHeight += headerHeight + headerMargin;
+//            }
+//
+//            // ÉTAPE 8 : MISE À JOUR DE LA HAUTEUR MAXIMALE
+//            maxTotalHeight = Math.max(maxTotalHeight, groupTotalHeight);
+//        }
         // ÉTAPE 9 : RETOUR DE LA HAUTEUR MAXIMALE (GARANTIE NON-NÉGATIVE)
-        return Math.max(0, maxTotalHeight);
+//        return Math.max(0, maxTotalHeight);
     }
 
     /**
@@ -312,7 +338,7 @@ public class PreferredSizeCalculator {
      */
     public int[] estimateGroupWidths(Ribbon ribbon,
             HRibbonGroupModel groupModel,
-            HRibbonModel model,            
+            HRibbonModel model,
             HRibbonLayoutContext ctx) {
 
         int[] estimatedWidths = new int[groupModel.getGroupCount()];
@@ -323,17 +349,9 @@ public class PreferredSizeCalculator {
         // Hors EDT : on ne peut pas appeler getPreferredSize() sur des composants Swing.
         // On retourne une estimation mais thread-safe.
         if (!SwingUtilities.isEventDispatchThread()) {
-            for (int i = 0; i < groupModel.getGroupCount(); i++) {
-                HRibbonGroup g = groupModel.getHRibbonGroup(i);
-                int gw = (g != null && g.getPreferredWidth() > 0)
-                        ? g.getPreferredWidth() : ribbon.getDefaultGroupWidth();
-                if (headerAlignment == Ribbon.HEADER_WEST
-                        || headerAlignment == Ribbon.HEADER_EAST) {
-                    gw += headerWidth;
-                }
-                estimatedWidths[i] = Math.max(gw, 20);
-            }
-            return estimatedWidths;
+             throw new IllegalStateException(
+                    "PreferredSizeCalculator.estimateGroupWidths must be called on the EDT"
+            );
         }
 
         // Sur EDT : calcul précis par sommation des composants
@@ -352,8 +370,8 @@ public class PreferredSizeCalculator {
             }
 
             // Priorité 2 : calculer depuis les composants du modèle
-            int padding = (group != null) ? Math.max(0, group.getPadding()) : 2;
-            int spacing = (group != null) ? Math.max(0, group.getComponentMargin()) : 2;
+            int padding = (group != null) ? Math.max(0, group.getPadding()) : 0;
+            int spacing = (group != null) ? Math.max(0, group.getComponentMargin()) : 0;
             int valueCount = model.getValueCount(i);
             int totalWidth = 0;
 
@@ -492,9 +510,7 @@ public class PreferredSizeCalculator {
             }
 
             // Largeur naturelle = somme composants + marges entre eux + padding
-            double ln = sommeLargeurs
-                    + (valueCount > 1 ? (valueCount - 1) * compMargin : 0)
-                    + padding * 2;
+            double ln = sommeLargeurs + (valueCount > 1 ? (valueCount - 1) * compMargin : 0) + padding * 2;
 
             // Ajouter la largeur du header latéral si applicable
             if (headerAlignment == Ribbon.HEADER_WEST
@@ -543,6 +559,7 @@ public class PreferredSizeCalculator {
             int pw = (int) Math.round(espaceNet * poids[i]);
             pw = Math.max(pw, 30);
             group.setPreferredWidth(pw);
+            System.out.println(group.toString());
         }
     }
 

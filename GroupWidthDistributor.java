@@ -50,18 +50,6 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
     // =========================================================================
     // VARIABLE D'INSTANCE
     // =========================================================================
-    /**
-     * Indicateur de mode de distribution égale
-     *
-     * VALEURS : - true : Tous les groupes ont la même largeur (répartition
-     * uniforme) - false : Largeurs proportionnelles aux besoins (mode
-     * intelligent)
-     *
-     * VOLATILE : Garantit la visibilité des modifications entre threads (bien
-     * que Swing soit principalement single-threaded, c'est une bonne pratique)
-     */
-    private volatile boolean equalDistribution = false;
-
     // =========================================================================
     // CONSTRUCTEUR
     // =========================================================================
@@ -99,173 +87,211 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
      * élément représente la largeur totale allouée au groupe correspondant
      * (inclut l'espace pour l'en-tête si alignement WEST/EAST)
      *
-     * Aucune exception levée, retourne un tableau vide pour les cas
-     * invalides
+     * Aucune exception levée, retourne un tableau vide pour les cas invalides
      */
     @Override
     public int[] distributeWidths(HRibbonLayoutContext ctx,
             HRibbonGroupModel groupModel,
             int availableWidth) {
-        // ÉTAPE 1 : VÉRIFICATION DES PARAMÈTRES D'ENTRÉE
+
+        // =========================================================================
+        // ÉTAPE 1 : VALIDATION DES PARAMÈTRES
+        // =========================================================================
+        // Vérifie que le modèle des groupes existe.
+        // Sans modèle → aucun groupe → aucun calcul possible.
         if (groupModel == null) {
-            return new int[0]; // Pas de modèle -> pas de groupes
+            return new int[0];
         }
 
+        // Récupération du nombre total de groupes à distribuer.
         final int groupCount = groupModel.getGroupCount();
-        if (groupCount == 0) {
-            return new int[0]; // Modèle vide -> pas de groupes
+
+        // Si aucun groupe n'est présent, retourner un tableau vide.
+        if (groupCount <= 0) {
+            return new int[0];
         }
 
-        // ÉTAPE 2 : INITIALISATION DES RÉSULTATS
+        // Tableau résultat : largeur finale attribuée à chaque groupe.
         int[] finalWidths = new int[groupCount];
 
-        // ÉTAPE 3 : EXTRACTION DES PARAMÈTRES DE CONFIGURATION
+        // =========================================================================
+        // ÉTAPE 2 : EXTRACTION DU CONTEXTE
+        // =========================================================================
+        // Récupération sécurisée des paramètres du contexte.
+        // Si ctx est null, on applique des valeurs par défaut raisonnables.
         int headerAlignment = (ctx != null) ? ctx.getHeaderAlignment() : Ribbon.HEADER_NORTH;
         int headerWidth = (ctx != null) ? ctx.getHeaderWidth() : 0;
         int groupMargin = (ctx != null) ? ctx.getGroupMargin() : 0;
+        int defaultWidth = (ctx != null) ? ctx.getDefautlGroupWidth() : 150;
+        int absoluteMin = (ctx != null) ? ctx.getAbsoluteGroupMin() : 1;
 
-        // ÉTAPE 4 : CALCUL DE L'ESPACE DISPONIBLE POUR LES GROUPES
-        // Soustraction des marges inter-groupes
-        int totalMargin = groupMargin * Math.max(0, groupCount - 1);
-        int widthForGroups = Math.max(availableWidth - totalMargin, 0);
+        // Calcul de la largeur totale occupée par les marges inter-groupes.
+        // Exemple : 4 groupes → 3 marges.
+        int totalMargins = groupMargin * Math.max(0, groupCount - 1);
 
-        // ÉTAPE 5 : DÉTERMINATION DU MODE DE DISTRIBUTION       
-        // =====================================================================
-        // MODE DE DISTRIBUTION INTELLIGENTE (PROPORTIONNELLE)
-        // =====================================================================
-        // SOUS-ÉTAPE 5.1 : CALCUL DES LARGEURS DEMANDÉES PAR CHAQUE GROUPE
-        int totalRequestedWidth = 0; // Somme de toutes les largeurs demandées
-        int[] requestedWidths = new int[groupCount]; // Largeurs demandées par groupe
-        boolean[] isFixed = new boolean[groupCount]; // Indicateur "largeur fixe"
+        // Largeur réellement disponible pour les groupes eux-mêmes.
+        // On soustrait les marges et on garantit une valeur ≥ 0.
+        int widthForGroups = Math.max(availableWidth - totalMargins, 0);
+
+        // =========================================================================
+        // ÉTAPE 3 : CLASSIFICATION DES GROUPES (FIXED / PREFERRED / DEFAULT)
+        // =========================================================================
+        // Pour chaque groupe, on détermine sa largeur "demandée"
+        // selon la hiérarchie suivante :
+        // 1. width explicite
+        // 2. preferredWidth
+        // 3. largeur par défaut
+        int[] requested = new int[groupCount];
+
+        boolean[] isFixed = new boolean[groupCount];   // width explicite
+        boolean[] isPreferred = new boolean[groupCount];   // preferredWidth
+        boolean[] isDefault = new boolean[groupCount];   // largeur par défaut
+
+        int totalRequested = 0; // Somme totale des largeurs demandées
 
         for (int i = 0; i < groupCount; i++) {
+
             HRibbonGroup group = groupModel.getHRibbonGroup(i);
-            int req; // Largeur demandée pour ce groupe
+            int req; // largeur demandée pour ce groupe
 
             if (group != null) {
-                // HIÉRARCHIE DES PRIORITÉS POUR LA LARGEUR DEMANDÉE
-                if (group.getWidth() > 0) {
-                    // PRIORITÉ 1 : Largeur explicite définie
-                    req = group.getWidth();
-                    isFixed[i] = true; // Marqué comme "fixe" donc prioritaire
 
-                } else if (group.getPreferredWidth() > 0) {
-                    // PRIORITÉ 2 : Largeur préférée
+                if (group.getWidth() != -1) {
+                    // PRIORITÉ 1 : largeur fixée explicitement par l'utilisateur
+                    req = group.getWidth();
+                    isFixed[i] = true;
+
+                } else if (group.getPreferredWidth() != -1) {
+                    // PRIORITÉ 2 : largeur préférée calculée ou définie
                     req = group.getPreferredWidth();
-                    isFixed[i] = false; // Flexible (peut être ajustée)
+                    isPreferred[i] = true;
 
                 } else {
-                    // PRIORITÉ 3 : Largeur par défaut
-                    req = ctx.getDefautlGroupWidth();
-                    isFixed[i] = false; // Flexible
+                    // PRIORITÉ 3 : largeur par défaut du ruban
+                    req = defaultWidth;
+                    isDefault[i] = true;
                 }
 
-                // AJUSTEMENT POUR LES EN-TÊTES LATÉRAUX (WEST/EAST)
-                // Les en-têtes à gauche/droite prennent de la place dans la largeur du groupe
-                if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
-                    req += headerWidth; // Ajouter l'espace nécessaire à l'en-tête
-                }
-
-                // GARANTIR UN MINIMUM ABSOLU
-                requestedWidths[i] = Math.max(req, ctx.getAbsoluteGroupMin());
-
-            } else {                
-                requestedWidths[i] = Math.max(ctx.getDefautlGroupWidth(), ctx.getAbsoluteGroupMin());
-                isFixed[i] = false; // Flexible par défaut
+            } else {
+                // Groupe null → fallback sur largeur par défaut
+                req = defaultWidth;
+                isDefault[i] = true;
             }
-            // MISE À JOUR DE LA SOMME TOTALE
-            totalRequestedWidth += requestedWidths[i];
+
+            // Si le header est positionné à gauche ou à droite,
+            // il consomme de la largeur dans le groupe.
+            if (headerAlignment == Ribbon.HEADER_WEST
+                    || headerAlignment == Ribbon.HEADER_EAST) {
+                req += headerWidth;
+            }
+
+            // Sécurisation : aucun groupe ne descend sous le minimum absolu.
+            requested[i] = Math.max(req, absoluteMin);
+
+            // Accumulation pour comparer avec l'espace disponible.
+            totalRequested += requested[i];
         }
 
-        // SOUS-ÉTAPE 5.2 : DÉTERMINATION DU SCÉNARIO (ESPACE SUFFISANT OU NON)
-        if (totalRequestedWidth <= widthForGroups) {
-            // SCÉNARIO 1 : ESPACE SUFFISANT POUR TOUTES LES DEMANDES
-            // Copier les largeurs demandées comme base
-            System.arraycopy(requestedWidths, 0, finalWidths, 0, groupCount);
+        // =========================================================================
+        // ÉTAPE 4 : SCÉNARIO 1 — ESPACE SUFFISANT
+        // =========================================================================
+        // Si la somme des largeurs demandées tient dans l'espace disponible,
+        // on distribue normalement, avec éventuellement redistribution du surplus.
+        if (totalRequested <= widthForGroups) {
 
-            if (ctx.getUseOnlywidth()) { // Utilisation de toute la lageur disponible activée
-                
-            //DISTRIBUTION DE L'ESPACE RESTANT AUX GROUPES FLEXIBLES
-            int remainingSpace = widthForGroups - totalRequestedWidth;
+            // Base : on copie les largeurs demandées telles quelles.
+            System.arraycopy(requested, 0, finalWidths, 0, groupCount);
+
+            // Calcul du surplus d'espace restant à distribuer.
+            int remaining = widthForGroups - totalRequested;
+
+            // Le surplus ne doit être distribué qu'aux groupes non FIXED.
             int flexibleCount = 0;
-
-            // Compter les groupes flexibles (non-fixes)
             for (int i = 0; i < groupCount; i++) {
                 if (!isFixed[i]) {
                     flexibleCount++;
                 }
             }
 
-            // Répartition équitable de l'espace restant entre les groupes flexibles
-            if (flexibleCount > 0 && remainingSpace > 0) {
-                int extraPerGroup = remainingSpace / flexibleCount;
+            if (flexibleCount > 0) {
+
+                // Distribution uniforme du surplus.
+                int extraPerGroup = remaining / flexibleCount;
+
+                // Pixels restants dus aux divisions entières.
+                int remainder = remaining % flexibleCount;
 
                 for (int i = 0; i < groupCount; i++) {
                     if (!isFixed[i]) {
+
                         finalWidths[i] += extraPerGroup;
+
+                        // Répartition du reste pixel par pixel
+                        if (remainder > 0) {
+                            finalWidths[i]++;
+                            remainder--;
+                        }
                     }
                 }
             }
-                
-            } 
-            
-        } else {
-            // SCÉNARIO 2 : ESPACE INSUFFISANT → RÉDUCTION INTELLIGENTE
-            // Calculer l'espace occupé par les groupes fixes vs flexibles
-            int fixedSpace = 0;   // Espace réservé aux groupes fixes
-            int flexibleSpace = 0; // Espace demandé par les groupes flexibles
+        } // =========================================================================
+        // ÉTAPE 5 : SCÉNARIO 2 — RÉDUCTION (PRIORITÉ RESPECTÉE)
+        // =========================================================================
+        else {
+
+            // 1️⃣ On réserve d'abord l'espace des groupes FIXED.
+            int fixedSpace = 0;
 
             for (int i = 0; i < groupCount; i++) {
                 if (isFixed[i]) {
-                    fixedSpace += requestedWidths[i];
-                } else {
-                    flexibleSpace += requestedWidths[i];
+                    finalWidths[i] = requested[i];
+                    fixedSpace += requested[i];
                 }
             }
 
-            // Calculer l'espace disponible pour les groupes flexibles
-            int availableForFlexible = Math.max(widthForGroups - fixedSpace, 0);
+            // Espace restant pour les autres catégories.
+            int remaining = Math.max(widthForGroups - fixedSpace, 0);
 
-            // RÉPARTITION PROPORTIONNELLE POUR LES GROUPES FLEXIBLES
-            for (int i = 0; i < groupCount; i++) {
-                if (isFixed[i]) {
-                    // Groupes fixes : conserver leur largeur demandée
-                    finalWidths[i] = requestedWidths[i];
+            // 2️⃣ Réduction des groupes DEFAULT en premier
+            remaining = reduceCategory(
+                    remaining,
+                    requested,
+                    finalWidths,
+                    isDefault,
+                    absoluteMin
+            );
 
-                } else {
-                    // Groupes flexibles : réduction proportionnelle
-                    if (flexibleSpace > 0) {
-                        // Calcul du ratio de réduction pour ce groupe
-                        float ratio = (float) requestedWidths[i] / (float) flexibleSpace;
-
-                        // Application proportionnelle de l'espace disponible
-                        finalWidths[i] = Math.max((int) (availableForFlexible * ratio), ctx.getAbsoluteGroupMin());
-
-                    } else {
-                        // Cas limite : pas d'espace flexible demandé
-                        finalWidths[i] = ctx.getAbsoluteGroupMin();
-                    }
-                }
-            }
+            // 3️⃣ Si nécessaire, réduction des groupes PREFERRED
+            remaining = reduceCategory(
+                    remaining,
+                    requested,
+                    finalWidths,
+                    isPreferred,
+                    absoluteMin
+            );
         }
 
-        // ÉTAPE 6 : APPLICATION DES CONTRAINTES MIN/MAX PAR GROUPE
+        // =========================================================================
+        // ÉTAPE 6 : APPLICATION DES CONTRAINTES MIN / MAX
+        // =========================================================================
+        // Chaque groupe peut définir ses propres contraintes supplémentaires.
         for (int i = 0; i < groupCount; i++) {
+
             HRibbonGroup group = groupModel.getHRibbonGroup(i);
 
+            // Sécurisation minimale si groupe null
             if (group == null) {
-                // Groupe null : garantir le minimum absolu
-                finalWidths[i] = Math.max(finalWidths[i], ctx.getAbsoluteGroupMin());
+                finalWidths[i] = Math.max(finalWidths[i], absoluteMin);
                 continue;
             }
 
-            // EXTRACTION DES CONTRAINTES DU GROUPE
-            int minW = group.getMinWidth();  // Largeur minimale configurée
-            int maxW = group.getMaxWidth();  // Largeur maximale configurée
+            int minW = group.getMinWidth();
+            int maxW = group.getMaxWidth();
 
-            // AJUSTEMENT POUR LES EN-TÊTES LATÉRAUX
-            // Les contraintes min/max doivent inclure l'espace de l'en-tête
-            if (headerAlignment == Ribbon.HEADER_WEST || headerAlignment == Ribbon.HEADER_EAST) {
+            // Si header latéral, il influence aussi les contraintes.
+            if (headerAlignment == Ribbon.HEADER_WEST
+                    || headerAlignment == Ribbon.HEADER_EAST) {
+
                 if (minW > 0) {
                     minW += headerWidth;
                 }
@@ -274,21 +300,119 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
                 }
             }
 
-            // APPLICATION DE LA CONTRAINTE MINIMALE
+            // Application stricte des contraintes.
             if (minW > 0) {
                 finalWidths[i] = Math.max(finalWidths[i], minW);
             }
-
-            // APPLICATION DE LA CONTRAINTE MAXIMALE
             if (maxW > 0) {
                 finalWidths[i] = Math.min(finalWidths[i], maxW);
             }
 
-            // GARANTIE DE SÉCURITÉ : MINIMUM ABSOLU
-            finalWidths[i] = Math.max(finalWidths[i], ctx.getAbsoluteGroupMin());
+            // Garantie ultime de sécurité.
+            finalWidths[i] = Math.max(finalWidths[i], absoluteMin);
         }
 
-        // ÉTAPE 7 : RETOUR DES LARGEURS CALCULÉES
+        // =========================================================================
+        // ÉTAPE 7 : CORRECTION FINALE DU DELTA (ARRONDIS)
+        // =========================================================================
+        // À cause des divisions entières, il peut rester un écart
+        // entre la somme réelle et widthForGroups.
+        int used = 0;
+        for (int w : finalWidths) {
+            used += w;
+        }
+
+        int delta = widthForGroups - used;
+
+        if (delta != 0) {
+
+            // Correction appliquée sur le dernier groupe non FIXED
+            // pour conserver la priorité hiérarchique.
+            for (int i = groupCount - 1; i >= 0; i--) {
+                if (!isFixed[i]) {
+                    finalWidths[i] += delta;
+                    break;
+                }
+            }
+        }
+
         return finalWidths;
     }
+
+    /**
+     * Réduction proportionnelle d'une catégorie (DEFAULT ou PREFERRED) Respecte
+     * une largeur minimale absolue.
+     */
+    private int reduceCategory(int available,
+            int[] requested,
+            int[] result,
+            boolean[] mask,
+            int absoluteMin) {
+
+        // =========================================================================
+        // ÉTAPE 1 : CALCUL DU TOTAL DES LARGEURS DEMANDÉES POUR CETTE CATÉGORIE
+        // =========================================================================
+        // On additionne uniquement les largeurs des groupes appartenant
+        // à la catégorie ciblée (DEFAULT ou PREFERRED selon le masque).
+        // Cela servira de base pour une redistribution proportionnelle.
+        int totalCategoryRequest = 0;
+
+        for (int i = 0; i < requested.length; i++) {
+            if (mask[i]) {
+                totalCategoryRequest += requested[i];
+            }
+        }
+
+        // =========================================================================
+        // ÉTAPE 2 : CAS DÉGÉNÉRÉ
+        // =========================================================================
+        // Si aucune largeur n’est demandée dans cette catégorie,
+        // il n’y a rien à redistribuer.
+        // On retourne donc l’espace disponible inchangé.
+        if (totalCategoryRequest <= 0) {
+            return available;
+        }
+
+        // =========================================================================
+        // ÉTAPE 3 : REDISTRIBUTION PROPORTIONNELLE
+        // =========================================================================
+        // Chaque groupe de la catégorie reçoit une part de l’espace disponible
+        // proportionnelle à sa demande initiale.
+        //
+        // Formule :
+        //    ratio = requested[i] / totalCategoryRequest
+        //    allocated = available * ratio
+        //
+        // Cela garantit :
+        //  - conservation des proportions relatives
+        //  - respect de la hiérarchie globale (DEFAULT puis PREFERRED)
+        for (int i = 0; i < requested.length; i++) {
+
+            // On ignore les groupes qui ne font pas partie de la catégorie
+            if (!mask[i]) {
+                continue;
+            }
+
+            // Calcul du poids relatif du groupe dans la catégorie
+            float ratio = (float) requested[i] / (float) totalCategoryRequest;
+
+            // Allocation proportionnelle de l’espace disponible
+            int allocated = (int) (available * ratio);
+
+            // Sécurité : on ne descend jamais sous la largeur minimale absolue
+            result[i] = Math.max(allocated, absoluteMin);
+        }
+
+        // =========================================================================
+        // ÉTAPE 4 : ESPACE CONSOMMÉ
+        // =========================================================================
+        // Toute la largeur disponible est considérée comme consommée
+        // par cette catégorie : Les arrondis peuvent créer
+        // un léger écart: A corrigé plus tard.
+        //
+        // On retourne donc 0 pour indiquer qu'il ne reste plus d'espace
+        // à redistribuer aux catégories suivantes.
+        return 0;
+    }
+
 }
