@@ -213,9 +213,8 @@ public List<ResizeAction> calculateResizeActions(
                 // Groupe réduit : il prend sa largeur "collapsed"
                 currentTotalWidth += group.getCollapsedWidth();
             } else {
-                // Groupe normal : il prend sa largeur normale (celle du layout)
-                Integer normalWidth = normalWidths.get(i);
-                currentTotalWidth += (normalWidth != null) ? normalWidth : group.getPreferredWidth();
+                // Groupe normal : il prend sa largeur normale (celle du layout)                
+                currentTotalWidth += (normalWidths.get(i) != null) ? normalWidths.get(i) : group.getPreferredWidth();
             }
             
             // Ajouter la marge après chaque groupe SAUF le dernier
@@ -234,120 +233,86 @@ public List<ResizeAction> calculateResizeActions(
     // 3. availableWidth == currentTotalWidth → Rien à faire
     // =========================================================================
     
-    // =========================================================================
-    // CAS 1 : RÉDUCTION NÉCESSAIRE (on manque d'espace)
-    // =========================================================================
-    if (availableWidth < currentTotalWidth) {
+    // CAS 1 : RÉDUCTION NÉCESSAIRE
+// Vérifier si au moins un groupe a besoin d'être collapsé
+// Calculer la somme des minWidth de tous les groupes normaux + collapsed
+int totalMinWidth = 0;
+for (int i = 0; i < groupModel.getGroupCount(); i++) {
+    HRibbonGroup group = groupModel.getHRibbonGroup(i);
+    if (group == null) continue;
+    if (group.isCollapsed()) {
+        totalMinWidth += group.getCollapsedWidth();
+    } else {
+        totalMinWidth += group.getMinWidth();
+    }
+    if (i < groupModel.getGroupCount() - 1) {
+        totalMinWidth += groupMargin;
+    }
+//    System.out.println("Groupe " + i 
+//        + " | minWidth=" + group.getMinWidth()
+//        + " | isCollapsed=" + group.isCollapsed()
+//        + " | contribution=" + (group.isCollapsed() ? group.getCollapsedWidth() : group.getMinWidth()));
+}
+//System.out.println("availableWidth=" + availableWidth 
+//    + " | totalMinWidth=" + totalMinWidth
+//    + " | needsCollapse=" + (totalMinWidth > availableWidth));
+
+boolean needsCollapse = totalMinWidth > availableWidth;
+
+if (needsCollapse) {
+    
+    // On part de la largeur réelle actuelle, pas de totalMinWidth
+    int workingWidth = currentTotalWidth;
+    
+    for (int i = groupModel.getGroupCount() - 1; i >= 0; i--) {
+        if (workingWidth <= availableWidth) break;
         
-        // On va simuler l'espace qu'on aurait après chaque collapse
-        // workingWidth = largeur totale APRÈS avoir appliqué les collapses qu'on décide de faire
-        int workingWidth = currentTotalWidth;
+        HRibbonGroup group = groupModel.getHRibbonGroup(i);
+        if (group == null || group.isCollapsed()) continue;
         
-        // Tant qu'on a pas assez réduit (workingWidth > availableWidth)
-        // et qu'il reste des groupes à collapser
-        while (workingWidth > availableWidth) {
-            
-            // Chercher le prochain groupe à collapser (le plus à droite en mode NORMAL)
-            int groupToCollapse = findNextGroupToCollapse(groupModel);
-            
-            // Si plus aucun groupe à collapser, on arrête
-            if (groupToCollapse == -1) {
-                break;
-            }
-            
-            // Récupérer le groupe concerné
-            HRibbonGroup group = groupModel.getHRibbonGroup(groupToCollapse);
-            
-            // Récupérer ses largeurs avant/après collapse
-            Integer normalWidth = normalWidths.get(groupToCollapse);
-            int widthBeforeCollapse = (normalWidth != null) ? normalWidth : group.getPreferredWidth();
-            int widthAfterCollapse = group.getCollapsedWidth();
-            
-            // Calculer la nouvelle largeur totale SI on collapse ce groupe
-            int newWorkingWidth = workingWidth - widthBeforeCollapse + widthAfterCollapse;
-            
-            // Vérifier que ça nous rapproche de l'objectif (normalement oui)
-            if (newWorkingWidth < workingWidth) {
-                // Ajouter l'action à notre liste
-                actions.add(new ResizeAction(groupToCollapse, true));  // true = collapse
-                
-                // Mettre à jour la largeur de travail pour la prochaine itération
-                workingWidth = newWorkingWidth;
-                
-                // Pour la simulation, on marque temporairement le groupe comme collapsed
-                // (sinon findNextGroupToCollapse le trouverait encore au prochain tour)
-                group.setCurrentLevel(CollapseLevel.COLLAPSED);
-            } else {
-                // Cas improbable : le collapse n'a pas réduit la largeur
-                break;
-            }
-        }
+        // Largeur normale allouée à ce groupe
+        Integer normalWidth = normalWidths.get(i);
+        int allocatedWidth = (normalWidth != null) ? normalWidth : group.getPreferredWidth();
         
-        // IMPORTANT : Restaurer les états des groupes après la simulation
-        // Sinon les groupes resteraient marqués comme collapsed
-        for (ResizeAction action : actions) {
-            HRibbonGroup group = groupModel.getHRibbonGroup(action.getGroupIndex());
-            if (group != null && action.isCollapse()) {
-                group.setCurrentLevel(CollapseLevel.NORMAL);
-            }
+        // En collapsant ce groupe, on perd allocatedWidth et on gagne collapsedWidth
+        actions.add(new ResizeAction(i, true));
+        workingWidth = workingWidth - allocatedWidth + group.getCollapsedWidth();
+    }
+    
+}
+// CAS 2 : EXPANSION POSSIBLE (seulement si pas de collapse nécessaire)
+else {
+    int workingWidth = currentTotalWidth;
+    
+    while (true) {
+        int groupToExpand = findNextGroupToExpand(groupModel);
+        if (groupToExpand == -1) break;
+        
+        HRibbonGroup group = groupModel.getHRibbonGroup(groupToExpand);
+        Integer normalWidth = normalWidths.get(groupToExpand);
+        int widthAfterExpand = (normalWidth != null) ? normalWidth : group.getPreferredWidth();
+        int widthBeforeExpand = group.getCollapsedWidth();
+        
+        int newWorkingWidth = workingWidth - widthBeforeExpand + widthAfterExpand;
+        if (newWorkingWidth <= availableWidth) {
+            actions.add(new ResizeAction(groupToExpand, false));
+            workingWidth = newWorkingWidth;
+            group.setCurrentLevel(CollapseLevel.NORMAL);
+        } else {
+            break;
         }
     }
     
-    // =========================================================================
-    // CAS 2 : EXPANSION POSSIBLE (on a de l'espace en trop)
-    // =========================================================================
-    else if (availableWidth > currentTotalWidth) {
-        
-        // On va simuler l'espace qu'on aurait après chaque expand
-        int workingWidth = currentTotalWidth;
-        
-        // Tant qu'on peut ajouter de l'espace sans dépasser la limite
-        while (true) {
-            
-            // Chercher le prochain groupe à expandre (le plus à gauche en mode COLLAPSED)
-            int groupToExpand = findNextGroupToExpand(groupModel);
-            
-            // Si plus aucun groupe à expandre, on arrête
-            if (groupToExpand == -1) {
-                break;
-            }
-            
-            // Récupérer le groupe concerné
-            HRibbonGroup group = groupModel.getHRibbonGroup(groupToExpand);
-            
-            // Récupérer ses largeurs avant/après expand
-            int widthBeforeExpand = group.getCollapsedWidth();
-            Integer normalWidth = normalWidths.get(groupToExpand);
-            int widthAfterExpand = (normalWidth != null) ? normalWidth : group.getPreferredWidth();
-            
-            // Calculer la nouvelle largeur totale SI on expand ce groupe
-            int newWorkingWidth = workingWidth - widthBeforeExpand + widthAfterExpand;
-            
-            // Vérifier qu'on ne dépasse PAS l'espace disponible
-            if (newWorkingWidth <= availableWidth) {
-                // On peut expandre sans dépasser
-                actions.add(new ResizeAction(groupToExpand, false));  // false = expand
-                
-                // Mettre à jour la largeur de travail
-                workingWidth = newWorkingWidth;
-                
-                // Pour la simulation, on marque temporairement comme normal
-                group.setCurrentLevel(CollapseLevel.NORMAL);
-            } else {
-                // ExpandRE ce groupe nous ferait dépasser l'espace dispo → on arrête
-                break;
-            }
-        }
-        
-        // IMPORTANT : Restaurer les états des groupes après la simulation
-        for (ResizeAction action : actions) {
+    for (ResizeAction action : actions) {
+        if (action.isExpand()) {
             HRibbonGroup group = groupModel.getHRibbonGroup(action.getGroupIndex());
-            if (group != null && action.isExpand()) {
-                group.setCurrentLevel(CollapseLevel.COLLAPSED);
-            }
+            if (group != null) group.setCurrentLevel(CollapseLevel.COLLAPSED);
         }
     }
+}
     
+//    System.out.println("availableWidth=" + availableWidth 
+//    + " | currentTotalWidth=" + currentTotalWidth);
     // Si availableWidth == currentTotalWidth, on ne fait rien (actions reste vide)
     
     return actions;

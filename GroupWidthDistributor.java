@@ -67,17 +67,14 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
         // equalDistribution initialisé à false par défaut
     }
 
-    // =========================================================================
-    // IMPLÉMENTATION DE L'INTERFACE IGroupWidthDistributor
-    // =========================================================================
     /**
      * Distribue les largeurs disponibles entre tous les groupes du ruban
      *
-     * ALGORITHME GÉNÉRAL : 1.Vérifier les paramètres d'entrée (null, groupes
- vides) 2. Calculer l'espace disponible après soustraction des marges 3.
- Choisir le mode de distribution (égal vs intelligent) 4. Appliquer
- l'algorithme de distribution correspondant 5. Appliquer les contraintes
- min/max de chaque groupe 6. Garantir des largeurs minimales raisonnables
+     * ALGORITHME GÉNÉRAL : 1. Vérifier les paramètres d'entrée (null, groupes
+     * vides) 2. Calculer l'espace disponible après soustraction des marges 3.
+     * Choisir le mode de distribution (égal vs intelligent) 4. Appliquer
+     * l'algorithme de distribution correspondant 5. Appliquer les contraintes
+     * min/max de chaque groupe 6. Garantir des largeurs minimales raisonnables
      *
      * @param ctx Contexte de layout contenant : - Alignement des en-têtes
      * (headerAlignment) - Largeur des en-têtes (headerWidth) - Marge entre
@@ -91,398 +88,477 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
      *
      * Aucune exception levée, retourne un tableau vide pour les cas invalides
      */
-    
     @Override
-public int[] distributeWidths(HRibbonLayoutContext ctx,
-                              Ribbon ribbon,
-                              int availableWidth) {
+    public int[] distributeWidths(HRibbonLayoutContext ctx,
+            Ribbon ribbon,
+            int availableWidth, boolean useEntireSpace) {
 
-    // =========================================================================
-    // ÉTAPE 1 : VALIDATION DES PARAMÈTRES
-    // =========================================================================
+        // =========================================================================
+        // ÉTAPE 1 : VALIDATION DES PARAMÈTRES
+        // =========================================================================
+        // Objectif : Vérifier que tout ce dont on a besoin existe
+        // Si un élément critique est manquant, on retourne un tableau vide
+        // plutôt que de planter (robustesse)
+        if (ribbon == null) {
+            return new int[0];  // Pas de ruban = pas de distribution possible
+        }
 
-    if (ribbon == null) {
-        return new int[0];
-    }
+        // Récupération du modèle de groupes (contient la liste des groupes)
+        HRibbonGroupModel groupModel = ribbon.getGroupModel();
+        // Récupération du modèle de données (contient les composants)
+        HRibbonModel model = ribbon.getModel();
 
-    HRibbonGroupModel groupModel = ribbon.getGroupModel();
-    HRibbonModel model = ribbon.getModel();
+        final int groupCount = groupModel.getGroupCount();
 
-    if (groupModel == null) {
-        return new int[0];
-    }
+        if (groupModel == null) {
+            return new int[0];  // Pas de modèle de groupes = pas de distribution
+        }
+        if (groupCount <= 0) {
+            return new int[0];  // Aucun groupe à distribuer
+        }
+        // On calcul la largeur minimale nécessaire pour afficher tous les 
+        //composants d'un groupe sans débordement
+        LineWrapper lineWrapper = new LineWrapper();
 
-    final int groupCount = groupModel.getGroupCount();
+        int[] dynamicMin = new int[groupCount];
 
-    if (groupCount <= 0) {
-        return new int[0];
-    }
+        for (int i = 0; i < groupCount; i++) {
 
-    int[] finalWidths = new int[groupCount]; // Largeur finale après distribution
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
 
-    // =========================================================================
-    // ÉTAPE 2 : EXTRACTION DU CONTEXTE
-    // =========================================================================
+            if (group != null) {
+                // On récupère tous les composants de ce groupe depuis le modèle
+                List<Object> values
+                        = model.getComponentsAt(groupModel.getGroupIndex(group.getGroupIdentifier()));
 
-    int headerAlignment = (ctx != null) ? ctx.getHeaderAlignment() : Ribbon.HEADER_NORTH;
-    int headerWidth     = (ctx != null) ? ctx.getHeaderWidth() : 0;
-    int groupMargin     = (ctx != null) ? ctx.getGroupMargin() : 0;
-    int defaultWidth    = (ctx != null) ? ctx.getDefautlGroupWidth() : 150;
-    int absoluteMin     = (ctx != null) ? ctx.getAbsoluteGroupMin() : 1;
+                List<Component> comps = new ArrayList<>();
 
-    int totalMargins   = groupMargin * Math.max(0, groupCount - 1);
-    int widthForGroups = Math.max(availableWidth - totalMargins, 0);
+                // Pour chaque valeur, on obtient le composant Swing correspondant
+                for (Object value : values) {
+                    comps.add(ribbon.getComponentForValue(
+                            value,
+                            groupModel.getGroupIndex(group.getGroupIdentifier()),
+                            i));
+                }
 
-    // =========================================================================
-    // ÉTAPE 3 : CALCUL DES LARGEURS DEMANDÉES + MINIMUM DYNAMIQUE DE CHAQUE GROUPE
-    // =========================================================================
+                int groupCurrentWidth = group.getWidth() > 0
+                        ? group.getWidth()
+                        : group.getPreferredWidth();
 
-    int[] requested = new int[groupCount];
-    int[] effectiveMin = new int[groupCount];
+                dynamicMin[i] = lineWrapper.computeDynamicMinWidth(
+                        comps,
+                        groupCurrentWidth, // largeur actuelle du groupe pour simuler le wrapping
+                        group.getComponentMargin(),
+                        group.getPadding()
+                );
+            }
 
-    boolean[] isFixed     = new boolean[groupCount];
-    boolean[] isPreferred = new boolean[groupCount];
-    boolean[] isDefault   = new boolean[groupCount];
+        }
 
-    int totalRequested = 0;
+        // Tableau qui contiendra les largeurs finales de chaque groupe
+        int[] finalWidths = new int[groupCount];
 
-    LineWrapper lineWrapper = new LineWrapper();
+        // =========================================================================
+        // ÉTAPE 2 : EXTRACTION DU CONTEXTE
+        // =========================================================================
+        // Objectif : Récupérer tous les paramètres de configuration
+        // On utilise l'opérateur ternaire pour fournir des valeurs par défaut
+        // si le contexte est null (robustesse)
+        int headerAlignment = (ctx != null) ? ctx.getHeaderAlignment() : Ribbon.HEADER_NORTH;
+        int headerWidth = (ctx != null) ? ctx.getHeaderWidth() : 0;
+        int groupMargin = (ctx != null) ? ctx.getGroupMargin() : 0;
+        int defaultWidth = (ctx != null) ? ctx.getDefautlGroupWidth() : 150;
+        int absoluteMin = (ctx != null) ? ctx.getAbsoluteGroupMin() : 1;
 
-    for (int i = 0; i < groupCount; i++) {
+        // Calcul de l'espace réellement disponible pour les groupes
+        // totalMargins = marge * (nombre d'espaces entre groupes)
+        // S'il y a N groupes, il y a (N-1) espaces entre eux
+        int totalMargins = groupMargin * Math.max(0, groupCount - 1);
+        // widthForGroups = espace total - espace des marges (jamais négatif)
+        int widthForGroups = Math.max(availableWidth - totalMargins, 0);
 
-        HRibbonGroup group = groupModel.getHRibbonGroup(i);
+        // =========================================================================
+        // ÉTAPE 3 : CALCUL DES LARGEURS DEMANDÉES + MINIMUM DYNAMIQUE DE CHAQUE GROUPE
+        // =========================================================================
+        // Objectif : Déterminer ce que chaque groupe "voudrait" comme largeur
+        // et calculer son minimum absolu basé sur son contenu
+        // requested[i] = largeur idéale que le groupe i voudrait avoir
+        int[] requested = new int[groupCount];
+        // effectiveMin[i] = largeur minimale que le groupe i peut accepter
+        int[] effectiveMin = new int[groupCount];
 
-        int req;
+        // Trackers pour savoir comment chaque groupe a obtenu sa largeur
+        // Cela influencera la façon dont on réduit/agrandit plus tard
+        boolean[] isFixed = new boolean[groupCount];  // Largeur FIXE (explicite)
+        boolean[] isPreferred = new boolean[groupCount];  // Largeur PRÉFÉRÉE
+        boolean[] isDefault = new boolean[groupCount];  // Largeur PAR DÉFAUT
 
-        // ---------------------------
-        // Détermination largeur demandée
-        // ---------------------------
+        int totalRequested = 0;  // Somme de toutes les largeurs demandées
 
-        if (group != null) {
+        // On parcourt tous les groupes
+        for (int i = 0; i < groupCount; i++) {
 
-            if (group.getWidth() != -1) {
-                req = group.getWidth();
-                isFixed[i] = true;
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
+            int req;  // Largeur demandée pour ce groupe
 
-            } else if (group.getPreferredWidth() != -1) {
-                req = group.getPreferredWidth();
-                isPreferred[i] = true;
+            // ---------------------------
+            // Détermination largeur demandée (ordre de priorité)
+            // ---------------------------
+            // Règle : 
+            // 1. Si une largeur FIXE est définie (group.getWidth()), on l'utilise
+            // 2. Sinon, si une largeur PRÉFÉRÉE est définie, on l'utilise
+            // 3. Sinon, on utilise la largeur PAR DÉFAUT du contexte
+            if (group != null) {
+
+                // Priorité 1 : Largeur fixe explicite
+                if (group.getWidth() != -1) {
+                    req = group.getWidth();
+                    isFixed[i] = true;  // On marque ce groupe comme "fixe"
+                } else if (!useEntireSpace) {
+                    req = dynamicMin[i];
+                    isPreferred[i] = true;
+                } else if (group.getPreferredWidth() != -1) { // Priorité 2 : Largeur préférée
+                    req = group.getPreferredWidth();
+                    isPreferred[i] = true;  // On marque ce groupe comme "préféré"
+                } // Priorité 3 : Largeur par défaut
+                else {
+                    req = defaultWidth;
+                    isDefault[i] = true;  // On marque ce groupe comme "défaut"
+                }
 
             } else {
-                req = defaultWidth;
-                isDefault[i] = true;
+                // Normalement on ne devrait jamais arriver ici
+                throw new IllegalArgumentException("Group cannot be null");
             }
 
-        } else {
-            throw new IllegalArgumentException("Group cannot be null");
-        }
-
-        // Ajout header latéral si nécessaire
-        if (headerAlignment == Ribbon.HEADER_WEST
-                || headerAlignment == Ribbon.HEADER_EAST) {
-            req += headerWidth;
-        }
-
-        // ---------------------------
-        // Calcul dynamique du minWidth du groupe
-        // ---------------------------
-
-        int dynamicMin = 0;
-
-        if (group != null) {
-            
-            //On récupère tous ses composants
-            List<Object> values =
-                    model.getComponentsAt(groupModel.getGroupIndex(group.getGroupIdentifier()));
-
-            List<Component> comps = new ArrayList<>();
-
-            for (Object value : values) {
-                comps.add(ribbon.getComponentForValue(
-                        value,
-                        groupModel.getGroupIndex(group.getGroupIdentifier()),
-                        i));
+            // Si les en-têtes sont à gauche ou à droite, ils prennent de la place
+            // Il faut donc ajouter leur largeur à la largeur totale du groupe
+            if (headerAlignment == Ribbon.HEADER_WEST
+                    || headerAlignment == Ribbon.HEADER_EAST) {
+                req += headerWidth;
             }
 
-            dynamicMin = lineWrapper.computeDynamicMinWidth( // <- Méthode pour calculer la minWidth dynamique
-                    comps,
-                    group.getHeigth(),              // hauteur FIXE
-                    group.getComponentMargin(),     // spacing horizontal
-                    group.getComponentMargin(),     // spacing vertical
-                    group.getPadding()              // padding interne
-            );
-            
-            group.setMinWidth(dynamicMin);
-            
-//            System.out.println("==== Groupe " + i + " === " + dynamicMin);
-            
+            // ---------------------------
+            // Calcul dynamique du minWidth du groupe
+            // ---------------------------
+            // C'est le cœur de l'intelligence : on calcule la largeur MINIMALE
+            // nécessaire pour que tous les composants du groupe soient visibles
+            // correctement, en tenant compte de leur disposition
+            if (group != null) {
+
+//                System.out.println("Groupe " + i 
+//    + " | getWidth()=" + group.getWidth()
+//    + " | getPreferredWidth()=" + group.getPreferredWidth()
+//    + " | groupCurrentWidth=" + groupCurrentWidth
+//    + " | dynamicMin=" + dynamicMin
+//    + " | effectiveMin=" + effectiveMin[i]);
+                // On sauvegarde ce minimum dynamique dans le groupe
+                group.setMinWidth(dynamicMin[i]);
+
+            }
+            effectiveMin[i] = dynamicMin[i];
+            // La largeur demandée ne peut jamais être inférieure au minimum effectif
+            // C'est logique : on ne peut pas demander moins que le minimum viable
+            requested[i] = Math.max(req, effectiveMin[i]);
+
+            totalRequested += requested[i];  // On accumule pour la somme totale
         }
 
-        // Minimum effectif = max(min défini, dynamicMin, absoluteMin)
-        effectiveMin[i] = dynamicMin;
+        // =========================================================================
+        // ÉTAPE 4 : CAS ESPACE SUFFISANT (totalRequested <= widthForGroups)
+        // =========================================================================
+        // Objectif : Si on a assez de place pour donner à chaque groupe ce qu'il demande,
+        // on le fait, puis on distribue l'espace restant équitablement
+        if (totalRequested <= widthForGroups) {
 
-        // La largeur demandée ne peut jamais être < minimum effectif
-        requested[i] = Math.max(req, effectiveMin[i]);
+            if (useEntireSpace) {
+                // Redistribuer tout l'espace disponible entre les groupes flexibles
+                System.arraycopy(requested, 0, finalWidths, 0, groupCount);
+                int remaining = widthForGroups - totalRequested;
+                int flexibleCount = 0;
+                for (int i = 0; i < groupCount; i++) {
+                    if (!isFixed[i]) {
+                        flexibleCount++;
+                    }
+                }
+                if (flexibleCount > 0) {
+                    int extraPerGroup = remaining / flexibleCount;
+                    int remainder = remaining % flexibleCount;
+                    for (int i = 0; i < groupCount; i++) {
+                        if (!isFixed[i]) {
+                            finalWidths[i] += extraPerGroup;
+                            if (remainder > 0) {
+                                finalWidths[i]++;
+                                remainder--;
+                            }
+                        }
+                    }
+                }
 
-        totalRequested += requested[i];
-    }
+            } else {
+                // Mode compact : chaque groupe reçoit exactement dynamicMin
+                // Les groupes fixes gardent leur largeur explicite
+                // Aucune redistribution de l'espace restant
+                for (int i = 0; i < groupCount; i++) {
+                    if (isFixed[i]) {
+                        finalWidths[i] = requested[i];
+                    } else {
+                        finalWidths[i] = dynamicMin[i];
+                    }
+                }
+                // Retour immédiat : on saute les étapes 5, 6 et 7
+                // qui redistribueraient ou ajusteraient les largeurs
+                return finalWidths;
+            }
 
-    // =========================================================================
-    // ÉTAPE 4 : CAS ESPACE SUFFISANT
-    // =========================================================================
+        } // =========================================================================
+        // ÉTAPE 5 : CAS ESPACE INSUFFISANT (totalRequested > widthForGroups)
+        // =========================================================================
+        // Objectif : On n'a pas assez de place, il faut réduire certains groupes
+        // Stratégie : 
+        // 1. Les groupes FIXES gardent leur taille (on ne peut pas les réduire)
+        // 2. On réduit d'abord les groupes "DEFAULT"
+        // 3. Puis on réduit les groupes "PREFERRED"
+        // (Les groupes FIXES ne sont jamais réduits)
+        else {
 
-    if (totalRequested <= widthForGroups) {
-
-        System.arraycopy(requested, 0, finalWidths, 0, groupCount);
-
-        int remaining = widthForGroups - totalRequested;
-
-        int flexibleCount = 0;
-        for (int i = 0; i < groupCount; i++) {
-            if (!isFixed[i]) flexibleCount++;
-        }
-
-        if (flexibleCount > 0) {
-
-            int extraPerGroup = remaining / flexibleCount;
-            int remainder = remaining % flexibleCount;
+            // Étape 5.1 : Calcul de l'espace pris par les groupes FIXES
+            int fixedSpace = 0;
 
             for (int i = 0; i < groupCount; i++) {
-                if (!isFixed[i]) {
+                if (isFixed[i]) {
+                    finalWidths[i] = requested[i];  // Ils gardent leur taille
+                    fixedSpace += requested[i];
+                }
+            }
 
-                    finalWidths[i] += extraPerGroup;
+            // Espace restant pour les groupes non-fixes
+            int remaining = Math.max(widthForGroups - fixedSpace, 0);
 
-                    if (remainder > 0) {
-                        finalWidths[i]++;
-                        remainder--;
+            // Étape 5.2 : Réduction des groupes DEFAULT d'abord (priorité basse)
+            remaining = reduceCategory(remaining, requested, finalWidths, isDefault, effectiveMin);
+
+            // Étape 5.3 : Réduction des groupes PREFERRED ensuite (priorité moyenne)
+            remaining = reduceCategory(remaining, requested, finalWidths, isPreferred, effectiveMin);
+
+            // Note : Les groupes FIXES ont déjà été traités et ne sont pas réduits
+            // Si après ces réductions il reste encore de l'espace à répartir,
+            // ce serait aux groupes "inconnus" (ni DEFAULT ni PREFERRED) mais normalement
+            // tout groupe est dans l'une des trois catégories
+        }
+
+        // =========================================================================
+        // ÉTAPE 6 : CONTRAINTES MIN/MAX STRICTES
+        // =========================================================================
+        // Objectif : S'assurer qu'aucun groupe ne dépasse ses limites
+        // Après toutes les distributions/réductions, on vérifie que chaque groupe
+        // respecte ses bornes (minWidth et maxWidth)
+        for (int i = 0; i < groupCount; i++) {
+
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
+
+            int minW = effectiveMin[i];  // Minimum calculé à l'étape 3
+            int maxW = Integer.MAX_VALUE;  // Par défaut, pas de maximum
+
+            // Si un maxWidth est défini, on l'utilise
+            if (group != null && group.getMaxWidth() > 0) {
+                maxW = group.getMaxWidth();
+            }
+
+            // On applique les bornes : jamais en dessous du min, jamais au-dessus du max
+            finalWidths[i] = Math.max(finalWidths[i], minW);
+            finalWidths[i] = Math.min(finalWidths[i], maxW);
+        }
+
+        // =========================================================================
+        // ÉTAPE 7 : GESTION DES ARRONDIS RESTANTS
+        // =========================================================================
+        // Objectif : Corriger les erreurs d'arrondi dues aux divisions entières
+        // Après toutes ces opérations, la somme des largeurs peut ne pas correspondre
+        // exactement à widthForGroups (à cause des divisions et des contraintes)
+        // On ajuste pixel par pixel pour atteindre la largeur exacte
+        int used = 0;
+        for (int w : finalWidths) {
+            used += w;  // On recalcule la somme utilisée
+        }
+        int delta = widthForGroups - used;  // Écart entre ce qu'on a et ce qu'on devrait avoir
+
+        // Tant qu'il y a un écart
+        while (delta != 0) {
+
+            boolean progress = false;  // Pour détecter les blocages
+
+            // On parcourt tous les groupes
+            for (int i = 0; i < groupCount && delta != 0; i++) {
+
+                // On ignore les groupes fixes (on ne modifie pas leur taille)
+                if (isFixed[i]) {
+                    continue;
+                }
+
+                if (delta > 0) {
+                    // Il manque de l'espace : on ajoute 1 pixel
+                    finalWidths[i]++;
+                    delta--;
+                    progress = true;
+                } else {
+                    // Il y a trop d'espace : on retire 1 pixel si possible
+                    if (finalWidths[i] > effectiveMin[i]) {
+                        finalWidths[i]--;
+                        delta++;
+                        progress = true;
                     }
                 }
             }
-        }
-    }
 
-    // =========================================================================
-    // ÉTAPE 5 : ESPACE INSSUFFISANT CAS RÉDUCTION
-    // =========================================================================
-    else {
-
-        int fixedSpace = 0;
-
-        for (int i = 0; i < groupCount; i++) {
-            if (isFixed[i]) {
-                finalWidths[i] = requested[i];
-                fixedSpace += requested[i];
+            // Si on a fait un tour complet sans pouvoir ajuster, on arrête
+            // (pour éviter une boucle infinie)
+            if (!progress) {
+                break;
             }
         }
 
-        int remaining = Math.max(widthForGroups - fixedSpace, 0);
-
-        // Distribution proportionnelle DEFAULT puis PREFERRED
-        remaining = reduceCategory(remaining, requested, finalWidths, isDefault, effectiveMin);
-        remaining = reduceCategory(remaining, requested, finalWidths, isPreferred, effectiveMin);
+        return finalWidths;  // On retourne les largeurs finales calculées
     }
 
-    // =========================================================================
-    // ÉTAPE 6 : CONTRAINTES MIN/MAX STRICTES
-    // =========================================================================
+    /**
+     * Réduction proportionnelle d'une catégorie de groupes en respectant un
+     * minimum dynamique individuel pour chaque groupe.
+     *
+     * CONTRAT : - Chaque groupe i possède son minimum incompressible
+     * effectiveMin[i]. - Aucun résultat ne pourra être inférieur à
+     * effectiveMin[i]. - La somme finale distribuée ne dépassera jamais
+     * "available". - La méthode retourne le reste réel non consommé.
+     *
+     * @param available largeur totale disponible pour cette catégorie
+     * @param requested largeurs demandées par chaque groupe
+     * @param result tableau résultat à remplir (largeurs finales)
+     * @param category masque indiquant les groupes concernés
+     * @param effectiveMin minimum dynamique individuel par groupe
+     *
+     * @return largeur restante non consommée
+     */
+    private int reduceCategory(
+            int available,
+            int[] requested,
+            int[] result,
+            boolean[] category,
+            int[] effectiveMin) {
 
-    for (int i = 0; i < groupCount; i++) {
+        // =========================================================================
+        // ÉTAPE 1 : Identifier les groupes concernés et calculer les totaux
+        // =========================================================================
+        int totalRequested = 0;      // Somme des demandes des groupes concernés
+        int totalMinRequired = 0;    // Somme des minimums incompressibles
+        int count = 0;               // Nombre de groupes concernés
 
-        HRibbonGroup group = groupModel.getHRibbonGroup(i);
-
-        int minW = effectiveMin[i];
-        int maxW = Integer.MAX_VALUE;
-
-        if (group != null && group.getMaxWidth() > 0) {
-            maxW = group.getMaxWidth();
+        for (int i = 0; i < requested.length; i++) {
+            if (category[i]) {
+                totalRequested += requested[i];
+                totalMinRequired += effectiveMin[i];
+                count++;
+            }
         }
 
-        finalWidths[i] = Math.max(finalWidths[i], minW);
-        finalWidths[i] = Math.min(finalWidths[i], maxW);
-    }
+        // Aucun groupe concerné → rien à faire
+        if (count == 0) {
+            return available;
+        }
 
-    // =========================================================================
-    // ÉTAPE 7 : GESTION DES ARRONDIS RESTANTS
-    // =========================================================================
+        // =========================================================================
+        // ÉTAPE 2 : Vérification du minimum incompressible global
+        // =========================================================================
+        // Si la somme des minimums dépasse ou égale l'espace disponible,
+        // on distribue uniquement les minimums.
+        // Cela garantit la cohérence structurelle du layout.
+        if (totalMinRequired >= available) {
 
-    int used = 0;
-    for (int w : finalWidths) used += w;
+            int distributed = 0;
 
-    int delta = widthForGroups - used;
+            for (int i = 0; i < requested.length; i++) {
+                if (category[i]) {
+                    result[i] = effectiveMin[i];
+                    distributed += effectiveMin[i];
+                }
+            }
 
-    while (delta != 0) {
+            // On retourne le reste réel (peut être 0)
+            return Math.max(available - distributed, 0);
+        }
 
-        boolean progress = false;
+        // =========================================================================
+        // ÉTAPE 3 : Distribution proportionnelle contrôlée
+        // =========================================================================
+        // On distribue proportionnellement aux demandes,
+        // mais jamais sous le minimum individuel.
+        int distributed = 0;
 
-        for (int i = 0; i < groupCount && delta != 0; i++) {
+        for (int i = 0; i < requested.length; i++) {
 
-            if (isFixed[i]) continue;
+            if (!category[i]) {
+                continue;
+            }
 
-            if (delta > 0) {
-                finalWidths[i]++;
-                delta--;
-                progress = true;
-            } else {
-                if (finalWidths[i] > effectiveMin[i]) {
-                    finalWidths[i]--;
-                    delta++;
-                    progress = true;
+            // Ratio de la demande individuelle sur la demande totale
+            float ratio = (float) requested[i] / (float) totalRequested;
+
+            // Allocation proportionnelle
+            int allocated = (int) (available * ratio);
+
+            // Respect du minimum dynamique individuel
+            allocated = Math.max(allocated, effectiveMin[i]);
+
+            result[i] = allocated;
+            distributed += allocated;
+        }
+
+        // =========================================================================
+        // ÉTAPE 4 : Correction des dépassements dus aux minimums
+        // =========================================================================
+        // Il est possible que la distribution dépasse "available"
+        // à cause des minimums imposés.
+        int remainder = available - distributed;
+
+        if (remainder < 0) {
+
+            // On doit réduire certains groupes,
+            // mais jamais sous leur minimum individuel.
+            for (int i = requested.length - 1; i >= 0 && remainder < 0; i--) {
+
+                if (!category[i]) {
+                    continue;
+                }
+
+                // On peut réduire seulement si on est au-dessus du minimum
+                while (result[i] > effectiveMin[i] && remainder < 0) {
+                    result[i]--;
+                    remainder++;
                 }
             }
         }
 
-        if (!progress) break;
-    }
+        // =========================================================================
+        // ÉTAPE 5 : Distribution des pixels restants (si positif)
+        // =========================================================================
+        // On distribue pixel par pixel pour garantir
+        // une somme finale parfaitement exacte.
+        if (remainder > 0) {
 
-    return finalWidths;
-}
+            for (int i = 0; i < requested.length && remainder > 0; i++) {
 
-    /**
- * Réduction proportionnelle d'une catégorie de groupes en respectant
- * un minimum dynamique individuel pour chaque groupe.
- *
- * CONTRAT :
- * - Chaque groupe i possède son minimum incompressible effectiveMin[i].
- * - Aucun résultat ne pourra être inférieur à effectiveMin[i].
- * - La somme finale distribuée ne dépassera jamais "available".
- * - La méthode retourne le reste réel non consommé.
- *
- * @param available     largeur totale disponible pour cette catégorie
- * @param requested     largeurs demandées par chaque groupe
- * @param result        tableau résultat à remplir (largeurs finales)
- * @param category      masque indiquant les groupes concernés
- * @param effectiveMin  minimum dynamique individuel par groupe
- *
- * @return largeur restante non consommée
- */
-private int reduceCategory(
-        int available,
-        int[] requested,
-        int[] result,
-        boolean[] category,
-        int[] effectiveMin) {
+                if (!category[i]) {
+                    continue;
+                }
 
-    // =========================================================================
-    // ÉTAPE 1 : Identifier les groupes concernés et calculer les totaux
-    // =========================================================================
-
-    int totalRequested = 0;      // Somme des demandes des groupes concernés
-    int totalMinRequired = 0;    // Somme des minimums incompressibles
-    int count = 0;               // Nombre de groupes concernés
-
-    for (int i = 0; i < requested.length; i++) {
-        if (category[i]) {
-            totalRequested += requested[i];
-            totalMinRequired += effectiveMin[i];
-            count++;
-        }
-    }
-
-    // Aucun groupe concerné → rien à faire
-    if (count == 0) {
-        return available;
-    }
-
-    // =========================================================================
-    // ÉTAPE 2 : Vérification du minimum incompressible global
-    // =========================================================================
-    // Si la somme des minimums dépasse ou égale l'espace disponible,
-    // on distribue uniquement les minimums.
-    // Cela garantit la cohérence structurelle du layout.
-
-    if (totalMinRequired >= available) {
-
-        int distributed = 0;
-
-        for (int i = 0; i < requested.length; i++) {
-            if (category[i]) {
-                result[i] = effectiveMin[i];
-                distributed += effectiveMin[i];
+                result[i]++;
+                remainder--;
             }
         }
 
-        // On retourne le reste réel (peut être 0)
-        return Math.max(available - distributed, 0);
+        // =========================================================================
+        // ÉTAPE 6 : Retour du reste réel non consommé
+        // =========================================================================
+        return remainder;
     }
-
-    // =========================================================================
-    // ÉTAPE 3 : Distribution proportionnelle contrôlée
-    // =========================================================================
-    // On distribue proportionnellement aux demandes,
-    // mais jamais sous le minimum individuel.
-
-    int distributed = 0;
-
-    for (int i = 0; i < requested.length; i++) {
-
-        if (!category[i]) {
-            continue;
-        }
-
-        // Ratio de la demande individuelle sur la demande totale
-        float ratio = (float) requested[i] / (float) totalRequested;
-
-        // Allocation proportionnelle
-        int allocated = (int) (available * ratio);
-
-        // Respect du minimum dynamique individuel
-        allocated = Math.max(allocated, effectiveMin[i]);
-
-        result[i] = allocated;
-        distributed += allocated;
-    }
-
-    // =========================================================================
-    // ÉTAPE 4 : Correction des dépassements dus aux minimums
-    // =========================================================================
-    // Il est possible que la distribution dépasse "available"
-    // à cause des minimums imposés.
-
-    int remainder = available - distributed;
-
-    if (remainder < 0) {
-
-        // On doit réduire certains groupes,
-        // mais jamais sous leur minimum individuel.
-
-        for (int i = requested.length - 1; i >= 0 && remainder < 0; i--) {
-
-            if (!category[i]) {
-                continue;
-            }
-
-            // On peut réduire seulement si on est au-dessus du minimum
-            while (result[i] > effectiveMin[i] && remainder < 0) {
-                result[i]--;
-                remainder++;
-            }
-        }
-    }
-
-    // =========================================================================
-    // ÉTAPE 5 : Distribution des pixels restants (si positif)
-    // =========================================================================
-    // On distribue pixel par pixel pour garantir
-    // une somme finale parfaitement exacte.
-
-    if (remainder > 0) {
-
-        for (int i = 0; i < requested.length && remainder > 0; i++) {
-
-            if (!category[i]) {
-                continue;
-            }
-
-            result[i]++;
-            remainder--;
-        }
-    }
-
-    // =========================================================================
-    // ÉTAPE 6 : Retour du reste réel non consommé
-    // =========================================================================
-
-    return remainder;
-}
 
 }

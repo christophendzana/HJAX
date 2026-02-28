@@ -18,8 +18,9 @@ public interface IGroupWidthDistributor {
      * @param ctx           contexte de layout (informations sur header, margins, flags)     
      * @param ribbon     
      * @param availableWidth largeur totale disponible (après insets)
+     * @param useEntireWidth
      * @return tableau d'entiers de longueur groupModel.getGroupCount()
      */
-    int[] distributeWidths(HRibbonLayoutContext ctx, Ribbon ribbon, int availableWidth);
+    int[] distributeWidths(HRibbonLayoutContext ctx, Ribbon ribbon, int availableWidth, boolean useEntireWidth);
     
 }

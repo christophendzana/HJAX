@@ -410,32 +410,75 @@ public class LineWrapper {
         }
     }
 
-    /**
- * Calcul dynamique de la largeur minimale nécessaire pour un groupe HRibbon.
+
+/**
+ * Calcul dynamique de la largeur minimale nécessaire pour un groupe
+ * HRibbon.
  *
- * LOGIQUE :
- * - On cherche la plus petite largeur (minWidth) pour laquelle tous les composants
- *   tiennent dans la hauteur fixe du groupe et aucun composant ne dépasse horizontalement.
- * - On utilise une recherche dichotomique (binary search) pour trouver cette largeur de façon efficace.
+ * LOGIQUE : 
+ * - On cherche la plus petite largeur (minWidth) pour laquelle
+ *   tous les composants tiennent dans la hauteur fixe du groupe et aucun
+ *   composant ne dépasse horizontalement.
+ * - On utilise une recherche dichotomique (binary search) pour trouver cette 
+ * largeur de façon
+ *   efficace.
  * - wrapIntoLines() simule le wrapping pour une largeur candidate.
- * - calculateLineHeight() permet de vérifier si la somme des hauteurs des lignes
- *   dépasse la hauteur du groupe.
+ * - calculateLineHeight() permet de vérifier si la somme des
+ *   hauteurs des lignes dépasse la hauteur du groupe.
  *
- * @param components      Liste des composants du groupe
- * @param groupHeight     Hauteur fixe du groupe (pixels)
- * @param groupMargin     Espacement horizontal entre composants (pixels)
+ * @param components Liste des composants du groupe
+ * @param groupHeight Hauteur fixe du groupe (pixels)
+ * @param groupMargin Espacement horizontal entre composants (pixels)
  * @param verticalSpacing Espacement vertical entre lignes (pixels)
- * @param padding         Padding interne gauche/droite du groupe (pixels)
+ * @param padding Padding interne gauche/droite du groupe (pixels)
  * @return La largeur minimale nécessaire pour ce groupe (pixels)
  */
-public int computeDynamicMinWidth(
-        List<Component> components,
-        int groupHeight,
-        int groupMargin,
-        int verticalSpacing,
-        int padding
-) {
-    return 160;
+public int computeDynamicMinWidth(List<Component> components,
+                                   int currentWidth,
+                                   int componentMargin,
+                                   int padding) {
+    ensureEdt();
+
+    if (components == null || components.isEmpty()) {
+        return 0;
+    }
+
+    // Largeur interne disponible pour les composants (sans padding)
+    int innerWidth = Math.max(currentWidth - padding * 2, 1);
+
+    // Simuler le wrapping avec la largeur actuelle
+    List<List<Component>> lines = wrapIntoLines(components, innerWidth, componentMargin);
+
+    if (lines == null || lines.isEmpty()) {
+        return padding * 2;
+    }
+
+    // Chercher la ligne la plus large
+    int maxLineWidth = 0;
+
+    for (List<Component> line : lines) {
+        int lineWidth = 0;
+
+        for (int i = 0; i < line.size(); i++) {
+            Component c = line.get(i);
+            if (c == null) continue;
+
+            Dimension pref = c.getPreferredSize();
+            if (pref == null) continue;
+
+            lineWidth += pref.width;
+
+            // Ajouter la marge entre composants (pas après le dernier)
+            if (i < line.size() - 1) {
+                lineWidth += componentMargin;
+            }
+        }
+
+        maxLineWidth = Math.max(maxLineWidth, lineWidth);
+    }
+
+    // minWidth = largeur de la ligne la plus large + padding gauche + padding droit
+    return maxLineWidth + padding * 2;
 }
 
     // =========================================================================
