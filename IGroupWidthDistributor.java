@@ -4,7 +4,7 @@
  */
 package rubban.layout;
 
-import rubban.HRibbonGroupModel;
+import rubban.Ribbon;
 
 /**
  * Interface pour la distribution des largeurs des groupes.
@@ -15,25 +15,11 @@ public interface IGroupWidthDistributor {
      /**
      * Calcule et retourne un tableau de largeurs (en pixels) pour chaque groupe.
      *
-     * @param ctx           contexte de layout (informations sur header, margins, flags)
-     * @param groupModel    modèle des HRibbonGroup
+     * @param ctx           contexte de layout (informations sur header, margins, flags)     
+     * @param ribbon     
      * @param availableWidth largeur totale disponible (après insets)
      * @return tableau d'entiers de longueur groupModel.getGroupCount()
      */
-    int[] distributeWidths(HRibbonLayoutContext ctx, HRibbonGroupModel groupModel, int availableWidth);
-
-    /**
-     * Active ou désactive la distribution égale (tous les groupes même largeur).
-     *
-     * @param equal true => égalitaire
-     */
-    void setEqualDistribution(boolean equal);
-
-    /**
-     * Retourne l'état de la distribution égale.
-     *
-     * @return true si distribution égale active
-     */
-    boolean isEqualDistribution();
+    int[] distributeWidths(HRibbonLayoutContext ctx, Ribbon ribbon, int availableWidth);
     
 }
