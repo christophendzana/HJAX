@@ -176,133 +176,141 @@ public class BasicHRibbonUI extends ComponentUI {
         hoverAnimationProgress = 0f;
     }
 
+    
     @Override
-    public void paint(Graphics g, JComponent c) {
-        Graphics2D g2 = (Graphics2D) g.create();
-        try {
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, 
-                               RenderingHints.VALUE_ANTIALIAS_ON);
+public void paint(Graphics g, JComponent c) {
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                           RenderingHints.VALUE_ANTIALIAS_ON);
 
-            Rectangle[] groupBounds = getGroupBounds();
-            if (groupBounds == null) {
-                return;
+        Rectangle[] groupBounds = getGroupBounds();
+        if (groupBounds == null) {
+            return;
+        }
+
+        HRibbonLayoutManager lm = getLayoutManager();
+        HRibbonGroupModel groupModel = (lm != null) ? lm.getRibbon().getGroupModel() : null;
+
+        // Récupérer le scrollOffset depuis le layout manager
+        int scrollOffset = (lm != null) ? lm.getScrollOffset() : 0;
+
+        // Définir une zone de clipping pour éviter que les groupes
+        // débordent visuellement en dehors de la zone disponible du ruban.
+        // Sans ce clipping, un groupe partiellement visible continuerait
+        // à être dessiné au-delà du bord gauche ou droit du ruban.
+        Insets insets = c.getInsets();
+        int clipX = (insets != null) ? insets.left : 0;
+        int clipW = c.getWidth() - clipX - ((insets != null) ? insets.right : 0);
+        g2.setClip(clipX, 0, clipW, c.getHeight());
+
+        // Dessiner chaque groupe
+        for (int i = 0; i < groupBounds.length; i++) {
+            Rectangle bounds = groupBounds[i];
+            if (bounds == null) {
+                continue;
             }
 
-            HRibbonLayoutManager lm = getLayoutManager();
-            HRibbonGroupModel groupModel = (lm != null) ? lm.getRibbon().getGroupModel() : null;
+            // Appliquer scrollOffset à X pour le dessin uniquement.
+            // groupBoundsCache n'est pas modifié : seule la représentation
+            // visuelle est décalée.
+            int drawX = bounds.x - scrollOffset;
 
-            // Dessiner chaque groupe
-            for (int i = 0; i < groupBounds.length; i++) {
-                Rectangle bounds = groupBounds[i];
-                if (bounds == null) {
-                    continue;
-                }
+            boolean isHovered = (i == hoveredGroupIndex);
+            boolean isFocused = (i == focusedGroupIndex);
 
-                boolean isHovered = (i == hoveredGroupIndex);
-                boolean isFocused = (i == focusedGroupIndex);
+            // Créer la forme arrondie avec drawX
+            RoundRectangle2D roundedRect = new RoundRectangle2D.Float(
+                drawX, bounds.y,
+                Math.max(0, bounds.width), Math.max(0, bounds.height),
+                cornerRadius, cornerRadius
+            );
 
-                // Créer la forme arrondie
-                RoundRectangle2D roundedRect = new RoundRectangle2D.Float(
-                    bounds.x, bounds.y,
-                    Math.max(0, bounds.width), Math.max(0, bounds.height),
-                    cornerRadius, cornerRadius
-                );
-
-                // 1. FOND DU GROUPE AVEC DÉGRADÉ
-                if (isFocused) {
-                    // Focus : fond bleu clair solide
-                    g2.setColor(focusBg);
-                    g2.fill(roundedRect);
-                } else {
-                    // Normal : dégradé personnalisé ou par défaut
-                    if (groupModel != null) {
-                        HRibbonGroup group = groupModel.getHRibbonGroup(i);
-                        if (group != null && group.getBackground() != null) {
-                            // Utiliser la couleur personnalisée si définie
-                            g2.setColor(group.getBackground());
-                            g2.fill(roundedRect);
-                        } else {
-                            // Dégradé par défaut
-                            GradientPaint gradient = new GradientPaint(
-                                bounds.x, bounds.y, defaultGroupStartColor,
-                                bounds.x + bounds.width, bounds.y + bounds.height, defaultGroupEndColor
-                            );
-                            g2.setPaint(gradient);
-                            g2.fill(roundedRect);
-                        }
+            // 1. FOND DU GROUPE AVEC DÉGRADÉ
+            if (isFocused) {
+                g2.setColor(focusBg);
+                g2.fill(roundedRect);
+            } else {
+                if (groupModel != null) {
+                    HRibbonGroup group = groupModel.getHRibbonGroup(i);
+                    if (group != null && group.getBackground() != null) {
+                        g2.setColor(group.getBackground());
+                        g2.fill(roundedRect);
                     } else {
-                        // Dégradé par défaut
                         GradientPaint gradient = new GradientPaint(
-                            bounds.x, bounds.y, defaultGroupStartColor,
-                            bounds.x + bounds.width, bounds.y + bounds.height, defaultGroupEndColor
+                            drawX, bounds.y, defaultGroupStartColor,
+                            drawX + bounds.width, bounds.y + bounds.height, defaultGroupEndColor
                         );
                         g2.setPaint(gradient);
                         g2.fill(roundedRect);
                     }
-                }
-
-                // 2. TEINTE HOVER ANIMÉE (par-dessus le fond si hover actif)
-                if (isHovered && !isFocused && hoverAnimationProgress > 0) {
-                    // Calculer la couleur d'overlay avec alpha animé
-                    int alpha = (int)(hoverTint.getAlpha() * hoverAnimationProgress);
-                    Color animatedHoverTint = new Color(
-                        hoverTint.getRed(),
-                        hoverTint.getGreen(),
-                        hoverTint.getBlue(),
-                        alpha
+                } else {
+                    GradientPaint gradient = new GradientPaint(
+                        drawX, bounds.y, defaultGroupStartColor,
+                        drawX + bounds.width, bounds.y + bounds.height, defaultGroupEndColor
                     );
-                    g2.setColor(animatedHoverTint);
+                    g2.setPaint(gradient);
                     g2.fill(roundedRect);
-                }
-
-                // 3. BORDURE FOCUS (prioritaire)
-                if (isFocused) {
-                    g2.setColor(focusRing);
-                    g2.setStroke(new BasicStroke(3f)); // Bordure épaisse
-                    RoundRectangle2D focusOutline = new RoundRectangle2D.Float(
-                        bounds.x - 2, bounds.y - 2,
-                        Math.max(0, bounds.width + 4), Math.max(0, bounds.height + 4),
-                        cornerRadius + 2, cornerRadius + 2
-                    );
-                    g2.draw(focusOutline);
-                }
-                // 4. BORDURE HOVER ANIMÉE (si pas de focus)
-                else if (isHovered && hoverAnimationProgress > 0) {
-                    // Calculer l'épaisseur animée
-                    float strokeWidth = 1f + (1f * hoverAnimationProgress);
-                    g2.setColor(hoverBorderColor);
-                    g2.setStroke(new BasicStroke(strokeWidth));
-                    
-                    // Calculer la position animée pour un effet de zoom subtil
-                    float inset = (1 - hoverAnimationProgress) * 0.5f;
-                    g2.drawRoundRect(
-                        bounds.x + (int)inset, 
-                        bounds.y + (int)inset,
-                        Math.max(0, bounds.width - 1 - (int)(inset * 2)), 
-                        Math.max(0, bounds.height - 1 - (int)(inset * 2)),
-                        cornerRadius, 
-                        cornerRadius
-                    );
-                }
-                // 5. BORDURE NORMALE (si ni hover ni focus)
-                else {
-                    g2.setColor(new Color(0, 0, 0, 15)); // Bordure subtile
-                    g2.setStroke(new BasicStroke(1f));
-                    g2.drawRoundRect(
-                        bounds.x, bounds.y,
-                        Math.max(0, bounds.width - 1), Math.max(0, bounds.height - 1),
-                        cornerRadius, cornerRadius
-                    );
                 }
             }
 
-            // Bordure inférieure du ruban
-            paintRibbonBorder(g2, c);
+            // 2. TEINTE HOVER ANIMÉE
+            if (isHovered && !isFocused && hoverAnimationProgress > 0) {
+                int alpha = (int)(hoverTint.getAlpha() * hoverAnimationProgress);
+                Color animatedHoverTint = new Color(
+                    hoverTint.getRed(),
+                    hoverTint.getGreen(),
+                    hoverTint.getBlue(),
+                    alpha
+                );
+                g2.setColor(animatedHoverTint);
+                g2.fill(roundedRect);
+            }
 
-        } finally {
-            g2.dispose();
+            // 3. BORDURE FOCUS
+            if (isFocused) {
+                g2.setColor(focusRing);
+                g2.setStroke(new BasicStroke(3f));
+                RoundRectangle2D focusOutline = new RoundRectangle2D.Float(
+                    drawX - 2, bounds.y - 2,
+                    Math.max(0, bounds.width + 4), Math.max(0, bounds.height + 4),
+                    cornerRadius + 2, cornerRadius + 2
+                );
+                g2.draw(focusOutline);
+            }
+            // 4. BORDURE HOVER ANIMÉE
+            else if (isHovered && hoverAnimationProgress > 0) {
+                float strokeWidth = 1f + (1f * hoverAnimationProgress);
+                g2.setColor(hoverBorderColor);
+                g2.setStroke(new BasicStroke(strokeWidth));
+                float inset = (1 - hoverAnimationProgress) * 0.5f;
+                g2.drawRoundRect(
+                    drawX + (int)inset,
+                    bounds.y + (int)inset,
+                    Math.max(0, bounds.width - 1 - (int)(inset * 2)),
+                    Math.max(0, bounds.height - 1 - (int)(inset * 2)),
+                    cornerRadius,
+                    cornerRadius
+                );
+            }
+            // 5. BORDURE NORMALE
+            else {
+                g2.setColor(new Color(0, 0, 0, 15));
+                g2.setStroke(new BasicStroke(1f));
+                g2.drawRoundRect(
+                    drawX, bounds.y,
+                    Math.max(0, bounds.width - 1), Math.max(0, bounds.height - 1),
+                    cornerRadius, cornerRadius
+                );
+            }
         }
+
+        paintRibbonBorder(g2, c);
+
+    } finally {
+        g2.dispose();
     }
+}
 
     /**
      * Dessine la bordure inférieure du ruban

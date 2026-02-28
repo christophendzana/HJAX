@@ -1,5 +1,7 @@
 package rubban;
 
+import hcomponents.HScrollBar;
+import hcomponents.vues.HScrollBarStyle;
 import java.awt.*;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +42,19 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     private Rectangle[] groupBoundsCache = null;
     private Map<Integer, List<Component>> componentsByGroupCache = null;
 
+    //Element pour le scroll Horizontale
+    // Scrollbar horizontale pour le défilement des groupes collapsed
+    private HScrollBar horizontalScrollBar = null;
+
+    // Offset de défilement en pixels, appliqué à la position X de chaque groupe
+    private int scrollOffset = 0;
+
     public HRibbonLayoutManager(Ribbon ribbon) {
         if (ribbon == null) {
             throw new IllegalArgumentException("Ribbon cannot be null");
         }
         this.ribbon = ribbon;
+
     }
 
     @Override
@@ -68,8 +78,8 @@ public class HRibbonLayoutManager implements LayoutManager2 {
 
         Component collapseBtn = hRibbon.getCollapseButton();
 
-        if (hRibbon.getRibbonState() == Ribbon.RibbonState.COLLAPSED) {
-            // Mode COLLAPSED : bouton en haut à droite du ruban réduit
+        if (hRibbon.getRibbonState() == Ribbon.RibbonState.VERTIVAL_COLLAPSED) {
+            // Mode VERTIVAL_COLLAPSED : bouton en haut à droite du ruban réduit
             if (collapseBtn != null) {
                 if (collapseBtn.getParent() != hRibbon) {
                     hRibbon.addComponentToContainer(collapseBtn);
@@ -100,7 +110,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         groupBoundsCache = null;
         componentsByGroupCache = null;
 
-        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5) - collapseBtn.getWidth()-3;
+        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5) - collapseBtn.getWidth() - 3;
 
         int headerAlignment = hRibbon.getHeaderAlignment();
         boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
@@ -127,7 +137,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         //Calcul des tailles préférées avant la distribution
         preferredCalculator.computeAndAssignPreferredWidths(ribbon, model, groupModel, groupCount, availableWidth, ctx);
 
-        int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, groupModel, availableWidth);
+        int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, hRibbon, availableWidth);
 
         Map<Integer, Integer> normalWidths = new HashMap<>();
         for (int i = 0; i < normalGroupWidths.length; i++) {
@@ -214,6 +224,54 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         }
         groupBoundsCache = groupBounds;
 
+        // =============ÉTAPE 6b : GESTION DU SCROLL HORIZONTAL=================
+        // Si tous les groupes sont collapsed et que la largeur totale
+        // dépasse availableWidth, on active la scrollbar horizontale.
+        // La scrollbar occupe la zone libérée par les headers.
+        //
+        // Paramètres de la scrollbar :
+        //   minimum      = 0 (début du défilement)
+        //   maximum      = largeurTotaleCollapsed (fin du défilement)
+        //   visibleAmount = availableWidth (portion visible)
+        //   value        = scrollOffset (position actuelle)
+        if (shouldEnableHorizontalScroll(groupModel, availableWidth)) {
+
+            // Créer la scrollbar si elle n'existe pas encore
+            ensureScrollBarExists(ribbon);
+
+            // Calculer la largeur totale de tous les groupes collapsed
+            int totalCollapsedWidth = 0;
+            for (int i = 0; i < groupCount; i++) {
+                HRibbonGroup group = groupModel.getHRibbonGroup(i);
+                totalCollapsedWidth += group.getCollapsedWidth();
+                if (i < groupCount - 1) {
+                    totalCollapsedWidth += groupMargin;
+                }
+            }
+
+            // Configurer les paramètres de la scrollbar
+            horizontalScrollBar.setMinimum(0);
+            horizontalScrollBar.setMaximum(totalCollapsedWidth);
+            horizontalScrollBar.setVisibleAmount(availableWidth);
+            horizontalScrollBar.setValue(scrollOffset);            
+
+            // Positionner la scrollbar dans la zone des headers
+            int insetLeft = (insets != null) ? insets.left : 0;
+            int scrollBarY = contentY + contentHeightPerGroup + headerMargin;
+            int scrollBarH = headerHeight;
+            int scrollBarW = availableWidth;
+
+            horizontalScrollBar.setBounds(insetLeft, scrollBarY, scrollBarW, scrollBarH);
+            horizontalScrollBar.setVisible(true);
+
+        } else {
+            // Pas de scroll nécessaire : masquer la scrollbar et réinitialiser l'offset
+            if (horizontalScrollBar != null) {
+                horizontalScrollBar.setVisible(false);
+            }
+            scrollOffset = 0;
+        }
+
         // ============ ÉTAPE 7 : POSITION DES HEADERS ============
         headerManager.updateAndPositionHeaders(hRibbon, ctx, groupModel, groupBounds);
 
@@ -234,6 +292,8 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 // Ajouter au conteneur si pas déjà présent
                 if (c.getParent() != hRibbon) {
                     hRibbon.addComponentToContainer(c);
+
+//                    System.out.println( "group " + group.getModelIndex() + " :Comp" + "Dim = " + c.getPreferredSize());
                 }
 
                 //Gestion stricte de la visibilité du OverflowButton
@@ -288,7 +348,13 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                     // Centrer le OverflowButton verticalement dans le groupRect
                     int btnHeight = Math.min(btn.getPreferredSize().height, groupRect.height);
                     int y = groupRect.y + (groupRect.height - btnHeight) / 2;
-                    btn.setBounds(groupRect.x, y, group.getCollapsedWidth(), btnHeight);
+
+                    // Appliquer scrollOffset à X :
+                    // - scrollOffset = 0 → comportement identique à avant
+                    // - scrollOffset > 0 → les groupes défilent vers la gauche
+                    int x = groupRect.x - scrollOffset;
+
+                    btn.setBounds(x- scrollOffset, y, group.getCollapsedWidth(), btnHeight);
                 }
             } else {
                 // Groupe normal : layout multi-lignes normal              
@@ -300,6 +366,11 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         }
     }
 
+    // Getter public pour que BasicHRibbonUI puisse lire le scrollOffset
+public int getScrollOffset() {
+    return scrollOffset;
+}
+    
     @Override
     public Dimension preferredLayoutSize(Container parent) {
 
@@ -439,6 +510,66 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         componentsByGroupCache = null;
         componentOrganizer.clearCache();
         preferredCalculator.clearCache();
+    }
+
+    /**
+     * Détermine si le scroll horizontal doit être activé.
+     *
+     * Conditions : 1. Tous les groupes sont collapsed 2. La largeur totale des
+     * groupes collapsed > availableWidth
+     *
+     * @return true si le scroll doit être activé
+     */
+    private boolean shouldEnableHorizontalScroll(HRibbonGroupModel groupModel,
+            int availableWidth) {
+        int groupCount = groupModel.getGroupCount();
+        if (groupCount == 0) {
+            return false;
+        }
+
+        // Vérifier que TOUS les groupes sont collapsed
+        for (int i = 0; i < groupCount; i++) {
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
+            if (group == null || !group.isCollapsed()) {
+                return false; // Au moins un groupe n'est pas collapsed
+            }
+        }
+
+        // Calculer la largeur totale nécessaire
+        int totalCollapsedWidth = 0;
+        int groupMargin = groupModel.getHRibbonGroupMarggin();
+        for (int i = 0; i < groupCount; i++) {
+            HRibbonGroup group = groupModel.getHRibbonGroup(i);
+            totalCollapsedWidth += group.getCollapsedWidth();
+            if (i < groupCount - 1) {
+                totalCollapsedWidth += groupMargin;
+            }
+        }
+
+        if (totalCollapsedWidth > availableWidth) {
+            System.out.println("debut scroll");
+        }
+        
+        return totalCollapsedWidth > availableWidth;
+    }
+
+    /**
+     * Crée et configure la scrollbar horizontale si elle n'existe pas encore.
+     * L'ajoute physiquement au Ribbon via addComponentToContainer().
+     */
+    private void ensureScrollBarExists(Ribbon ribbon) {
+        if (horizontalScrollBar == null) {
+            horizontalScrollBar = new HScrollBar(JScrollBar.HORIZONTAL);
+            horizontalScrollBar.setScrollStyle(HScrollBarStyle.PRIMARY);
+
+            // Écouter les changements de valeur pour mettre à jour scrollOffset
+            horizontalScrollBar.addAdjustmentListener(e -> {
+                scrollOffset = e.getValue();
+                ribbon.repaint(); // Redessiner avec le nouvel offset
+            });
+
+            ribbon.addComponentToContainer(horizontalScrollBar);
+        }
     }
 
     /**

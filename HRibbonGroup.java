@@ -10,7 +10,6 @@ package rubban;
 
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Rectangle;
 import java.util.Objects;
 import javax.swing.event.SwingPropertyChangeSupport;
 import rubban.layout.CollapseLevel;
@@ -66,7 +65,7 @@ public class HRibbonGroup {
  * Une valeur trop petite peut provoquer des chevauchements visuels
  * ou rendre les composants illisibles lors du resize adaptatif.
  */
-private int minWidth = 120;
+private int minWidth = -1;
 
     /**
      * Largeur maximale autorisée pour ce groupe. 0 = pas de maximum imposé.
@@ -91,7 +90,7 @@ private int minWidth = 120;
      * Largeur du groupe lorsqu'il est en mode COLLAPSED (JComboBox). Par défaut
      * 80 pixels.
      */
-    private int collapsedWidth = 119;
+    private int collapsedWidth = 85;
 
     /**
      * Composant affiché quand le groupe est collapsed (généralement un

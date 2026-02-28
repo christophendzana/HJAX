@@ -211,11 +211,12 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     public enum RibbonState {
         EXPANDED, // Ruban déplié (affichage normal)
-        COLLAPSED   // Ruban réduit (bouton seulement)
+        VERTIVAL_COLLAPSED,   // Ruban réduit  (bouton seulement)
+        HORIZONTAL_COLLAPSED
     }
 
     // =========================================================================
-    // VARIABLES POUR LA GESTION DES ETATS EXPAND AND COLLAPSED DU RUBAN
+    // VARIABLES POUR LA GESTION DES ETATS EXPAND AND VERTIVAL_COLLAPSED DU RUBAN
     // =========================================================================
     private RibbonState currentState = RibbonState.EXPANDED;
     private boolean autoCollapseEnabled = false;
@@ -246,7 +247,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private CollapseLevel[] savedGroupStates;
 
     // =========================================================================
-    //ANIMATION COLLAPSED RIBBON
+    //ANIMATION VERTIVAL_COLLAPSED RIBBON
     // =========================================================================
     private Timer collapseAnimator;
     private int startHeight;
@@ -292,6 +293,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private static boolean UseEntireWidth = false;
 
     private int ribbonHeight = 300;
+    
     
     // =========================================================================
     // CONSTRUCTEURS
@@ -2045,7 +2047,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 // BOUTON DE COLLAPSE
 // =========================================================================
     /**
-     * Définit un bouton personnalisé pour le mode COLLAPSED. Si null, le bouton
+     * Définit un bouton personnalisé pour le mode VERTIVAL_COLLAPSED. Si null, le bouton
      * par défaut sera utilisé.
      */
     public void setCollapsedButton(Component button) {
@@ -2056,8 +2058,8 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
         this.collapsedButton = button;
 
-        // Si on est en mode COLLAPSED, forcer la mise à jour
-        if (currentState == RibbonState.COLLAPSED) {
+        // Si on est en mode VERTIVAL_COLLAPSED, forcer la mise à jour
+        if (currentState == RibbonState.VERTIVAL_COLLAPSED) {
             revalidate();
             repaint();
         }
@@ -2073,10 +2075,10 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
         // Action : expand le ruban
         button.addActionListener(e -> {
-            if (getRibbonState() == RibbonState.COLLAPSED) {
+            if (getRibbonState() == RibbonState.VERTIVAL_COLLAPSED) {
                 setRibbonState(RibbonState.EXPANDED);
             } else {
-                setRibbonState(RibbonState.COLLAPSED);
+                setRibbonState(RibbonState.VERTIVAL_COLLAPSED);
             }
         });
 
@@ -2139,9 +2141,9 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
                     if (parentHeight < preferredHeight && currentState == RibbonState.EXPANDED) {
                         // Collapse immédiat si pas assez d'espace
-                        setRibbonState(RibbonState.COLLAPSED);
+                        setRibbonState(RibbonState.VERTIVAL_COLLAPSED);
 
-                    } else if (parentHeight >= referenceExpandedHeight && currentState == RibbonState.COLLAPSED) {
+                    } else if (parentHeight >= referenceExpandedHeight && currentState == RibbonState.VERTIVAL_COLLAPSED) {
                         // Expand si l'espace redevient suffisant pour la hauteur normale
                         setRibbonState(RibbonState.EXPANDED);
                     }
@@ -2149,12 +2151,23 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                     // 5. Dans tous les cas, on déverrouille
                     isAdjustingState = false;
                 }
+                
             }
         };
     }
 
+    private void setAllGroupsCollapsed(boolean collapsed){
+        
+        int groupColapsed = 0;
+        
+        for (int i = 0; i < 10; i++) {
+            
+        }
+        
+    }
+    
     /**
-     * Définit l'état du ruban (EXPANDED ou COLLAPSED).
+     * Définit l'état du ruban (EXPANDED ou VERTIVAL_COLLAPSED).
      */
     /**
      */
@@ -2169,7 +2182,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         HButton button = (HButton) this.getCollapseButton();
 
         int newHeight;
-        if (state == RibbonState.COLLAPSED) {
+        if (state == RibbonState.VERTIVAL_COLLAPSED) {
             saveGroupStates();
             newHeight = collapsedHeight;
 
@@ -2262,11 +2275,11 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     }
 
     /**
-     * Définit la hauteur du ruban quand il est réduit (COLLAPSED).
+     * Définit la hauteur du ruban quand il est réduit (VERTIVAL_COLLAPSED).
      */
     public void setCollapsedHeight(int height) {
         this.collapsedHeight = Math.max(20, height);
-        if (currentState == RibbonState.COLLAPSED) {
+        if (currentState == RibbonState.VERTIVAL_COLLAPSED) {
             revalidate();
         }
     }
@@ -2280,7 +2293,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     /**
      * Sauvegarde l'état actuel de tous les groupes. Appelé automatiquement
-     * avant de passer en mode COLLAPSED.
+     * avant de passer en mode VERTIVAL_COLLAPSED.
      */
     private void saveGroupStates() {
         if (groupModel == null) {
