@@ -90,7 +90,7 @@ private int minWidth = -1;
      * Largeur du groupe lorsqu'il est en mode COLLAPSED (JComboBox). Par défaut
      * 80 pixels.
      */
-    private int collapsedWidth = 85;
+    private int collapsedWidth = 80;
 
     /**
      * Composant affiché quand le groupe est collapsed (généralement un
@@ -182,7 +182,7 @@ private int minWidth = -1;
     private SwingPropertyChangeSupport changeSupport;
 
     private boolean collapsible = true;      // peut-on transformer le groupe en menu ?
-    private int collapseWidth = 48;          // largeur (px) du placeholder quand collapsed (par défaut)
+           // largeur (px) du placeholder quand collapsed (par défaut)
     private boolean collapsed = false;       // état courant de collapse
 
     // =========================================================================
@@ -848,14 +848,14 @@ public void setMinWidth(int minWidth) {
      * Largeur (px) à utiliser pour le groupe lorsqu'il est collapsé.
      */
     public int getCollapseWidth() {
-        return Math.max(0, collapseWidth);
+        return Math.max(0, collapsedWidth);
     }
 
     /**
      * Définit la collapseWidth (px).
      */
     public void setCollapseWidth(int collapseWidth) {
-        this.collapseWidth = Math.max(0, collapseWidth);
+        this.collapsedWidth = Math.max(0, collapseWidth);
     }
 
     /**
@@ -1009,6 +1009,7 @@ public void setMinWidth(int minWidth) {
     @Override
     public String toString() {
         return "HRibbonGroup[identifier=" + groupIdentifier               
-                + ", preferred=" + preferredWidth + "]";
+                + ", preferred=" + preferredWidth + "]"
+                + ", currentWidth=" + width + "]";
     }
 }
