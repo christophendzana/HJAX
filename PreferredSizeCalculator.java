@@ -559,7 +559,7 @@ public class PreferredSizeCalculator {
             int pw = (int) Math.round(espaceNet * poids[i]);
             pw = Math.max(pw, 30);
             group.setPreferredWidth(pw);
-            System.out.println(group.toString());
+//            System.out.println(group.toString());
         }
     }
 
