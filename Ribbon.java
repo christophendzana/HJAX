@@ -211,7 +211,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     public enum RibbonState {
         EXPANDED, // Ruban déplié (affichage normal)
-        VERTIVAL_COLLAPSED,   // Ruban réduit  (bouton seulement)
+        VERTIVAL_COLLAPSED, // Ruban réduit  (bouton seulement)
         HORIZONTAL_COLLAPSED
     }
 
@@ -293,8 +293,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     private static boolean UseEntireWidth = false;
 
     private int ribbonHeight = 300;
-    
-    
+
     // =========================================================================
     // CONSTRUCTEURS
     // =========================================================================
@@ -554,14 +553,18 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 //    }
     /**
      * Déplace un groupe à une nouvelle position.
+     *
+     * @param groupIndex
+     * @param targetIndex
      */
     public void moveGroup(int groupIndex, int targetIndex) {
         if (groupIndex < 0 || groupIndex >= groupModel.getGroupCount()
                 || targetIndex < 0 || targetIndex >= groupModel.getGroupCount()) {
             throw new IllegalArgumentException("Indice de groupe invalide");
         }
-
         groupModel.moveGroup(groupIndex, targetIndex);
+        model.moveGroup(groupIndex, targetIndex);
+        componentOrganizer.clearCache();
     }
 
     /**
@@ -629,17 +632,28 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             base = new Dimension(getParent().getWidth(), 120);
         }
 
-        // 3) Largeur = celle du parent (si disponible)
-        int width = base.width;
-        Container parent = getParent();
-        if (parent != null) {
-            width = parent.getWidth(); // Prend toute la largeur du parent
-        }
+        // 3) DÉTECTION DU CONTEXTE PARENT
+// Dans un JTabbedPane, c'est lui qui impose les bounds via son LayoutManager.
+// On ne s'approprie donc pas la largeur — on retourne uniquement
+// la hauteur issue de ribbonHeight pour que la zone de contenu
+// du JTabbedPane soit correctement dimensionnée.
+Container parent = getParent();
+if (parent != null && (parent instanceof JTabbedPane ||
+                       parent.getParent() instanceof JTabbedPane)) {
+    return new Dimension(base.width, ribbonHeight);
+}
 
-        // 4) Appliquer la limite maximale de hauteur
-        int height = Math.min(base.height, maxHeight);
+// 4) COMPORTEMENT NORMAL (hors JTabbedPane)
+// Largeur = celle du parent si disponible
+int width = base.width;
+if (parent != null) {
+    width = parent.getWidth();
+}
 
-        return new Dimension(width, height);
+// Hauteur limitée par maxHeight
+int height = Math.min(base.height, maxHeight);
+
+return new Dimension(width, height);
     }
 
     /**
@@ -917,7 +931,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                     break;
 
                 case HRibbonModelEvent.MOVE:
-                    groupModel.moveGroup(e.getPosition(), e.getToPosition());
+                    groupModel.moveGroup(e.getPosition(), e.getToPosition());                    
                     break;
             }
         }
@@ -942,7 +956,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (component != null && component.getParent() != this) {
             super.add(component); // Appel à JComponent.add()            
         }
-
     }
 
     /**
@@ -1114,7 +1127,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         if (layout != null) {
             layout.invalidateLayout(this);
         }
-
         revalidate();
         repaint();
     }
@@ -1440,6 +1452,12 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                 throw new IndexOutOfBoundsException("Invalid group index: " + newIndex);
             }
             groupModel.moveGroup(groupIdentifier, newIndex);
+            
+            int currentIndex = groupModel.getGroupIndex(groupIdentifier);            
+            if (currentIndex >= 0) {
+                model.moveGroup(currentIndex, newIndex);
+            }
+            componentOrganizer.clearCache();
         }
     }
 
@@ -1949,14 +1967,22 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         return overflowProxyFactory;
     }
 
-    public int getRibbonHeight(){
+    public int getRibbonHeight() {
         return ribbonHeight;
     }
-    
-    public void setRibbonHeight( int height ){
-        this.ribbonHeight = height;
+
+    public void setRibbonHeight(int height) {
+    this.ribbonHeight = height;
+
+    // Si le Ribbon est dans un JTabbedPane, forcer un recalcul
+    // immédiat du layout pour que la nouvelle hauteur soit prise en compte
+    if (layout != null) {
+        layout.invalidateLayout(this);
     }
-    
+    revalidate();
+    repaint();
+}
+
     /**
      * Retourne la hauteur de contenu préférée calculée par le
      * HRibbonLayoutManager.
@@ -2047,8 +2073,8 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 // BOUTON DE COLLAPSE
 // =========================================================================
     /**
-     * Définit un bouton personnalisé pour le mode VERTIVAL_COLLAPSED. Si null, le bouton
-     * par défaut sera utilisé.
+     * Définit un bouton personnalisé pour le mode VERTIVAL_COLLAPSED. Si null,
+     * le bouton par défaut sera utilisé.
      */
     public void setCollapsedButton(Component button) {
         // Retirer l'ancien bouton s'il existe
@@ -2151,21 +2177,21 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
                     // 5. Dans tous les cas, on déverrouille
                     isAdjustingState = false;
                 }
-                
+
             }
         };
     }
 
-    private void setAllGroupsCollapsed(boolean collapsed){
-        
+    private void setAllGroupsCollapsed(boolean collapsed) {
+
         int groupColapsed = 0;
-        
+
         for (int i = 0; i < 10; i++) {
-            
+
         }
-        
+
     }
-    
+
     /**
      * Définit l'état du ruban (EXPANDED ou VERTIVAL_COLLAPSED).
      */
