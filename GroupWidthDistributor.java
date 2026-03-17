@@ -70,11 +70,11 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
     /**
      * Distribue les largeurs disponibles entre tous les groupes du ruban
      *
-     * ALGORITHME GÉNÉRAL : 1. Vérifier les paramètres d'entrée (null, groupes
-     * vides) 2. Calculer l'espace disponible après soustraction des marges 3.
-     * Choisir le mode de distribution (égal vs intelligent) 4. Appliquer
-     * l'algorithme de distribution correspondant 5. Appliquer les contraintes
-     * min/max de chaque groupe 6. Garantir des largeurs minimales raisonnables
+     * ALGORITHME GÉNÉRAL : 1.Vérifier les paramètres d'entrée (null, groupes
+ vides) 2. Calculer l'espace disponible après soustraction des marges 3.
+ Choisir le mode de distribution (égal vs intelligent) 4. Appliquer
+ l'algorithme de distribution correspondant 5. Appliquer les contraintes
+ min/max de chaque groupe 6. Garantir des largeurs minimales raisonnables
      *
      * @param ctx Contexte de layout contenant : - Alignement des en-têtes
      * (headerAlignment) - Largeur des en-têtes (headerWidth) - Marge entre
@@ -82,6 +82,7 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
      * (isEqualDistribution)
      * @param availableWidth Largeur totale disponible dans le conteneur parent
      * (déjà soustraite des marges gauche/droite du parent)
+     * @param useEntireSpace
      * @return Tableau d'entiers de taille groupModel.getGroupCount() Chaque
      * élément représente la largeur totale allouée au groupe correspondant
      * (inclut l'espace pour l'en-tête si alignement WEST/EAST)
@@ -93,9 +94,9 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
             Ribbon ribbon,
             int availableWidth, boolean useEntireSpace) {
 
-        // =========================================================================
+        // =====================================================================
         // ÉTAPE 1 : VALIDATION DES PARAMÈTRES
-        // =========================================================================
+        // =====================================================================
         // Objectif : Vérifier que tout ce dont on a besoin existe
         // Si un élément critique est manquant, on retourne un tableau vide
         // plutôt que de planter (robustesse)
@@ -151,6 +152,13 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
                         group.getComponentMargin(),
                         group.getPadding()
                 );
+                
+//                 System.out.println("Groupe " + i 
+//    + " | getWidth()=" + group.getWidth()
+//    + " | getPreferredWidth()=" + group.getPreferredWidth()
+//    + " | groupCurrentWidth=" + groupCurrentWidth
+//    + " | dynamicMin=" + dynamicMin);
+                
             }
 
         }
@@ -245,17 +253,11 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
             // nécessaire pour que tous les composants du groupe soient visibles
             // correctement, en tenant compte de leur disposition
             if (group != null) {
-
-//                System.out.println("Groupe " + i 
-//    + " | getWidth()=" + group.getWidth()
-//    + " | getPreferredWidth()=" + group.getPreferredWidth()
-//    + " | groupCurrentWidth=" + groupCurrentWidth
-//    + " | dynamicMin=" + dynamicMin
-//    + " | effectiveMin=" + effectiveMin[i]);
                 // On sauvegarde ce minimum dynamique dans le groupe
                 group.setMinWidth(dynamicMin[i]);
 
             }
+            
             effectiveMin[i] = dynamicMin[i];
             // La largeur demandée ne peut jamais être inférieure au minimum effectif
             // C'est logique : on ne peut pas demander moins que le minimum viable
@@ -376,7 +378,7 @@ public class GroupWidthDistributor implements IGroupWidthDistributor {
         // Objectif : Corriger les erreurs d'arrondi dues aux divisions entières
         // Après toutes ces opérations, la somme des largeurs peut ne pas correspondre
         // exactement à widthForGroups (à cause des divisions et des contraintes)
-        // On ajuste pixel par pixel pour atteindre la largeur exacte
+        // On ajuste au fur et à mesure pour atteindre la largeur exacte
         int used = 0;
         for (int w : finalWidths) {
             used += w;  // On recalcule la somme utilisée
