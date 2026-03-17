@@ -4,9 +4,6 @@
  */
 package rubban;
 
-import hcomponents.ArrowIcon;
-import hcomponents.HButton;
-import hcomponents.vues.HButtonStyle;
 import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.util.*;
@@ -108,11 +105,6 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     protected transient Hashtable<Object, Object> defaultRenderersByGroupClass;
 
     /**
-     * Activer le drag & drop des groupes/composants.
-     */
-    private boolean dragEnabled;
-
-    /**
      * Empêcher les mises à jour récursives de l'UI.
      */
     private transient boolean updateInProgress;
@@ -139,7 +131,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
     /**
      * Hauteur maximale du ruban
      */
-    private int maxHeight = 300;
+    private int maxHeight = 500;
 
     /**
      * Couleur de fond par défaut pour tous les en-têtes du ruban. Utilisée
@@ -257,8 +249,7 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
 
     private int referenceExpandedHeight = -1;
 
-    private Component defaultCollapseButton;
-
+//    private Component defaultCollapseButton;
     private Icon iconRibbonOverflowButton = null;
 
     /**
@@ -633,27 +624,27 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
         }
 
         // 3) DÉTECTION DU CONTEXTE PARENT
-// Dans un JTabbedPane, c'est lui qui impose les bounds via son LayoutManager.
-// On ne s'approprie donc pas la largeur — on retourne uniquement
-// la hauteur issue de ribbonHeight pour que la zone de contenu
-// du JTabbedPane soit correctement dimensionnée.
-Container parent = getParent();
-if (parent != null && (parent instanceof JTabbedPane ||
-                       parent.getParent() instanceof JTabbedPane)) {
-    return new Dimension(base.width, ribbonHeight);
-}
+        // Dans un JTabbedPane, c'est lui qui impose les bounds via son LayoutManager.
+        // On ne s'approprie donc pas la largeur — on retourne uniquement
+        // la hauteur issue de ribbonHeight pour que la zone de contenu
+        // du JTabbedPane soit correctement dimensionnée.
+        Container parent = getParent();
+        if (parent != null && (parent instanceof JTabbedPane
+                || parent.getParent() instanceof JTabbedPane)) {
+            return new Dimension(base.width, ribbonHeight);
+        }
 
-// 4) COMPORTEMENT NORMAL (hors JTabbedPane)
-// Largeur = celle du parent si disponible
-int width = base.width;
-if (parent != null) {
-    width = parent.getWidth();
-}
+        // 4) COMPORTEMENT NORMAL (hors JTabbedPane)
+        // Largeur = celle du parent si disponible
+        int width = base.width;
+        if (parent != null) {
+            width = parent.getWidth();
+        }
 
-// Hauteur limitée par maxHeight
-int height = Math.min(base.height, maxHeight);
+        // Hauteur limitée par maxHeight
+        int height = Math.min(base.height, maxHeight);
 
-return new Dimension(width, height);
+        return new Dimension(width, height);
     }
 
     /**
@@ -931,7 +922,7 @@ return new Dimension(width, height);
                     break;
 
                 case HRibbonModelEvent.MOVE:
-                    groupModel.moveGroup(e.getPosition(), e.getToPosition());                    
+                    groupModel.moveGroup(e.getPosition(), e.getToPosition());
                     break;
             }
         }
@@ -1452,8 +1443,8 @@ return new Dimension(width, height);
                 throw new IndexOutOfBoundsException("Invalid group index: " + newIndex);
             }
             groupModel.moveGroup(groupIdentifier, newIndex);
-            
-            int currentIndex = groupModel.getGroupIndex(groupIdentifier);            
+
+            int currentIndex = groupModel.getGroupIndex(groupIdentifier);
             if (currentIndex >= 0) {
                 model.moveGroup(currentIndex, newIndex);
             }
@@ -1972,16 +1963,16 @@ return new Dimension(width, height);
     }
 
     public void setRibbonHeight(int height) {
-    this.ribbonHeight = height;
+        this.ribbonHeight = height;
 
-    // Si le Ribbon est dans un JTabbedPane, forcer un recalcul
-    // immédiat du layout pour que la nouvelle hauteur soit prise en compte
-    if (layout != null) {
-        layout.invalidateLayout(this);
+        // Si le Ribbon est dans un JTabbedPane, forcer un recalcul
+        // immédiat du layout pour que la nouvelle hauteur soit prise en compte
+        if (layout != null) {
+            layout.invalidateLayout(this);
+        }
+        revalidate();
+        repaint();
     }
-    revalidate();
-    repaint();
-}
 
     /**
      * Retourne la hauteur de contenu préférée calculée par le
@@ -2094,35 +2085,35 @@ return new Dimension(width, height);
     /**
      * Crée le bouton de collapse par défaut.
      */
-    private Component createDefaultCollapsedButton() {
-        HButton button = new HButton(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
-        button.setButtonStyle(HButtonStyle.PRIMARY);
-        button.setToolTipText("Réduire le ruban");
+//    private Component createDefaultCollapsedButton() {
+//        HButton button = new HButton(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
+//        button.setButtonStyle(HButtonStyle.PRIMARY);
+//        button.setToolTipText("Réduire le ruban");
+//
+    ////         Action : expand le ruban
+//        button.addActionListener(e -> {
+//            if (getRibbonState() == RibbonState.VERTIVAL_COLLAPSED) {
+//                setRibbonState(RibbonState.EXPANDED);
+//            } else {
+//                setRibbonState(RibbonState.VERTIVAL_COLLAPSED);
+//            }
+//        });
+//
+//        return button;
+//    }
 
-        // Action : expand le ruban
-        button.addActionListener(e -> {
-            if (getRibbonState() == RibbonState.VERTIVAL_COLLAPSED) {
-                setRibbonState(RibbonState.EXPANDED);
-            } else {
-                setRibbonState(RibbonState.VERTIVAL_COLLAPSED);
-            }
-        });
-
-        return button;
-    }
-
-    /**
-     * Retourne le bouton de collapse (le crée si nécessaire).
-     */
-    Component getCollapseButton() {
-        if (collapsedButton != null) {
-            return collapsedButton; // Bouton personnalisé
-        }
-        if (defaultCollapseButton == null) {
-            defaultCollapseButton = createDefaultCollapsedButton();
-        }
-        return defaultCollapseButton;
-    }
+//    /**
+//     * Retourne le bouton de collapse (le crée si nécessaire).
+//     */
+//    Component getCollapseButton() {
+//        if (collapsedButton != null) {
+//            return collapsedButton; // Bouton personnalisé
+//        }
+//        if (defaultCollapseButton == null) {
+//            defaultCollapseButton = createDefaultCollapsedButton();
+//        }
+//        return defaultCollapseButton;
+//    }
 
     /**
      * Crée et configure le listener de redimensionnement du parent. Ce listener
@@ -2154,9 +2145,8 @@ return new Dimension(width, height);
                     return;
                 }
 
-                int parentHeight = parent.getHeight();
-                int preferredHeight = getPreferredSize().height;
-
+//                int parentHeight = parent.getHeight();
+//                int preferredHeight = getPreferredSize().height;
                 // 4. Prendre la décision de collapse ou expand
                 isAdjustingState = true; // ← On verrouille pour éviter la boucle
                 try {
@@ -2165,14 +2155,14 @@ return new Dimension(width, height);
                         referenceExpandedHeight = getPreferredSize().height;
                     }
 
-                    if (parentHeight < preferredHeight && currentState == RibbonState.EXPANDED) {
-                        // Collapse immédiat si pas assez d'espace
-                        setRibbonState(RibbonState.VERTIVAL_COLLAPSED);
-
-                    } else if (parentHeight >= referenceExpandedHeight && currentState == RibbonState.VERTIVAL_COLLAPSED) {
-                        // Expand si l'espace redevient suffisant pour la hauteur normale
-                        setRibbonState(RibbonState.EXPANDED);
-                    }
+//                    if (parentHeight < preferredHeight && currentState == RibbonState.EXPANDED) {
+//                        // Collapse immédiat si pas assez d'espace
+//                        setRibbonState(RibbonState.VERTIVAL_COLLAPSED);
+//
+//                    } else if (parentHeight >= referenceExpandedHeight && currentState == RibbonState.VERTIVAL_COLLAPSED) {
+//                        // Expand si l'espace redevient suffisant pour la hauteur normale
+//                        setRibbonState(RibbonState.EXPANDED);
+//                    }
                 } finally {
                     // 5. Dans tous les cas, on déverrouille
                     isAdjustingState = false;
@@ -2197,44 +2187,43 @@ return new Dimension(width, height);
      */
     /**
      */
-    public void setRibbonState(RibbonState state) {
-        if (state == null || this.currentState == state) {
-            return;
-        }
-
-        RibbonState old = this.currentState;
-        this.currentState = state;
-
-        HButton button = (HButton) this.getCollapseButton();
-
-        int newHeight;
-        if (state == RibbonState.VERTIVAL_COLLAPSED) {
-            saveGroupStates();
-            newHeight = collapsedHeight;
-
-            button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.DOWN, 0.4f, 5));
-            button.setToolTipText("Etendre le ruban");
-            for (Component comp : getComponents()) {
-                comp.setVisible(false);
-            }
-        } else {
-            for (Component comp : getComponents()) {
-                comp.setVisible(true);
-            }
-            restoreGroupStates();
-            // Utiliser la hauteur de référence sauvegardée
-            newHeight = (referenceExpandedHeight != -1) ? referenceExpandedHeight : getPreferredSize().height;
-            button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
-
-        }
-
-        // Lancer l'animation vers la nouvelle hauteur
-        animateHeight(newHeight);
-
-        firePropertyChange("ribbonState", old, state);
-        // Pas besoin de revalidate/repaint ici, l'animation s'en charge
-    }
-
+//    public void setRibbonState(RibbonState state) {
+//        if (state == null || this.currentState == state) {
+//            return;
+//        }
+//
+//        RibbonState old = this.currentState;
+//        this.currentState = state;
+//
+//        HButton button = (HButton) this.getCollapseButton();
+//
+//        int newHeight;
+//        if (state == RibbonState.VERTIVAL_COLLAPSED) {
+//            saveGroupStates();
+//            newHeight = collapsedHeight;
+//
+//            button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.DOWN, 0.4f, 5));
+//            button.setToolTipText("Etendre le ruban");
+//            for (Component comp : getComponents()) {
+//                comp.setVisible(false);
+//            }
+//        } else {
+//            for (Component comp : getComponents()) {
+//                comp.setVisible(true);
+//            }
+//            restoreGroupStates();
+//            // Utiliser la hauteur de référence sauvegardée
+//            newHeight = (referenceExpandedHeight != -1) ? referenceExpandedHeight : getPreferredSize().height;
+//            button.setIcon(new ArrowIcon(defaultHeaderBorderColor, ArrowIcon.Direction.UP, 0.4f, 5));
+//
+//        }
+//
+//        // Lancer l'animation vers la nouvelle hauteur
+//        animateHeight(newHeight);
+//
+//        firePropertyChange("ribbonState", old, state);
+//        // Pas besoin de revalidate/repaint ici, l'animation s'en charge
+//    }
     /**
      * Anime la transition entre la hauteur actuelle et la nouvelle hauteur.
      */

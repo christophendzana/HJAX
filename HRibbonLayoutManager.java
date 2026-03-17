@@ -62,6 +62,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         if (!SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("HRibbonLayoutManager.layoutContainer must be called on the EDT");
         }
+        //Si le contenaire n'est pas un ruban
         if (!(parent instanceof Ribbon)) {
             return;
         }
@@ -69,37 +70,34 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         Ribbon hRibbon = (Ribbon) parent;
         Insets insets = parent.getInsets();
 
-        // Positionnement tu boutton collapse du Ruban
-        int collapseBtnWidth = 60; // Largeur arbitraire, à ajuster
-        int collapseBtnHeight = 30;
-
-        int posX = parent.getWidth() - collapseBtnWidth - (insets != null ? insets.right : 0);
-        int posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0);
-
-        Component collapseBtn = hRibbon.getCollapseButton();
-
-        if (hRibbon.getRibbonState() == Ribbon.RibbonState.VERTIVAL_COLLAPSED) {
-            // Mode VERTIVAL_COLLAPSED : bouton en haut à droite du ruban réduit
-            if (collapseBtn != null) {
-                if (collapseBtn.getParent() != hRibbon) {
-                    hRibbon.addComponentToContainer(collapseBtn);
-                }
-                collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
-                collapseBtn.setVisible(true);
-            }
-            return;
-        } else {            // Mode EXPANDED : bouton en bas à droite du ruban complet
-
-            posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0);
-
-            if (collapseBtn != null) {
-                if (collapseBtn.getParent() != hRibbon) {
-                    hRibbon.addComponentToContainer(collapseBtn);
-                }
-                collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
-                collapseBtn.setVisible(true);
-            }
-        }
+//         Positionnement tu boutton collapse du Ruban
+//        int collapseBtnWidth = 60; // Largeur arbitraire, à ajuster
+//        int collapseBtnHeight = 30;
+//
+//        int posX = parent.getWidth() - collapseBtnWidth - (insets != null ? insets.right : 0);
+//        int posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0);
+//
+//        Component collapseBtn = hRibbon.getCollapseButton();
+//
+//        if (hRibbon.getRibbonState() == Ribbon.RibbonState.VERTIVAL_COLLAPSED) {
+//            // Mode VERTIVAL_COLLAPSED : bouton en haut à droite du ruban réduit
+//            if (collapseBtn != null) {
+//                if (collapseBtn.getParent() != hRibbon) {
+//                    hRibbon.addComponentToContainer(collapseBtn);
+//                }
+//                collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
+//            }
+//        } else { // Mode EXPANDED : bouton en bas à droite du ruban complet
+//
+//            posY = parent.getHeight() - collapseBtnHeight - (insets != null ? insets.bottom : 0);
+//
+//            if (collapseBtn != null) {
+//                if (collapseBtn.getParent() != hRibbon) {
+//                    hRibbon.addComponentToContainer(collapseBtn);
+//                }
+//                collapseBtn.setBounds(posX, posY, collapseBtnWidth, collapseBtnHeight);
+//            }
+//        }
 
         HRibbonModel model = hRibbon.getModel();
         HRibbonGroupModel groupModel = hRibbon.getGroupModel();
@@ -110,7 +108,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         groupBoundsCache = null;
         componentsByGroupCache = null;
 
-        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5) - collapseBtn.getWidth() - 3;
+        int availableWidth = parent.getWidth() - (insets != null ? (insets.left + insets.right) : 5);
 
         int headerAlignment = hRibbon.getHeaderAlignment();
         boolean headersVisible = headerAlignment != Ribbon.HEADER_HIDDEN;
@@ -119,7 +117,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         int defaultGroupWidth = hRibbon.getDefaultGroupWidth();
         int absoluteGroupMin = hRibbon.getDefaultAbsoluteGroupWidth();
         boolean useEntireWidth = hRibbon.getUseEntireWidth();
-        
+
         HRibbonLayoutContext ctx = new HRibbonLayoutContext(
                 headerAlignment,
                 hRibbon.getHeaderWidth(),
@@ -129,8 +127,6 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                 absoluteGroupMin
         );
 
-        
-        
         int groupCount = groupModel.getGroupCount();
         if (groupCount == 0) {
             return;
@@ -139,13 +135,12 @@ public class HRibbonLayoutManager implements LayoutManager2 {
         // ============ ÉTAPE 1 : CALCULER LES LARGEURS NORMALES ============
         //Calcul des tailles préférées avant la distribution
         if (useEntireWidth) {
-    // Mode étendu : on calcule les preferredWidths proportionnellement
-    // à availableWidth avant de distribuer
-    preferredCalculator.computeAndAssignPreferredWidths(
-        ribbon, model, groupModel, groupCount, availableWidth, ctx
-    );
-}
-
+            // Mode étendu : on calcule les preferredWidths proportionnellement
+            // à availableWidth avant de distribuer
+            preferredCalculator.computeAndAssignPreferredWidths(
+                    ribbon, model, groupModel, groupCount, availableWidth, ctx
+            );
+        }
 
         int[] normalGroupWidths = widthDistributor.distributeWidths(ctx, hRibbon, availableWidth, useEntireWidth);
 
@@ -263,7 +258,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
             horizontalScrollBar.setMinimum(0);
             horizontalScrollBar.setMaximum(totalCollapsedWidth);
             horizontalScrollBar.setVisibleAmount(availableWidth);
-            horizontalScrollBar.setValue(scrollOffset);            
+            horizontalScrollBar.setValue(scrollOffset);
 
             // Positionner la scrollbar dans la zone des headers
             int insetLeft = (insets != null) ? insets.left : 0;
@@ -364,7 +359,7 @@ public class HRibbonLayoutManager implements LayoutManager2 {
                     // - scrollOffset > 0 → les groupes défilent vers la gauche
                     int x = groupRect.x - scrollOffset;
                     btn.setBounds(x, y, group.getCollapsedWidth(), btnHeight);
-                                        
+
                 }
             } else {
                 // Groupe normal : layout multi-lignes normal              
@@ -376,10 +371,10 @@ public class HRibbonLayoutManager implements LayoutManager2 {
     }
 
     // Getter public pour que BasicHRibbonUI puisse lire le scrollOffset
-public int getScrollOffset() {
-    return scrollOffset;
-}
-    
+    public int getScrollOffset() {
+        return scrollOffset;
+    }
+
     @Override
     public Dimension preferredLayoutSize(Container parent) {
 
@@ -554,7 +549,7 @@ public int getScrollOffset() {
                 totalCollapsedWidth += groupMargin;
             }
         }
-        
+
         return totalCollapsedWidth > availableWidth;
     }
 
@@ -568,7 +563,7 @@ public int getScrollOffset() {
             horizontalScrollBar.setScrollStyle(HScrollBarStyle.PRIMARY);
 
             // Écouter les changements de valeur pour mettre à jour scrollOffset
-            horizontalScrollBar.addAdjustmentListener(e -> {                
+            horizontalScrollBar.addAdjustmentListener(e -> {
                 scrollOffset = e.getValue();
                 ribbon.revalidate();
                 ribbon.repaint(); // Redessiner avec le nouvel offset
@@ -578,7 +573,6 @@ public int getScrollOffset() {
         }
     }
 
-   
     public void removeHeaderForGroup(int groupIndex) {
         headerManager.removeHeaderForGroup(ribbon, groupIndex);
     }

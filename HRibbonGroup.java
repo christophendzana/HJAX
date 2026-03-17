@@ -43,29 +43,29 @@ public class HRibbonGroup {
     /**
      * Largeur actuelle du groupe en pixels, telle affichée à l'écran.
      */
-    private int width = -1 ;
+    private int width = -1;
 
     /**
      * hauteur actuelle du groupe en pixels
      */
     private int heigth;
-    
+
     /**
      * Largeur préférée du groupe en pixels, utilisée pour le calcul du layout.
      */
     private int preferredWidth = -1;
 
-  /**
- * Largeur minimale du groupe en pixels.
- * 
- * Par défaut à 0 : la minWidth est calculée automatiquement comme
- * la largeur du composant le plus large du groupe.
- * 
- * DÉCONSEILLÉ de modifier cette valeur manuellement via setMinWidth().
- * Une valeur trop petite peut provoquer des chevauchements visuels
- * ou rendre les composants illisibles lors du resize adaptatif.
- */
-private int minWidth = -1;
+    /**
+     * Largeur minimale du groupe en pixels.
+     *
+     * Par défaut à 0 : la minWidth est calculée automatiquement comme la
+     * largeur du composant le plus large du groupe.
+     *
+     * DÉCONSEILLÉ de modifier cette valeur manuellement via setMinWidth(). Une
+     * valeur trop petite peut provoquer des chevauchements visuels ou rendre
+     * les composants illisibles lors du resize adaptatif.
+     */
+    private int minWidth = -1;
 
     /**
      * Largeur maximale autorisée pour ce groupe. 0 = pas de maximum imposé.
@@ -170,10 +170,9 @@ private int minWidth = -1;
      * Préfix par défaut auquel sera ajouté le groupe index pour créer les
      * groupIdentifier initial par défaut
      */
-    private static String defaultGroupNamePrefix = "Groupe ";    
-    
-//    private Rectangle bound;
+    private static String defaultGroupNamePrefix = "Groupe ";
 
+//    private Rectangle bound;
     /**
      * Gestionnaire des écouteurs PropertyChangeListener, notifie les
      * changements de propriétés (largeur, padding, etc.) aux composants
@@ -182,7 +181,7 @@ private int minWidth = -1;
     private SwingPropertyChangeSupport changeSupport;
 
     private boolean collapsible = true;      // peut-on transformer le groupe en menu ?
-           // largeur (px) du placeholder quand collapsed (par défaut)
+    // largeur (px) du placeholder quand collapsed (par défaut)
     private boolean collapsed = false;       // état courant de collapse
 
     // =========================================================================
@@ -283,16 +282,14 @@ private int minWidth = -1;
 //        return this.bound.y;
 //    }
 //    
-    public int getWidth(){
+    public int getWidth() {
         return width;
     }
-    
-    public int getHeigth(){
+
+    public int getHeigth() {
         return heigth;
     }
-    
-    
- 
+
 //    public void setBound( Rectangle bound ){        
 //        Rectangle old = this.bound;
 //        this.bound = bound;        
@@ -310,7 +307,6 @@ private int minWidth = -1;
 //        this.bound.y = y;
 //        firePropertyChange("bound.y", old, bound);
 //    }
-    
     /**
      * Retourne la valeur affichée dans l'en-tête du groupe. Si headerValue
      * n'est pas défini, retourne groupIdentifier.
@@ -399,7 +395,6 @@ private int minWidth = -1;
 //    public int getWidth() {
 //        return width;
 //    }
-
     /**
      * Définit la largeur actuelle du groupe et notifie les écouteurs. La
      * largeur est automatiquement contrainte entre minWidth et maxWidth.
@@ -421,13 +416,13 @@ private int minWidth = -1;
             firePropertyChange("width", old, newWidth);
         }
         System.out.println("la valeur à été set");
-                
+
     }
 
     public void setHeigth(int newHeigth) {
         this.heigth = newHeigth;
     }
-    
+
     /**
      * Retourne la largeur préférée du groupe pour le calcul du layout.
      *
@@ -456,24 +451,24 @@ private int minWidth = -1;
      * @return la largeur minimale en pixels, 0 si aucune limite
      */
     public int getMinWidth() {
-            return minWidth;
+        return minWidth;
     }
 
     /**
- * Définit manuellement la largeur minimale du groupe.
- * 
- * ATTENTION : déconseillé. Par défaut, la minWidth est calculée
- * automatiquement comme la largeur du composant le plus large
- * du groupe, ce qui garantit un affichage correct en toutes
- * circonstances. Forcer une valeur peut provoquer des chevauchements
- * ou des composants tronqués lors du resize adaptatif.
- * 
- * @param minWidth la largeur minimale en pixels
- */
-public void setMinWidth(int minWidth) {   
-      this.minWidth = minWidth;    
-    
-}
+     * Définit manuellement la largeur minimale du groupe.
+     *
+     * ATTENTION : déconseillé. Par défaut, la minWidth est calculée
+     * automatiquement comme la largeur du composant le plus large du groupe, ce
+     * qui garantit un affichage correct en toutes circonstances. Forcer une
+     * valeur peut provoquer des chevauchements ou des composants tronqués lors
+     * du resize adaptatif.
+     *
+     * @param minWidth la largeur minimale en pixels
+     */
+    public void setMinWidth(int minWidth) {
+        this.minWidth = minWidth;
+
+    }
 
     /**
      * Retourne la largeur maximale autorisée.
@@ -789,7 +784,7 @@ public void setMinWidth(int minWidth) {
      *
      * @param listener l'écouteur à ajouter
      */
-     public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
+    public void addPropertyChangeListener(java.beans.PropertyChangeListener listener) {
         getChangeSupport().addPropertyChangeListener(listener);
     }
 
@@ -1008,7 +1003,7 @@ public void setMinWidth(int minWidth) {
      */
     @Override
     public String toString() {
-        return "HRibbonGroup[identifier=" + groupIdentifier               
+        return "HRibbonGroup[identifier=" + groupIdentifier
                 + ", preferred=" + preferredWidth + "]"
                 + ", currentWidth=" + width + "]";
     }

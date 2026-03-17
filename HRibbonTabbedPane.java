@@ -5,6 +5,7 @@
 package rubban;
 
 
+import hcomponents.HTabbedPane;
 import hcomponents.vues.HBasicTabbedPaneUI;
 import hcomponents.vues.HTabbedPaneStyle;
 import javax.swing.*;
@@ -13,7 +14,7 @@ import java.awt.*;
  *
  * @author FIDELE
  */
-public class HRibbonTabbedPane extends JTabbedPane {
+public class HRibbonTabbedPane extends HTabbedPane {
     
     
     // =========================================================================
@@ -25,7 +26,7 @@ public class HRibbonTabbedPane extends JTabbedPane {
      * Chaque nouvel onglet sans couleur explicite reçoit la couleur suivante
      * dans ce tableau, en bouclant quand on arrive à la fin.
      */
-    private static final Color[] DEFAULT_TAB_COLORS = {
+    private final Color[] DEFAULT_TAB_COLORS = {
         new Color(13,  110, 253),   // Bleu primaire
         new Color(25,  135,  84),   // Vert succès
         new Color(220,  53,  69),   // Rouge danger
@@ -74,7 +75,7 @@ public class HRibbonTabbedPane extends JTabbedPane {
      */
     public HRibbonTabbedPane() {
         super();
-        setUI(new HBasicTabbedPaneUI());
+        
         setOpaque(false);
     }
 
@@ -85,7 +86,7 @@ public class HRibbonTabbedPane extends JTabbedPane {
      */
     public HRibbonTabbedPane(int tabPlacement) {
         super(tabPlacement);
-        setUI(new HBasicTabbedPaneUI());
+        
         setOpaque(false);
     }
 
@@ -97,7 +98,7 @@ public class HRibbonTabbedPane extends JTabbedPane {
      */
     public HRibbonTabbedPane(int tabPlacement, int tabLayoutPolicy) {
         super(tabPlacement, tabLayoutPolicy);
-        setUI(new HBasicTabbedPaneUI());
+        
         setOpaque(false);
     }
 

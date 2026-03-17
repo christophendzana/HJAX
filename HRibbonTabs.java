@@ -2,355 +2,667 @@
  * HRibbonTabs.java
  *
  * Composant combinant un HTabbedPane et des Ribbon.
- * Chaque onglet contient exactement un Ribbon, exactement comme dans Microsoft Word.
+ * Chaque onglet contient exactement un Ribbon, style Microsoft Word.
  *
  * ARCHITECTURE :
- * HRibbonTabs (JComponent, BorderLayout)
- *     └── HTabbedPane (CENTER)
- *             ├── Onglet "Accueil"  → Ribbon
- *             ├── Onglet "Insertion" → Ribbon
- *             └── ...
  *
- * RÈGLE DE TAILLE :
- * - HRibbonTabs prend toujours toute la largeur de son parent
- * - La hauteur totale est définie une seule fois par l'utilisateur via setHeight()
- * - HTabbedPane occupe toute la surface de HRibbonTabs (BorderLayout.CENTER)
- * - Chaque Ribbon occupe toute la largeur de l'onglet
- * - La hauteur de chaque Ribbon = hauteur totale - hauteur barre onglets (35px par défaut)
+ *   HRibbonTabs (doLayout() custom)
+ *       ├── HTabbedPane → occupe toute la surface moins la zone du bouton
+ *       └── boutonCollapse → positionné en absolu via setBounds()
+ *                            coin bas droite en EXPANDED  (flèche haut)
+ *                            coin haut droite en COLLAPSED (flèche bas)
  *
- * USAGE TYPIQUE :
- *   HRibbonTabs ribbonTabs = new HRibbonTabs();
- *   ribbonTabs.setHeight(150);
- *   ribbonTabs.addTab("Accueil");
- *   ribbonTabs.addTab("Insertion");
- *   ribbonTabs.addRibbon("Accueil", monRibbon);
- *   ribbonTabs.addRibbon(1, autreRibbon);
+ * Le positionnement du bouton est identique à la mécanique utilisée dans
+ * HRibbonLayoutManager pour le bouton collapse du Ribbon.
  */
 package rubban;
 
-import hcomponents.HTabbedPane;
+import hcomponents.ArrowIcon;
+import hcomponents.HButton;
+import hcomponents.vues.HButtonStyle;
 import hcomponents.vues.HTabbedPaneStyle;
 import java.awt.*;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
 import javax.swing.*;
 
 /**
  * HRibbonTabs — Composant de ruban à onglets style Microsoft Word.
  *
- * Combine un HTabbedPane et un Ribbon par onglet dans un composant
- * prêt à l'emploi. L'utilisateur définit la hauteur totale une seule fois,
- * et tous les composants internes s'ajustent automatiquement.
+ * Gère à lui seul la réduction/expansion de l'ensemble du ruban. Le Ribbon
+ * individuel ne possède plus de bouton de réduction.
  *
  * @author FIDELE
- * @version 1.0
+ * @version 4.0
  */
 public class HRibbonTabs extends JComponent {
 
     // =========================================================================
     // CONSTANTES
     // =========================================================================
+    /**
+     * Hauteur de la barre d'onglets du HTabbedPane en pixels. Utilisée comme
+     * hauteur cible en mode COLLAPSED et pour calculer la hauteur disponible
+     * pour les Ribbon en mode EXPANDED.
+     */
+    private static final int TAB_BAR_HEIGHT = 35;
 
     /**
-     * Hauteur estimée de la barre d'onglets du HTabbedPane en pixels.
-     * Utilisée pour calculer la hauteur disponible pour les Ribbon.
-     * Cette valeur est une approximation conservative qui fonctionne
-     * correctement avant que le composant soit affiché à l'écran.
+     * Hauteur totale par défaut du composant en mode EXPANDED.
      */
-    private static final int HAUTEUR_BARRE_ONGLETS = 35;
+    private static final int DEFAULT_HEIGHT = 150;
 
     /**
-     * Hauteur totale par défaut du composant en pixels.
-     * Correspond à la hauteur typique d'un ruban Word.
+     * Largeur fixe du bouton de réduction en pixels. Identique à
+     * collapseBtnWidth dans HRibbonLayoutManager.
      */
-    private static final int HAUTEUR_PAR_DEFAUT = 150;
+    private static final int BUTTON_WIDTH = 30;
+
+    /**
+     * Hauteur fixe du bouton de réduction en pixels. Identique à
+     * collapseBtnHeight dans HRibbonLayoutManager.
+     */
+    private static final int BUTTON_HEIGHT = 30;
+
+    /**
+     * Durée de l'animation de transition en millisecondes.
+     */
+    private static final int ANIMATION_DURATION = 200;
 
     // =========================================================================
     // COMPOSANTS INTERNES
     // =========================================================================
-
     /**
-     * Le TabbedPane qui contient visuellement tous les onglets.
-     * C'est lui qui gère la navigation entre les onglets.
+     * Le TabbedPane qui contient visuellement tous les onglets. Sa largeur
+     * disponible = largeur totale - BOUTON_LARGEUR - marges.
      */
     private final HRibbonTabbedPane tabbedPane;
+
+    /**
+     * Le bouton qui déclenche le collapse ou l'expand de HRibbonTabs.
+     * Positionné en absolu via setBounds() dans doLayout(). Coin bas droite en
+     * EXPANDED, coin haut droite en COLLAPSED.
+     */
+    private final HButton collapseButton;
 
     // =========================================================================
     // ÉTAT INTERNE
     // =========================================================================
+    /**
+     * Les deux états possibles du composant. EXPANDED : hauteur normale,
+     * Ribbons visibles. COLLAPSED : hauteur réduite à la barre d'onglets seule.
+     */
+    public enum RibbonTabsState {
+        EXPANDED,
+        COLLAPSED
+    }
 
     /**
-     * Hauteur totale souhaitée pour ce composant.
-     * Définie par l'utilisateur via setHeight().
-     * La hauteur disponible pour chaque Ribbon est :
-     * hauteurTotale - HAUTEUR_BARRE_ONGLETS
+     * État courant du composant. Initialisé à EXPANDED à la création.
      */
-    private int hauteurTotale = HAUTEUR_PAR_DEFAUT;
+    private RibbonTabsState currentState = RibbonTabsState.EXPANDED;
+
+    /**
+     * Hauteur totale souhaitée en mode EXPANDED. Définie par l'utilisateur via
+     * le constructeur ou setHeight().
+     */
+    private int totalHeight = DEFAULT_HEIGHT;
+
+    // =========================================================================
+    // AUTO-COLLAPSE
+    // =========================================================================
+    /**
+     * Active ou désactive le collapse automatique basé sur la hauteur de la
+     * fenêtre racine. Désactivé par défaut — l'utilisateur doit l'activer
+     * explicitement via setAutoCollapseEnabled(true).
+     */
+    private boolean autoCollapseEnabled = false;
+
+    /**
+     * Verrou pour éviter les boucles infinies lors du collapse automatique.
+     * Quand setState() est appelé par le listener, il déclenche un revalidate()
+     * qui peut re-déclencher componentResized() — ce verrou coupe la boucle.
+     */
+    private boolean isAdjustingState = false;
+
+    /**
+     * Listener installé sur la fenêtre racine (JFrame) pour détecter les
+     * redimensionnements. Stocké pour pouvoir le désinstaller dans removeNotify().
+     * On remonte jusqu'au JFrame car c'est lui qui reçoit les événements de
+     * redimensionnement — pas les conteneurs intermédiaires comme JPanel.
+     */
+    private ComponentListener windowResizeListener;
+
+    // =========================================================================
+    // ANIMATION
+    // =========================================================================
+    /**
+     * Timer Swing qui cadence l'animation de transition de hauteur. Créé une
+     * seule fois et réutilisé pour chaque transition. Identique au
+     * collapseAnimator de Ribbon.
+     */
+    private Timer animator;
+
+    /**
+     * Hauteur de départ de l'animation courante.
+     */
+    private int startHeight;
+
+    /**
+     * Hauteur cible de l'animation courante.
+     */
+    private int targetHeight;
+
+    /**
+     * Timestamp de démarrage de l'animation courante.
+     */
+    private long animationStartTime;
+
+    // =========================================================================
+    // COULEUR PAR DÉFAUT DU BOUTON
+    // =========================================================================
+    /**
+     * Couleur utilisée pour l'icône flèche du bouton de réduction.
+     */
+    private Color iconColor = Color.DARK_GRAY;
 
     // =========================================================================
     // CONSTRUCTEURS
     // =========================================================================
-
     /**
-     * Constructeur par défaut.
-     * Crée un HRibbonTabs avec la hauteur par défaut (150px) et le style PRIMARY.
+     * Constructeur par défaut. Hauteur 150px, style PRIMARY.
      */
     public HRibbonTabs() {
-        this(HAUTEUR_PAR_DEFAUT, HTabbedPaneStyle.PRIMARY);
+        this(DEFAULT_HEIGHT, HTabbedPaneStyle.PRIMARY);
     }
 
     /**
-     * Constructeur avec hauteur personnalisée.
-     * Le style visuel PRIMARY est appliqué par défaut.
+     * Constructeur avec hauteur personnalisée. Style PRIMARY par défaut.
      *
-     * @param hauteur hauteur totale souhaitée en pixels
+     * @param height hauteur totale souhaitée en pixels
      */
-    public HRibbonTabs(int hauteur) {
-        this(hauteur, HTabbedPaneStyle.PRIMARY);
+    public HRibbonTabs(int height) {
+        this(height, HTabbedPaneStyle.PRIMARY);
     }
 
     /**
-     * Constructeur avec hauteur et style personnalisés.
-     * C'est le constructeur principal — tous les autres lui délèguent.
+     * Constructeur principal — tous les autres lui délèguent.
      *
-     * @param hauteur hauteur totale souhaitée en pixels
-     * @param style   style visuel du HTabbedPane
+     * @param height hauteur totale souhaitée en pixels
+     * @param style style visuel du HTabbedPane
      */
-    public HRibbonTabs(int hauteur, HTabbedPaneStyle style) {
+    public HRibbonTabs(int height, HTabbedPaneStyle style) {
         super();
 
-        // Mémoriser la hauteur souhaitée
-        this.hauteurTotale = hauteur;
+        this.totalHeight = Math.max(TAB_BAR_HEIGHT + 40, height);
 
-        // Créer le HTabbedPane avec le style demandé
+        // Pas de LayoutManager — on gère tout dans doLayout()
+        setLayout(null);
+
+        // -----------------------------------------------------------------
+        // CRÉATION DU TABBEDPANE
+        // -----------------------------------------------------------------
         this.tabbedPane = new HRibbonTabbedPane();
         this.tabbedPane.setTabbedStyle(style);
+        add(this.tabbedPane);
 
-        // BorderLayout : le HTabbedPane occupera toujours toute la surface
-        setLayout(new BorderLayout());
-        add(this.tabbedPane, BorderLayout.CENTER);
+        tabbedPane.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                propagateHeightToRibbons();
+            }
+        });
 
-        // Forcer la taille préférée dès la création
-        appliquerTaillePreferee();
+        // -----------------------------------------------------------------
+        // CRÉATION DU BOUTON DE RÉDUCTION
+        // Flèche vers le haut en mode EXPANDED initial (comme Ribbon)
+        // -----------------------------------------------------------------
+        this.collapseButton = new HButton(
+                new ArrowIcon(iconColor, ArrowIcon.Direction.UP, 0.4f, 5)
+        );
+        this.collapseButton.setButtonStyle(HButtonStyle.SUCCESS);
+        this.collapseButton.setToolTipText("Réduire le ruban");
+        this.collapseButton.addActionListener(e -> toggleState());
+        add(this.collapseButton);
+
+        // -----------------------------------------------------------------
+        // TAILLE PRÉFÉRÉE INITIALE
+        // -----------------------------------------------------------------
+        applyPreferredSize();
+    }
+
+    // =========================================================================
+    // CYCLE DE VIE — INSTALLATION ET DÉSINSTALLATION DU LISTENER
+    // =========================================================================
+
+    /**
+     * Appelée automatiquement par Swing quand HRibbonTabs est ajouté à un
+     * conteneur. On remonte jusqu'à la fenêtre racine (JFrame) pour y installer
+     * le listener de redimensionnement. On cible le JFrame et non le parent
+     * immédiat car c'est lui qui reçoit les événements de resize de l'OS.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+
+        // Créer le listener une seule fois
+        if (windowResizeListener == null) {
+            windowResizeListener = new ComponentAdapter() {
+                @Override
+                public void componentResized(ComponentEvent e) {
+                    // Ignorer si le collapse automatique est désactivé
+                    if (!autoCollapseEnabled) {
+                        return;
+                    }
+
+                    // Verrou pour éviter la boucle infinie
+                    if (isAdjustingState) {
+                        return;
+                    }
+
+                    // Remonter jusqu'à la fenêtre racine pour lire sa hauteur
+                    Container window = getParent();
+                    while (window != null && !(window instanceof Window)) {
+                        window = window.getParent();
+                    }
+                    if (window == null) {
+                        return;
+                    }
+
+                    int windowHeight = window.getHeight();
+
+                    isAdjustingState = true;
+                    try {
+                        if (windowHeight < totalHeight
+                                && currentState == RibbonTabsState.EXPANDED) {
+                            // Fenêtre trop petite : réduire le ruban
+                            setState(RibbonTabsState.COLLAPSED);
+
+                        } else if (windowHeight >= totalHeight
+                                && currentState == RibbonTabsState.COLLAPSED) {
+                            // Fenêtre suffisamment grande : étendre le ruban
+                            setState(RibbonTabsState.EXPANDED);
+                        }
+                    } finally {
+                        // Déverrouiller dans tous les cas
+                        isAdjustingState = false;
+                    }
+                }
+            };
+        }
+
+        // Remonter jusqu'au JFrame et y installer le listener
+        Container window = getParent();
+        while (window != null && !(window instanceof Window)) {
+            window = window.getParent();
+        }
+        if (window != null) {
+            window.addComponentListener(windowResizeListener);
+        }
+    }
+
+    /**
+     * Appelée automatiquement par Swing quand HRibbonTabs est retiré de son
+     * conteneur. On retire le listener pour éviter les fuites mémoire.
+     */
+    @Override
+    public void removeNotify() {
+        // Remonter jusqu'au JFrame pour retirer le listener
+        Container window = getParent();
+        while (window != null && !(window instanceof Window)) {
+            window = window.getParent();
+        }
+        if (window != null && windowResizeListener != null) {
+            window.removeComponentListener(windowResizeListener);
+        }
+
+        super.removeNotify();
+    }
+
+    // =========================================================================
+    // LAYOUT PERSONNALISÉ
+    // =========================================================================
+    /**
+     * Positionne les composants internes manuellement.
+     *
+     * Reproduit exactement la mécanique de HRibbonLayoutManager : - Le bouton
+     * est positionné en absolu via setBounds() - Le HTabbedPane reçoit la
+     * largeur disponible après soustraction du bouton
+     *
+     * En mode EXPANDED : bouton au coin bas droite En mode COLLAPSED : bouton
+     * au coin haut droite
+     */
+    @Override
+    public void doLayout() {
+        int width  = getWidth();
+        int height = getHeight();
+        Insets insets = getInsets();
+
+        int insetTop    = insets != null ? insets.top    : 0;
+        int insetBottom = insets != null ? insets.bottom : 0;
+        int insetLeft   = insets != null ? insets.left   : 0;
+        int insetRight  = insets != null ? insets.right  : 0;
+
+        int posX = width - BUTTON_WIDTH - insetRight;
+        int posY;
+        if (currentState == RibbonTabsState.COLLAPSED) {
+            // Coin haut droite : aligné avec le haut de la barre d'onglets
+            posY = insetTop;
+        } else {
+            // Coin bas droite : aligné avec le bas du composant
+            posY = height - BUTTON_HEIGHT - insetBottom;
+        }
+
+        //  Positionner le bouton en absolu
+        collapseButton.setBounds(posX, posY, BUTTON_WIDTH, BUTTON_HEIGHT);
+
+        // Le HTabbedPane prend tout l'espace restant à gauche du bouton
+        int tabbedPaneWidth = posX - insetLeft - 3; // 3px de marge entre tab et bouton
+        tabbedPane.setBounds(
+                insetLeft,
+                insetTop,
+                tabbedPaneWidth,
+                height - insetTop - insetBottom
+        );
+    }
+
+    // =========================================================================
+    // GESTION DE L'ÉTAT (COLLAPSE / EXPAND)
+    // =========================================================================
+    /**
+     * Bascule l'état entre EXPANDED et COLLAPSED. Appelée par le bouton de
+     * réduction.
+     */
+    private void toggleState() {
+        if (currentState == RibbonTabsState.EXPANDED) {
+            setState(RibbonTabsState.COLLAPSED);
+        } else {
+            setState(RibbonTabsState.EXPANDED);
+        }
+    }
+
+    /**
+     * Applique un nouvel état au composant.
+     *
+     * En mode COLLAPSED : icône flèche bas, animation vers
+     * TAB_BAR_HEIGHT En mode EXPANDED : icône flèche haut, animation
+     * vers totalHeight
+     *
+     * @param newState le nouvel état à appliquer
+     */
+    public void setState(RibbonTabsState newState) {
+
+        if (newState == null || newState == currentState) {
+            return;
+        }
+
+        RibbonTabsState oldState = currentState;
+        currentState = newState;
+
+        if (newState == RibbonTabsState.COLLAPSED) {
+
+            // Flèche vers le bas : indique qu'on peut ré-ouvrir
+            collapseButton.setIcon(
+                    new ArrowIcon(iconColor, ArrowIcon.Direction.DOWN, 0.4f, 5)
+            );
+            collapseButton.setToolTipText("Étendre le ruban");
+
+            // Lancer l'animation vers la hauteur réduite
+            animateTo(TAB_BAR_HEIGHT);
+
+        } else {
+
+            // Flèche vers le haut : indique qu'on peut réduire
+            collapseButton.setIcon(
+                    new ArrowIcon(iconColor, ArrowIcon.Direction.UP, 0.4f, 5)
+            );
+            collapseButton.setToolTipText("Réduire le ruban");
+
+            // Lancer l'animation vers la hauteur totale
+            animateTo(totalHeight);
+        }
+
+        // Notifier les observateurs du changement d'état
+        firePropertyChange("ribbonTabsState", oldState, newState);
+    }
+
+    /**
+     * Retourne l'état actuel du composant.
+     *
+     * @return EXPANDED ou COLLAPSED
+     */
+    public RibbonTabsState getState() {
+        return currentState;
+    }
+
+    // =========================================================================
+    // ANIMATION DE HAUTEUR
+    // =========================================================================
+    /**
+     * Lance une animation de transition vers une nouvelle hauteur cible.
+     *
+     * Reprend exactement la mécanique de animateHeight() dans Ribbon : on
+     * modifie setPreferredSize() progressivement et on appelle revalidate() à
+     * chaque tick pour que le parent se réorganise.
+     *
+     * @param target hauteur finale en pixels
+     */
+    private void animateTo(int target) {
+
+        this.startHeight        = getHeight();
+        this.targetHeight       = target;
+        this.animationStartTime = System.currentTimeMillis();
+
+        if (animator == null) {
+            animator = new Timer(10, e -> {
+
+                long elapsed    = System.currentTimeMillis() - animationStartTime;
+                float progress  = Math.min(1f, (float) elapsed / ANIMATION_DURATION);
+
+                int currentHeight = startHeight
+                        + (int) ((targetHeight - startHeight) * progress);
+
+                setPreferredSize(new Dimension(getWidth(), currentHeight));
+                revalidate();
+
+                if (progress >= 1f) {
+                    ((Timer) e.getSource()).stop();
+                    setPreferredSize(new Dimension(getWidth(), targetHeight));
+                    revalidate();
+                }
+            });
+        }
+
+        animator.restart();
     }
 
     // =========================================================================
     // GESTION DE LA TAILLE
     // =========================================================================
-
     /**
-     * Définit la hauteur totale du composant.
+     * Définit la hauteur totale du composant en mode EXPANDED.
      *
-     * Cette méthode est le point central de contrôle des tailles.
-     * Elle met à jour la taille préférée du composant global, puis propage
-     * la hauteur correcte à tous les Ribbon déjà associés aux onglets.
-     *
-     * @param hauteur nouvelle hauteur totale en pixels (minimum 60px)
+     * @param height nouvelle hauteur totale en pixels
      */
-    public void setHeight(int hauteur) {
-        // Garantir une hauteur minimale raisonnable
-        this.hauteurTotale = Math.max(60, hauteur);
-
-        // Mettre à jour la taille préférée du composant global
-        appliquerTaillePreferee();
-
-        // Propager la nouvelle hauteur à tous les Ribbon existants
-        propagerHauteurAuxRibbons();
-
-        // Déclencher le recalcul de l'affichage
+    public void setHeight(int height) {
+        this.totalHeight = Math.max(TAB_BAR_HEIGHT + 40, height);
+        applyPreferredSize();
+        propagateHeightToRibbons();
         revalidate();
         repaint();
     }
 
     /**
-     * Retourne la hauteur totale actuellement configurée.
+     * Retourne la hauteur totale configurée pour le mode EXPANDED.
      *
      * @return hauteur totale en pixels
      */
-    public int getHeight() {
-        return hauteurTotale;
+    public int getConfiguredHeight() {
+        return totalHeight;
     }
 
     /**
-     * Calcule la hauteur disponible pour les Ribbon.
-     *
-     * La hauteur d'un Ribbon = hauteur totale - hauteur barre onglets.
-     * On retire aussi les insets du contenu du HTabbedPane (5px haut + 5px bas
-     * selon getContentBorderInsets dans HBasicTabbedPaneUI).
-     *
-     * @return hauteur disponible pour un Ribbon en pixels
+     * Calcule la hauteur disponible pour les Ribbon. Hauteur Ribbon = hauteur
+     * totale - barre onglets - insets contenu (10px)
      */
-    private int calculerHauteurRibbon() {
-        // Soustraire la barre d'onglets et les insets du contenu (5 + 5 = 10px)
-        return Math.max(40, hauteurTotale - HAUTEUR_BARRE_ONGLETS - 10);
+    private int calculateRibbonHeight() {
+        if (tabbedPane.getTabCount() > 0) {
+            Component content = tabbedPane.getComponentAt(0);
+            if (content != null && content.getY() > 0) {
+                // On ajoute 5px pour compenser l'inset bottom de HBasicTabbedPaneUI
+                return Math.max(40, tabbedPane.getHeight());
+            }
+        }
+        return Math.max(40, totalHeight - TAB_BAR_HEIGHT - 10);
     }
 
     /**
-     * Configure la taille préférée de ce composant.
-     *
-     * On fixe la hauteur préférée à hauteurTotale.
-     * La largeur préférée est mise à 0 pour signaler à Swing que ce composant
-     * doit prendre toute la largeur disponible de son parent (via son LayoutManager).
+     * Applique la taille préférée initiale. Largeur 0 = le LayoutManager du
+     * parent décide de la largeur.
      */
-    private void appliquerTaillePreferee() {
-        // Largeur 0 = le LayoutManager du parent décide de la largeur
-        // Hauteur = celle définie par l'utilisateur
-        setPreferredSize(new Dimension(0, hauteurTotale));
-        setMinimumSize(new Dimension(0, hauteurTotale));
-        setMaximumSize(new Dimension(Integer.MAX_VALUE, hauteurTotale));
+    private void applyPreferredSize() {
+        setPreferredSize(new Dimension(0, totalHeight));
+        setMinimumSize(new Dimension(0, totalHeight));
+        setMaximumSize(new Dimension(Short.MAX_VALUE, totalHeight));
     }
 
     /**
-     * Propage la hauteur correcte à tous les Ribbon actuellement enregistrés.
-     *
-     * Parcourt tous les onglets du HTabbedPane et ajuste la hauteur de chaque
-     * Ribbon trouvé dans le contenu des onglets.
+     * Propage la hauteur correcte à tous les Ribbon enregistrés dans les
+     * onglets.
      */
-    private void propagerHauteurAuxRibbons() {
-        int hauteurRibbon = calculerHauteurRibbon();
-        int nombreOnglets = tabbedPane.getTabCount();
+    private void propagateHeightToRibbons() {
+        int ribbonHeight = calculateRibbonHeight();
 
-        for (int i = 0; i < nombreOnglets; i++) {
-            Component contenu = tabbedPane.getComponentAt(i);
+        for (int i = 0; i < tabbedPane.getTabCount(); i++) {
+            Component content = tabbedPane.getComponentAt(i);
 
-            // Vérifier que le contenu est bien un Ribbon avant de le modifier
-            if (contenu instanceof Ribbon) {
-                Ribbon ribbon = (Ribbon) contenu;
-
-                // Appliquer la hauteur calculée au Ribbon
-                appliquerTailleAuRibbon(ribbon, hauteurRibbon);
+            if (content instanceof Ribbon) {
+                applyHeightToRibbon((Ribbon) content, ribbonHeight);
             }
         }
     }
 
     /**
-     * Applique la hauteur calculée à un Ribbon spécifique.
+     * Applique la hauteur calculée à un Ribbon spécifique. Short.MAX_VALUE =
+     * convention Swing pour "aussi large que possible".
      *
-     * On configure les tailles préférée, minimale et maximale pour que le
-     * Ribbon occupe toujours toute la largeur disponible et exactement
-     * la hauteur qui lui est allouée.
-     *
-     * @param ribbon       le Ribbon à redimensionner
-     * @param hauteurRibbon hauteur à appliquer en pixels
+     * @param ribbon le Ribbon à configurer
+     * @param ribbonHeight la hauteur à appliquer en pixels
      */
-    private void appliquerTailleAuRibbon(Ribbon ribbon, int hauteurRibbon) {
-        // Largeur Integer.MAX_VALUE = le Ribbon s'étire sur toute la largeur
-        ribbon.setPreferredSize(new Dimension(Integer.MAX_VALUE, hauteurRibbon));
-        ribbon.setMinimumSize(new Dimension(0, hauteurRibbon));
-        ribbon.setMaximumSize(new Dimension(Integer.MAX_VALUE, hauteurRibbon));
+    private void applyHeightToRibbon(Ribbon ribbon, int ribbonHeight) {
+        ribbon.setRibbonHeight(ribbonHeight);
+        ribbon.setPreferredSize(new Dimension(Short.MAX_VALUE, ribbonHeight));
+        ribbon.setMinimumSize(new Dimension(0, ribbonHeight));
+        ribbon.setMaximumSize(new Dimension(Short.MAX_VALUE, ribbonHeight));
+    }
 
-        // Propager la hauteur interne au Ribbon pour ses propres calculs de layout
-        ribbon.setRibbonHeight(hauteurRibbon);
+    // =========================================================================
+    // API PUBLIQUE — AUTO-COLLAPSE
+    // =========================================================================
+
+    /**
+     * Active ou désactive le collapse automatique basé sur la hauteur de la
+     * fenêtre racine.
+     *
+     * @param enabled true pour activer, false pour désactiver
+     */
+    public void setAutoCollapseEnabled(boolean enabled) {
+        this.autoCollapseEnabled = enabled;
+    }
+
+    /**
+     * Retourne true si le collapse automatique est activé.
+     *
+     * @return true si activé
+     */
+    public boolean isAutoCollapseEnabled() {
+        return autoCollapseEnabled;
     }
 
     // =========================================================================
     // API PUBLIQUE — GESTION DES ONGLETS
     // =========================================================================
-
     /**
-     * Ajoute un onglet vide avec un titre.
-     * Une icône colorée est attribuée automatiquement depuis le cycle de couleurs
-     * du HTabbedPane. Le contenu de l'onglet reste vide jusqu'à l'appel de
-     * addRibbon().
+     * Ajoute un onglet vide avec un titre. Icône colorée attribuée
+     * automatiquement par HTabbedPane.
      *
-     * @param titre titre affiché sur l'onglet
+     * @param title titre affiché sur l'onglet
      */
-    public void addTab(String titre) {
-        // JPanel vide transparent comme placeholder jusqu'à addRibbon()
+    public void addTab(String title) {
         JPanel placeholder = new JPanel();
         placeholder.setOpaque(false);
-
-        // Déléguer à HTabbedPane qui gère l'icône automatique
-        tabbedPane.addTab(titre, placeholder);
+        tabbedPane.addTab(title, placeholder);
     }
 
     /**
      * Ajoute un onglet vide avec un titre et une couleur d'icône explicite.
      *
-     * @param titre  titre affiché sur l'onglet
-     * @param couleur couleur de l'icône ronde de l'onglet
+     * @param title titre affiché sur l'onglet
+     * @param color couleur de l'icône ronde de l'onglet
      */
-    public void addTab(String titre, Color couleur) {
+    public void addTab(String title, Color color) {
         JPanel placeholder = new JPanel();
         placeholder.setOpaque(false);
-
-        // Déléguer à HTabbedPane avec la couleur choisie
-        tabbedPane.addTab(titre, couleur, placeholder);
+        tabbedPane.addTab(title, color, placeholder);
     }
 
     /**
-     * Ajoute un onglet vide avec un titre et une icône fournie explicitement.
+     * Ajoute un onglet vide avec une icône fournie explicitement.
      *
-     * @param titre titre affiché sur l'onglet
-     * @param icone icône à afficher à côté du titre
+     * @param title titre affiché sur l'onglet
+     * @param icon icône à afficher à côté du titre
      */
-    public void addTab(String titre, Icon icone) {
+    public void addTab(String title, Icon icon) {
         JPanel placeholder = new JPanel();
         placeholder.setOpaque(false);
-        tabbedPane.addTab(titre, icone, placeholder);
+        tabbedPane.addTab(title, icon, placeholder);
     }
 
     // =========================================================================
     // API PUBLIQUE — ASSOCIATION DES RIBBON
     // =========================================================================
-
     /**
      * Associe un Ribbon à un onglet identifié par son titre.
      *
-     * Cette méthode retrouve l'index de l'onglet via son titre, puis délègue
-     * à addRibbon(int, Ribbon) qui contient toute la logique réelle.
-     *
-     * Si le titre ne correspond à aucun onglet existant, un avertissement
-     * est affiché et rien n'est fait.
-     *
-     * @param titre  titre de l'onglet cible
+     * @param title titre de l'onglet cible
      * @param ribbon le Ribbon à injecter dans cet onglet
      */
-    public void addRibbon(String titre, Ribbon ribbon) {
-        // Retrouver l'index de l'onglet via son titre (méthode native JTabbedPane)
-        int index = tabbedPane.indexOfTab(titre);
+    public void addRibbon(String title, Ribbon ribbon) {
+        int index = tabbedPane.indexOfTab(title);
 
         if (index == -1) {
-            // L'onglet n'existe pas : avertir sans planter
-            System.err.println("HRibbonTabs.addRibbon : aucun onglet avec le titre \"" + titre + "\"");
+            System.err.println(
+                    "HRibbonTabs.addRibbon : aucun onglet avec le titre \"" + title + "\""
+            );
             return;
         }
 
-        // Déléguer à la méthode par index qui contient la logique réelle
         addRibbon(index, ribbon);
     }
 
     /**
      * Associe un Ribbon à un onglet identifié par son index.
      *
-     * C'est la méthode centrale de HRibbonTabs. Elle :
-     * 1. Vérifie que l'index est valide
-     * 2. Applique la hauteur correcte au Ribbon
-     * 3. Remplace le placeholder par le Ribbon dans le HTabbedPane
-     *
-     * @param indexOnglet index de l'onglet cible (0-based)
-     * @param ribbon      le Ribbon à injecter dans cet onglet
-     * @throws IndexOutOfBoundsException si l'index est invalide
+     * @param tabIndex index de l'onglet cible (0-based)
+     * @param ribbon le Ribbon à injecter
      */
-    public void addRibbon(int indexOnglet, Ribbon ribbon) {
-        // Vérifier que l'index est dans les bornes valides
-        if (indexOnglet < 0 || indexOnglet >= tabbedPane.getTabCount()) {
+    public void addRibbon(int tabIndex, Ribbon ribbon) {
+        if (tabIndex < 0 || tabIndex >= tabbedPane.getTabCount()) {
             throw new IndexOutOfBoundsException(
-                "HRibbonTabs.addRibbon : index invalide " + indexOnglet +
-                " (nombre d'onglets : " + tabbedPane.getTabCount() + ")"
+                    "HRibbonTabs.addRibbon : index invalide " + tabIndex
+                    + " (nombre d'onglets : " + tabbedPane.getTabCount() + ")"
             );
         }
 
         if (ribbon == null) {
-            throw new IllegalArgumentException("HRibbonTabs.addRibbon : le Ribbon ne peut pas être null");
+            throw new IllegalArgumentException(
+                    "HRibbonTabs.addRibbon : le Ribbon ne peut pas être null"
+            );
         }
 
-        // Calculer et appliquer la hauteur correcte au Ribbon
-        appliquerTailleAuRibbon(ribbon, calculerHauteurRibbon());
-
-        // Remplacer le placeholder (ou l'ancien Ribbon) par le nouveau Ribbon
-        // setComponentAt() est la méthode de JTabbedPane pour remplacer le contenu
-        tabbedPane.setComponentAt(indexOnglet, ribbon);
-
-        // Forcer le recalcul de l'affichage
+        applyHeightToRibbon(ribbon, calculateRibbonHeight());
+        tabbedPane.setComponentAt(tabIndex, ribbon);
         tabbedPane.revalidate();
         tabbedPane.repaint();
     }
@@ -358,35 +670,35 @@ public class HRibbonTabs extends JComponent {
     // =========================================================================
     // API PUBLIQUE — ACCÈS AUX COMPOSANTS
     // =========================================================================
-
     /**
-     * Retourne le Ribbon associé à l'onglet identifié par son titre.
-     * Retourne null si l'onglet n'existe pas ou ne contient pas de Ribbon.
+     * Retourne le Ribbon de l'onglet identifié par son titre, ou null.
      *
-     * @param titre titre de l'onglet recherché
-     * @return le Ribbon de cet onglet, ou null
+     * @param title titre de l'onglet recherché
+     * @return le Ribbon, ou null
      */
-    public Ribbon getRibbon(String titre) {
-        int index = tabbedPane.indexOfTab(titre);
-        if (index == -1) return null;
+    public Ribbon getRibbon(String title) {
+        int index = tabbedPane.indexOfTab(title);
+        if (index == -1) {
+            return null;
+        }
         return getRibbon(index);
     }
 
     /**
-     * Retourne le Ribbon associé à l'onglet à l'index donné.
-     * Retourne null si l'onglet ne contient pas encore de Ribbon.
+     * Retourne le Ribbon de l'onglet à l'index donné, ou null.
      *
-     * @param indexOnglet index de l'onglet (0-based)
-     * @return le Ribbon de cet onglet, ou null
+     * @param tabIndex index de l'onglet (0-based)
+     * @return le Ribbon, ou null
      */
-    public Ribbon getRibbon(int indexOnglet) {
-        if (indexOnglet < 0 || indexOnglet >= tabbedPane.getTabCount()) return null;
+    public Ribbon getRibbon(int tabIndex) {
+        if (tabIndex < 0 || tabIndex >= tabbedPane.getTabCount()) {
+            return null;
+        }
 
-        Component contenu = tabbedPane.getComponentAt(indexOnglet);
+        Component content = tabbedPane.getComponentAt(tabIndex);
 
-        // Vérifier que le contenu est bien un Ribbon (pas un placeholder)
-        if (contenu instanceof Ribbon) {
-            return (Ribbon) contenu;
+        if (content instanceof Ribbon) {
+            return (Ribbon) content;
         }
 
         return null;
@@ -403,8 +715,6 @@ public class HRibbonTabs extends JComponent {
 
     /**
      * Retourne le HTabbedPane interne.
-     * Permet un accès avancé au TabbedPane pour des configurations spécifiques
-     * (style, animations, placement des onglets, etc.).
      *
      * @return le HTabbedPane interne
      */
@@ -415,7 +725,7 @@ public class HRibbonTabs extends JComponent {
     /**
      * Retourne l'index de l'onglet actuellement sélectionné.
      *
-     * @return index de l'onglet sélectionné, ou -1 si aucun
+     * @return index sélectionné, ou -1
      */
     public int getSelectedIndex() {
         return tabbedPane.getSelectedIndex();
@@ -430,29 +740,43 @@ public class HRibbonTabs extends JComponent {
         tabbedPane.setSelectedIndex(index);
     }
 
+    /**
+     * Permet de personnaliser la couleur de l'icône flèche du bouton.
+     *
+     * @param color la nouvelle couleur de l'icône
+     */
+    public void setCollapseButtonIconColor(Color color) {
+        this.iconColor = color;
+
+        if (currentState == RibbonTabsState.EXPANDED) {
+            collapseButton.setIcon(
+                    new ArrowIcon(color, ArrowIcon.Direction.UP, 0.4f, 5)
+            );
+        } else {
+            collapseButton.setIcon(
+                    new ArrowIcon(color, ArrowIcon.Direction.DOWN, 0.4f, 5)
+            );
+        }
+    }
+
     // =========================================================================
     // SURCHARGE DE getPreferredSize
     // =========================================================================
-
     /**
-     * Retourne la taille préférée du composant.
-     *
-     * La largeur est toujours celle du parent (le composant prend toute la
-     * largeur disponible). La hauteur est celle définie par l'utilisateur.
+     * Retourne la taille préférée du composant. La largeur = celle du parent.
+     * La hauteur = celle gérée par ce composant.
      *
      * @return la dimension préférée
      */
     @Override
     public Dimension getPreferredSize() {
-        // Si une taille a été définie explicitement par l'utilisateur, la respecter
         if (isPreferredSizeSet()) {
             return super.getPreferredSize();
         }
 
-        // Calculer la largeur depuis le parent
         Container parent = getParent();
-        int largeur = (parent != null) ? parent.getWidth() : 800;
+        int width = (parent != null) ? parent.getWidth() : 800;
 
-        return new Dimension(largeur, hauteurTotale);
+        return new Dimension(width, totalHeight);
     }
 }
