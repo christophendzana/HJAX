@@ -348,12 +348,12 @@ protected void paintContentBorder(Graphics g, int tabPlacement, int selectedInde
     g2.fill(contentRect);
 
     // Bordure subtile autour du contenu
-    Color borderColor = (theme != null)
-        ? theme.getContentBorderColor()
-        : FALLBACK_CONTENT_BORDER;
-    g2.setColor(borderColor);
-    g2.setStroke(new BasicStroke(1f));
-    g2.draw(contentRect);
+//    Color borderColor = (theme != null)
+//        ? theme.getContentBorderColor()
+//        : FALLBACK_CONTENT_BORDER;
+//    g2.setColor(borderColor);
+//    g2.setStroke(new BasicStroke(1f));
+//    g2.draw(contentRect);
 
     g2.dispose();
 }
