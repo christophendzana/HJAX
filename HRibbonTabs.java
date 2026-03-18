@@ -286,20 +286,21 @@ public class HRibbonTabs extends JComponent {
 
                     int windowHeight = window.getHeight();
 
+// Seuil = hauteur du ruban + espace minimum pour le contenu dessous
+// En dessous de ce seuil la fenêtre est trop petite pour tout afficher
+                    final int MARGE_CONTENU_MIN = 50;
+                    int seuilCollapse = totalHeight + MARGE_CONTENU_MIN;
+
                     isAdjustingState = true;
                     try {
-                        if (windowHeight < totalHeight
+                        if (windowHeight < seuilCollapse
                                 && currentState == RibbonTabsState.EXPANDED) {
-                            // Fenêtre trop petite : réduire le ruban
                             setState(RibbonTabsState.COLLAPSED);
-
-                        } else if (windowHeight >= totalHeight
+                        } else if (windowHeight >= seuilCollapse
                                 && currentState == RibbonTabsState.COLLAPSED) {
-                            // Fenêtre suffisamment grande : étendre le ruban
                             setState(RibbonTabsState.EXPANDED);
                         }
                     } finally {
-                        // Déverrouiller dans tous les cas
                         isAdjustingState = false;
                     }
                 }
