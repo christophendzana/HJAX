@@ -283,7 +283,20 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
      */
     private static boolean UseEntireWidth = false;
 
-    private int ribbonHeight = 300;
+    private int ribbonHeight;
+
+    /**
+     * Thème visuel appliqué à ce Ribbon et ses groupes. Null si aucun thème n'a
+     * été appliqué — le Ribbon utilise alors ses couleurs par défaut
+     * (defaultHeaderBackground, etc.)
+     */
+    private HRibbonTabsTheme theme = null;
+
+    /**
+     * Rayon des coins arrondis des groupes en pixels. Valeur par défaut : 12px.
+     * Lue par BasicHRibbonUI lors du rendu.
+     */
+    private int groupCornerRadius = 12;
 
     // =========================================================================
     // CONSTRUCTEURS
@@ -1744,6 +1757,47 @@ public class Ribbon extends JComponent implements HRibbonModelListener, HRibbonG
             revalidate();
             repaint();
         }
+    }
+
+    /**
+     * Retourne le thème visuel appliqué à ce Ribbon. Retourne null si aucun
+     * thème n'a été défini.
+     *
+     * @return le thème courant, ou null
+     */
+    public HRibbonTabsTheme getTheme() {
+        return theme;
+    }
+
+    /**
+     * Applique un thème visuel à ce Ribbon et propage les couleurs aux groupes
+     * via BasicHRibbonUI au prochain repaint.
+     *
+     * @param theme le thème à appliquer, ou null pour réinitialiser
+     */
+    public void setTheme(HRibbonTabsTheme theme) {
+        this.theme = theme;
+        repaint();
+    }
+
+    /**
+     * Retourne le rayon des coins arrondis des groupes.
+     *
+     * @return rayon en pixels
+     */
+    public int getGroupCornerRadius() {
+        return groupCornerRadius;
+    }
+
+    /**
+     * Définit le rayon des coins arrondis des groupes. Relu par BasicHRibbonUI
+     * à chaque repaint.
+     *
+     * @param radius rayon en pixels (0 = coins carrés)
+     */
+    public void setGroupCornerRadius(int radius) {
+        this.groupCornerRadius = Math.max(0, radius);
+        repaint();
     }
 
     /**

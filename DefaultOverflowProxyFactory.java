@@ -127,7 +127,7 @@ public class DefaultOverflowProxyFactory implements OverflowProxyFactory {
     // BOUTONS
     // ------------------------------------------------------------------------
 
-    private JButton createButtonProxy(JButton original) {
+    private HButton createButtonProxy(JButton original) {
         HButton proxy = new HButton();
 
         // PRIORITÉ 1 : Partager l'Action (meilleure pratique)

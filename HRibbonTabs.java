@@ -25,6 +25,7 @@ import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
+import java.util.Map;
 import javax.swing.*;
 
 /**
@@ -128,9 +129,10 @@ public class HRibbonTabs extends JComponent {
 
     /**
      * Listener installé sur la fenêtre racine (JFrame) pour détecter les
-     * redimensionnements. Stocké pour pouvoir le désinstaller dans removeNotify().
-     * On remonte jusqu'au JFrame car c'est lui qui reçoit les événements de
-     * redimensionnement — pas les conteneurs intermédiaires comme JPanel.
+     * redimensionnements. Stocké pour pouvoir le désinstaller dans
+     * removeNotify(). On remonte jusqu'au JFrame car c'est lui qui reçoit les
+     * événements de redimensionnement — pas les conteneurs intermédiaires comme
+     * JPanel.
      */
     private ComponentListener windowResizeListener;
 
@@ -166,6 +168,20 @@ public class HRibbonTabs extends JComponent {
      * Couleur utilisée pour l'icône flèche du bouton de réduction.
      */
     private Color iconColor = Color.DARK_GRAY;
+
+    /**
+     * Thème global appliqué à tous les onglets qui n'ont pas de thème propre.
+     * Null par défaut — aucun thème appliqué, chaque composant garde ses
+     * couleurs.
+     */
+    private HRibbonTabsTheme globalTheme = null;
+
+    /**
+     * Thèmes spécifiques par index d'onglet. Si un onglet a un thème ici, il
+     * prend priorité sur le thème global. Clé : index de l'onglet. Valeur :
+     * thème à appliquer sur cet onglet.
+     */
+    private final Map<Integer, HRibbonTabsTheme> tabThemes = new java.util.HashMap<>();
 
     // =========================================================================
     // CONSTRUCTEURS
@@ -204,7 +220,6 @@ public class HRibbonTabs extends JComponent {
         // CRÉATION DU TABBEDPANE
         // -----------------------------------------------------------------
         this.tabbedPane = new HRibbonTabbedPane();
-        this.tabbedPane.setTabbedStyle(style);
         add(this.tabbedPane);
 
         tabbedPane.addComponentListener(new ComponentAdapter() {
@@ -235,7 +250,6 @@ public class HRibbonTabs extends JComponent {
     // =========================================================================
     // CYCLE DE VIE — INSTALLATION ET DÉSINSTALLATION DU LISTENER
     // =========================================================================
-
     /**
      * Appelée automatiquement par Swing quand HRibbonTabs est ajouté à un
      * conteneur. On remonte jusqu'à la fenêtre racine (JFrame) pour y installer
@@ -335,14 +349,14 @@ public class HRibbonTabs extends JComponent {
      */
     @Override
     public void doLayout() {
-        int width  = getWidth();
+        int width = getWidth();
         int height = getHeight();
         Insets insets = getInsets();
 
-        int insetTop    = insets != null ? insets.top    : 0;
+        int insetTop = insets != null ? insets.top : 0;
         int insetBottom = insets != null ? insets.bottom : 0;
-        int insetLeft   = insets != null ? insets.left   : 0;
-        int insetRight  = insets != null ? insets.right  : 0;
+        int insetLeft = insets != null ? insets.left : 0;
+        int insetRight = insets != null ? insets.right : 0;
 
         int posX = width - BUTTON_WIDTH - insetRight;
         int posY;
@@ -385,9 +399,8 @@ public class HRibbonTabs extends JComponent {
     /**
      * Applique un nouvel état au composant.
      *
-     * En mode COLLAPSED : icône flèche bas, animation vers
-     * TAB_BAR_HEIGHT En mode EXPANDED : icône flèche haut, animation
-     * vers totalHeight
+     * En mode COLLAPSED : icône flèche bas, animation vers TAB_BAR_HEIGHT En
+     * mode EXPANDED : icône flèche haut, animation vers totalHeight
      *
      * @param newState le nouvel état à appliquer
      */
@@ -450,15 +463,15 @@ public class HRibbonTabs extends JComponent {
      */
     private void animateTo(int target) {
 
-        this.startHeight        = getHeight();
-        this.targetHeight       = target;
+        this.startHeight = getHeight();
+        this.targetHeight = target;
         this.animationStartTime = System.currentTimeMillis();
 
         if (animator == null) {
             animator = new Timer(10, e -> {
 
-                long elapsed    = System.currentTimeMillis() - animationStartTime;
-                float progress  = Math.min(1f, (float) elapsed / ANIMATION_DURATION);
+                long elapsed = System.currentTimeMillis() - animationStartTime;
+                float progress = Math.min(1f, (float) elapsed / ANIMATION_DURATION);
 
                 int currentHeight = startHeight
                         + (int) ((targetHeight - startHeight) * progress);
@@ -557,10 +570,82 @@ public class HRibbonTabs extends JComponent {
         ribbon.setMaximumSize(new Dimension(Short.MAX_VALUE, ribbonHeight));
     }
 
+    /**
+     * Applique un thème à un Ribbon spécifique et met à jour les couleurs du
+     * bouton collapse si le thème global est concerné.
+     *
+     * @param ribbon le Ribbon cible
+     * @param theme le thème à appliquer
+     */
+    private void applyThemeToRibbon(Ribbon ribbon, HRibbonTabsTheme theme) {
+        if (ribbon == null || theme == null) {
+            return;
+        }
+        // Propager le thème au Ribbon — BasicHRibbonUI le lira au prochain repaint
+        ribbon.setTheme(theme);
+    }
+
+    /**
+     * Recalcule et applique le thème effectif à chaque onglet.
+     *
+     * LOGIQUE EN CASCADE : - Si l'onglet a un thème propre → appliquer ce thème
+     * - Sinon → appliquer le thème global - Si aucun thème global → ne rien
+     * faire
+     *
+     * Appelée après chaque changement de thème global ou de thème d'onglet.
+     */
+    private void propagateThemes() {
+        for (int i = 0; i < tabbedPane.getTabCount(); i++) {
+            Component content = tabbedPane.getComponentAt(i);
+
+            if (!(content instanceof Ribbon)) {
+                continue;
+            }
+
+            Ribbon ribbon = (Ribbon) content;
+
+            // Thème effectif : thème de l'onglet si défini, sinon thème global
+            HRibbonTabsTheme effectiveTheme = tabThemes.containsKey(i)
+                    ? tabThemes.get(i)
+                    : globalTheme;
+
+            // Appliquer uniquement si un thème est disponible
+            applyThemeToRibbon(ribbon, effectiveTheme);
+        }
+
+        // Mettre à jour la couleur du bouton collapse depuis le thème global
+        if (globalTheme != null) {
+            setCollapseButtonIconColor(globalTheme.getCollapseButtonIconColor());
+        }
+
+        // Mettre à jour le style visuel du tabbedPane depuis le thème global
+        if (globalTheme != null) {
+            applyThemeToTabbedPane(globalTheme);
+        }
+
+        repaint();
+    }
+
+    /**
+     * Applique les couleurs du thème au HTabbedPane via un HTabbedPaneStyle
+     * construit dynamiquement depuis les valeurs du thème.
+     *
+     * @param theme le thème source
+     */
+    private void applyThemeToTabbedPane(HRibbonTabsTheme theme) {
+        if (theme == null) {
+            return;
+        }
+        // Construire un HTabbedPaneStyle dynamique depuis les couleurs du thème
+        // On surcharge setTabbedStyle() avec les couleurs exactes du thème
+        tabbedPane.setBackground(theme.getTabBarBackground());
+        tabbedPane.setForeground(theme.getTabTextColor());
+        tabbedPane.repaint();
+    }
+
     // =========================================================================
     // API PUBLIQUE — AUTO-COLLAPSE
     // =========================================================================
-
     /**
      * Active ou désactive le collapse automatique basé sur la hauteur de la
      * fenêtre racine.
@@ -663,6 +748,11 @@ public class HRibbonTabs extends JComponent {
 
         applyHeightToRibbon(ribbon, calculateRibbonHeight());
         tabbedPane.setComponentAt(tabIndex, ribbon);
+        // Appliquer le thème effectif au Ribbon nouvellement ajouté
+        HRibbonTabsTheme effectiveTheme = tabThemes.containsKey(tabIndex)
+                ? tabThemes.get(tabIndex)
+                : globalTheme;
+        applyThemeToRibbon(ribbon, effectiveTheme);
         tabbedPane.revalidate();
         tabbedPane.repaint();
     }
@@ -757,6 +847,58 @@ public class HRibbonTabs extends JComponent {
                     new ArrowIcon(color, ArrowIcon.Direction.DOWN, 0.4f, 5)
             );
         }
+    }
+
+    /**
+     * Définit le thème global appliqué à tous les onglets. Les onglets ayant un
+     * thème propre ne sont pas affectés.
+     *
+     * @param theme le thème global, ou null pour réinitialiser
+     */
+    public void setTheme(HRibbonTabsTheme theme) {
+        this.globalTheme = theme;
+        propagateThemes();
+    }
+
+    /**
+     * Retourne le thème global actuel.
+     *
+     * @return le thème global, ou null
+     */
+    public HRibbonTabsTheme getTheme() {
+        return globalTheme;
+    }
+
+    /**
+     * Définit un thème spécifique pour un onglet donné. Ce thème prend priorité
+     * sur le thème global pour cet onglet.
+     *
+     * @param tabIndex index de l'onglet (0-based)
+     * @param theme le thème à appliquer, ou null pour revenir au thème global
+     */
+    public void setTabTheme(int tabIndex, HRibbonTabsTheme theme) {
+        if (tabIndex < 0 || tabIndex >= tabbedPane.getTabCount()) {
+            return;
+        }
+
+        if (theme == null) {
+            // Retirer le thème propre — l'onglet héritera du thème global
+            tabThemes.remove(tabIndex);
+        } else {
+            tabThemes.put(tabIndex, theme);
+        }
+
+        propagateThemes();
+    }
+
+    /**
+     * Retourne le thème spécifique d'un onglet, ou null s'il hérite du global.
+     *
+     * @param tabIndex index de l'onglet (0-based)
+     * @return le thème propre de l'onglet, ou null
+     */
+    public HRibbonTabsTheme getTabTheme(int tabIndex) {
+        return tabThemes.get(tabIndex);
     }
 
     // =========================================================================

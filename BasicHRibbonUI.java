@@ -9,10 +9,9 @@ import javax.swing.*;
 import javax.swing.plaf.ComponentUI;
 
 /**
- * Version améliorée de BasicHRibbonUI avec :
- * - Dégradé de fond par défaut (#B8EAE4 -> #B8CBEA)
- * - Transition fluide lors du hover
- * - Effets visibles améliorés
+ * Version améliorée de BasicHRibbonUI avec : - Dégradé de fond par défaut
+ * (#B8EAE4 -> #B8CBEA) - Transition fluide lors du hover - Effets visibles
+ * améliorés
  */
 public class BasicHRibbonUI extends ComponentUI {
 
@@ -24,13 +23,13 @@ public class BasicHRibbonUI extends ComponentUI {
     private Color focusBg = new Color(0xE3F2FD);                   // Bleu clair pour fond focus
     private Color focusRing = new Color(0x1976D2);                 // Bleu foncé pour bordure focus
     private Color ribbonBorder = new Color(0xD0D6DD);              // Bordure du ruban
-    private int cornerRadius = 15;                                 // Rayon des coins arrondis
+    private int cornerRadius = 0;                                 // Rayon des coins arrondis
 
     // État du composant
     private JComponent ribbon;
     private int hoveredGroupIndex = -1;     // Index du groupe sous la souris
     private int focusedGroupIndex = -1;     // Index du groupe qui a le focus
-    
+
     // Animation de transition
     private float hoverAnimationProgress = 0f; // 0 = pas de hover, 1 = hover complet
     private Timer hoverAnimationTimer;
@@ -58,16 +57,16 @@ public class BasicHRibbonUI extends ComponentUI {
             public void actionPerformed(ActionEvent e) {
                 // Déterminer la cible
                 float target = (hoveredGroupIndex != -1) ? 1.0f : 0.0f;
-                
+
                 // Animer progressivement
                 if (hoverAnimationProgress < target) {
                     hoverAnimationProgress = Math.min(target, hoverAnimationProgress + ANIMATION_STEP);
-                    if (ribbon != null) ribbon.repaint();
+                    if (ribbon != null) ribbon.repaint(0, 0, ribbon.getWidth(), ribbon.getHeight());
                 } else if (hoverAnimationProgress > target) {
                     hoverAnimationProgress = Math.max(target, hoverAnimationProgress - ANIMATION_STEP);
-                    if (ribbon != null) ribbon.repaint();
+                    if (ribbon != null) ribbon.repaint(0, 0, ribbon.getWidth(), ribbon.getHeight());
                 }
-                
+
                 // Arrêter le timer si l'animation est terminée
                 if (Math.abs(hoverAnimationProgress - target) < 0.001f) {
                     hoverAnimationTimer.stop();
@@ -86,7 +85,7 @@ public class BasicHRibbonUI extends ComponentUI {
     @Override
     public void installUI(JComponent c) {
         this.ribbon = c;
-        
+
         // Listener pour le survol de la souris
         mouseMotionListener = new MouseMotionAdapter() {
             @Override
@@ -123,15 +122,15 @@ public class BasicHRibbonUI extends ComponentUI {
                 if (!"focusOwner".equals(evt.getPropertyName())) {
                     return;
                 }
-                
+
                 Object focusOwner = evt.getNewValue();
                 int newFocusedIndex = -1;
-                
+
                 if (focusOwner instanceof Component) {
                     Component focused = (Component) focusOwner;
                     newFocusedIndex = getGroupIndexForComponent(focused);
                 }
-                
+
                 if (newFocusedIndex != focusedGroupIndex) {
                     focusedGroupIndex = newFocusedIndex;
                     ribbon.repaint();
@@ -155,7 +154,7 @@ public class BasicHRibbonUI extends ComponentUI {
         if (hoverAnimationTimer != null) {
             hoverAnimationTimer.stop();
         }
-        
+
         if (mouseMotionListener != null) {
             ribbon.removeMouseMotionListener(mouseMotionListener);
         }
@@ -176,150 +175,159 @@ public class BasicHRibbonUI extends ComponentUI {
         hoverAnimationProgress = 0f;
     }
 
-    
     @Override
-public void paint(Graphics g, JComponent c) {
-    Graphics2D g2 = (Graphics2D) g.create();
-    try {
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                           RenderingHints.VALUE_ANTIALIAS_ON);
+    public void paint(Graphics g, JComponent c) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
 
-        Rectangle[] groupBounds = getGroupBounds();
-        if (groupBounds == null) {
-            return;
-        }
-
-        HRibbonLayoutManager lm = getLayoutManager();
-        HRibbonGroupModel groupModel = (lm != null) ? lm.getRibbon().getGroupModel() : null;
-
-        // Récupérer le scrollOffset depuis le layout manager
-        int scrollOffset = (lm != null) ? lm.getScrollOffset() : 0;
-
-        // Définir une zone de clipping pour éviter que les groupes
-        // débordent visuellement en dehors de la zone disponible du ruban.
-        // Sans ce clipping, un groupe partiellement visible continuerait
-        // à être dessiné au-delà du bord gauche ou droit du ruban.
-        Insets insets = c.getInsets();
-        int clipX = (insets != null) ? insets.left : 0;
-        int clipW = c.getWidth() - clipX - ((insets != null) ? insets.right : 0);
-        g2.setClip(clipX, 0, clipW, c.getHeight());
-
-        // Dessiner chaque groupe
-        for (int i = 0; i < groupBounds.length; i++) {
-            Rectangle bounds = groupBounds[i];
-            if (bounds == null) {
-                continue;
+            Rectangle[] groupBounds = getGroupBounds();
+            if (groupBounds == null) {
+                return;
             }
 
-            // Appliquer scrollOffset à X pour le dessin uniquement.
-            // groupBoundsCache n'est pas modifié : seule la représentation
-            // visuelle est décalée.
-            int drawX = bounds.x - scrollOffset;
+            HRibbonLayoutManager lm = getLayoutManager();
+            HRibbonGroupModel groupModel = (lm != null) ? lm.getRibbon().getGroupModel() : null;
 
-            boolean isHovered = (i == hoveredGroupIndex);
-            boolean isFocused = (i == focusedGroupIndex);
+            // Récupérer le scrollOffset depuis le layout manager
+            int scrollOffset = (lm != null) ? lm.getScrollOffset() : 0;
 
-            // Créer la forme arrondie avec drawX
-            RoundRectangle2D roundedRect = new RoundRectangle2D.Float(
-                drawX, bounds.y,
-                Math.max(0, bounds.width), Math.max(0, bounds.height),
-                cornerRadius, cornerRadius
-            );
+            // Définir une zone de clipping pour éviter que les groupes
+            // débordent visuellement en dehors de la zone disponible du ruban.
+            // Sans ce clipping, un groupe partiellement visible continuerait
+            // à être dessiné au-delà du bord gauche ou droit du ruban.
+            Insets insets = c.getInsets();
+            int clipX = (insets != null) ? insets.left : 0;
+            int clipW = c.getWidth() - clipX - ((insets != null) ? insets.right : 0);
+            g2.setClip(clipX, 0, clipW, c.getHeight());
 
-            // 1. FOND DU GROUPE AVEC DÉGRADÉ
-            if (isFocused) {
-                g2.setColor(focusBg);
-                g2.fill(roundedRect);
-            } else {
-                if (groupModel != null) {
-                    HRibbonGroup group = groupModel.getHRibbonGroup(i);
-                    if (group != null && group.getBackground() != null) {
-                        g2.setColor(group.getBackground());
-                        g2.fill(roundedRect);
+            // Dessiner chaque groupe
+            for (int i = 0; i < groupBounds.length; i++) {
+                Rectangle bounds = groupBounds[i];
+                if (bounds == null) {
+                    continue;
+                }
+
+                // Appliquer scrollOffset à X pour le dessin uniquement.
+                // groupBoundsCache n'est pas modifié : seule la représentation
+                // visuelle est décalée.
+                int drawX = bounds.x - scrollOffset;
+
+                boolean isHovered = (i == hoveredGroupIndex);
+                boolean isFocused = (i == focusedGroupIndex);
+
+                // Lire le cornerRadius depuis le Ribbon si disponible — sinon valeur locale
+                int activeCornerRadius = (ribbon instanceof Ribbon)
+                        ? ((Ribbon) ribbon).getGroupCornerRadius()
+                        : cornerRadius;
+
+                // Créer la forme arrondie avec drawX
+                RoundRectangle2D roundedRect = new RoundRectangle2D.Float(
+                        drawX, bounds.y,
+                        Math.max(0, bounds.width), Math.max(0, bounds.height),
+                        activeCornerRadius, activeCornerRadius
+                );
+
+                // 1. FOND DU GROUPE AVEC DÉGRADÉ
+                // Si un thème est actif, ses couleurs ont priorité sur les couleurs
+                // par défaut. Un groupe avec une couleur explicite garde toujours
+                // sa priorité même sur le thème.
+                HRibbonTabsTheme theme = getActiveTheme();
+
+                if (isFocused) {
+                    g2.setColor(focusBg);
+                    g2.fill(roundedRect);
+                } else {
+                    if (groupModel != null) {
+                        HRibbonGroup group = groupModel.getHRibbonGroup(i);
+                        if (group != null && group.getBackground() != null) {
+                            // Couleur explicite du groupe — priorité absolue sur le thème
+                            g2.setColor(group.getBackground());
+                            g2.fill(roundedRect);
+                        } else {
+                            // Couleur depuis le thème ou depuis les couleurs par défaut
+                            Color startColor = (theme != null) ? theme.getGroupGradientStart() : defaultGroupStartColor;
+                            Color endColor = (theme != null) ? theme.getGroupGradientEnd() : defaultGroupEndColor;
+                            GradientPaint gradient = new GradientPaint(
+                                    drawX, bounds.y, startColor,
+                                    drawX + bounds.width, bounds.y + bounds.height, endColor
+                            );
+                            g2.setPaint(gradient);
+                            g2.fill(roundedRect);
+                        }
                     } else {
+                        Color startColor = (theme != null) ? theme.getGroupGradientStart() : defaultGroupStartColor;
+                        Color endColor = (theme != null) ? theme.getGroupGradientEnd() : defaultGroupEndColor;
                         GradientPaint gradient = new GradientPaint(
-                            drawX, bounds.y, defaultGroupStartColor,
-                            drawX + bounds.width, bounds.y + bounds.height, defaultGroupEndColor
+                                drawX, bounds.y, startColor,
+                                drawX + bounds.width, bounds.y + bounds.height, endColor
                         );
                         g2.setPaint(gradient);
                         g2.fill(roundedRect);
                     }
-                } else {
-                    GradientPaint gradient = new GradientPaint(
-                        drawX, bounds.y, defaultGroupStartColor,
-                        drawX + bounds.width, bounds.y + bounds.height, defaultGroupEndColor
+                }
+
+                // 2. TEINTE HOVER ANIMÉE — depuis le thème si disponible
+                if (isFocused && hoverAnimationProgress > 0) {
+                    Color baseHoverTint = (theme != null) ? theme.getGroupHoverTint() : hoverTint;
+                    int alpha = (int) (baseHoverTint.getAlpha() * hoverAnimationProgress);
+                    Color animatedHoverTint = new Color(
+                            baseHoverTint.getRed(),
+                            baseHoverTint.getGreen(),
+                            baseHoverTint.getBlue(),
+                            alpha
                     );
-                    g2.setPaint(gradient);
+                    g2.setColor(animatedHoverTint);
                     g2.fill(roundedRect);
                 }
+
+                 // 4. BORDURE FOCUS & HOVER ANIMÉE — depuis le thème si disponible
+                if ( isFocused) {
+                    float strokeWidth = 2f + (1f * hoverAnimationProgress);
+                    Color hoverBorder = (theme != null) ? theme.getGroupHoverBorderColor() : hoverBorderColor;
+                    g2.setColor(hoverBorder);
+                    g2.setStroke(new BasicStroke(strokeWidth));
+                    float inset = (1 - hoverAnimationProgress) * 0.5f;
+                    g2.drawRoundRect(
+                            drawX + (int) inset,
+                            bounds.y + (int) inset,
+                            Math.max(0, bounds.width - 1 - (int) (inset * 2)),
+                            Math.max(0, bounds.height - 1 - (int) (inset * 2)),
+                            activeCornerRadius, activeCornerRadius
+                    );
+                } // 5. BORDURE NORMALE — depuis le thème si disponible
+                else {
+                    Color normalBorder = (theme != null) ? theme.getGroupBorderColor() : new Color(0, 0, 0, 15);
+                    g2.setColor(normalBorder);
+                    g2.setStroke(new BasicStroke(1f));
+                    g2.drawRoundRect(
+                            drawX, bounds.y,
+                            Math.max(0, bounds.width - 1), Math.max(0, bounds.height - 1),
+                            activeCornerRadius, activeCornerRadius
+                    );
+                }
+
             }
 
-            // 2. TEINTE HOVER ANIMÉE
-            if (isHovered && !isFocused && hoverAnimationProgress > 0) {
-                int alpha = (int)(hoverTint.getAlpha() * hoverAnimationProgress);
-                Color animatedHoverTint = new Color(
-                    hoverTint.getRed(),
-                    hoverTint.getGreen(),
-                    hoverTint.getBlue(),
-                    alpha
-                );
-                g2.setColor(animatedHoverTint);
-                g2.fill(roundedRect);
-            }
+            paintRibbonBorder(g2, c);
 
-            // 3. BORDURE FOCUS
-            if (isFocused) {
-                g2.setColor(focusRing);
-                g2.setStroke(new BasicStroke(3f));
-                RoundRectangle2D focusOutline = new RoundRectangle2D.Float(
-                    drawX - 2, bounds.y - 2,
-                    Math.max(0, bounds.width + 4), Math.max(0, bounds.height + 4),
-                    cornerRadius + 2, cornerRadius + 2
-                );
-                g2.draw(focusOutline);
-            }
-            // 4. BORDURE HOVER ANIMÉE
-            else if (isHovered && hoverAnimationProgress > 0) {
-                float strokeWidth = 1f + (1f * hoverAnimationProgress);
-                g2.setColor(hoverBorderColor);
-                g2.setStroke(new BasicStroke(strokeWidth));
-                float inset = (1 - hoverAnimationProgress) * 0.5f;
-                g2.drawRoundRect(
-                    drawX + (int)inset,
-                    bounds.y + (int)inset,
-                    Math.max(0, bounds.width - 1 - (int)(inset * 2)),
-                    Math.max(0, bounds.height - 1 - (int)(inset * 2)),
-                    cornerRadius,
-                    cornerRadius
-                );
-            }
-            // 5. BORDURE NORMALE
-            else {
-                g2.setColor(new Color(0, 0, 0, 15));
-                g2.setStroke(new BasicStroke(1f));
-                g2.drawRoundRect(
-                    drawX, bounds.y,
-                    Math.max(0, bounds.width - 1), Math.max(0, bounds.height - 1),
-                    cornerRadius, cornerRadius
-                );
-            }
+        } finally {
+            g2.dispose();
         }
-
-        paintRibbonBorder(g2, c);
-
-    } finally {
-        g2.dispose();
     }
-}
 
     /**
      * Dessine la bordure inférieure du ruban
      */
     private void paintRibbonBorder(Graphics2D g2, JComponent c) {
-        int width = c.getWidth();
-        int height = c.getHeight();
-        g2.setColor(ribbonBorder);
-        g2.drawLine(0, height - 1, width, height - 1);
+//        int width = c.getWidth();
+//        int height = c.getHeight();
+//         Couleur depuis le thème si disponible
+//        HRibbonTabsTheme theme = getActiveTheme();
+//        Color borderColor = (theme != null) ? theme.getRibbonBorderColor() : ribbonBorder;
+//        g2.setColor(borderColor);
+//        g2.drawLine(0, height - 1, width, height - 1);
     }
 
     /**
@@ -375,13 +383,13 @@ public void paint(Graphics g, JComponent c) {
         }
 
         // Vérifier via la map des composants par groupe
-        java.util.Map<Integer, java.util.List<Component>> componentsByGroup = 
-            lm.getComponentsByGroup();
-        
+        java.util.Map<Integer, java.util.List<Component>> componentsByGroup
+                = lm.getComponentsByGroup();
+
         if (componentsByGroup != null) {
-            for (java.util.Map.Entry<Integer, java.util.List<Component>> entry : 
-                 componentsByGroup.entrySet()) {
-                
+            for (java.util.Map.Entry<Integer, java.util.List<Component>> entry
+                    : componentsByGroup.entrySet()) {
+
                 java.util.List<Component> components = entry.getValue();
                 if (components != null && components.contains(component)) {
                     return entry.getKey();
@@ -396,13 +404,13 @@ public void paint(Graphics g, JComponent c) {
                 Rectangle groupRect = bounds[i];
                 if (groupRect != null) {
                     Point componentLocation = SwingUtilities.convertPoint(
-                        component, 0, 0, ribbon
+                            component, 0, 0, ribbon
                     );
                     Rectangle componentRect = new Rectangle(
-                        componentLocation.x, componentLocation.y,
-                        component.getWidth(), component.getHeight()
+                            componentLocation.x, componentLocation.y,
+                            component.getWidth(), component.getHeight()
                     );
-                    
+
                     if (groupRect.intersects(componentRect)) {
                         return i;
                     }
@@ -416,7 +424,6 @@ public void paint(Graphics g, JComponent c) {
     // =========================================================================
     // MÉTHODES PUBLIQUES POUR PERSONNALISER L'APPARENCE
     // =========================================================================
-
     /**
      * Définit les couleurs de départ et de fin du dégradé par défaut
      */
@@ -498,4 +505,17 @@ public void paint(Graphics g, JComponent c) {
     public float getHoverAnimationProgress() {
         return hoverAnimationProgress;
     }
+
+    /**
+     * Récupère le thème actif depuis le Ribbon parent. Retourne null si le
+     * ribbon n'est pas un Ribbon ou si aucun thème n'a été défini — les
+     * couleurs par défaut seront alors utilisées.
+     */
+    private HRibbonTabsTheme getActiveTheme() {
+        if (ribbon instanceof Ribbon) {
+            return ((Ribbon) ribbon).getTheme();
+        }
+        return null;
+    }
+
 }

@@ -207,10 +207,7 @@ private long modelVersion = -1;
      * - MouseListener : fermeture sur clic extérieur (géré par HPopupMenu)
      */
     private void initButtonBehavior() {
-        this.addActionListener(e -> togglePopup());
-        
-        // On laisse HPopupMenu gérer la fermeture automatique
-        // Pas besoin de réinventer la roue
+        this.addActionListener(e -> togglePopup());        
     }
     
     /**
