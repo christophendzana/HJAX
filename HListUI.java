@@ -6,6 +6,7 @@ package hcomponents.vues;
 
 import hcomponents.models.HListModel;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -112,10 +113,7 @@ public class HListUI extends BasicListUI {
             int textWidth = fm.stringWidth(text);
             int preferredWidth = textWidth + 32; // Padding
             
-            setPreferredSize(new java.awt.Dimension(
-                Math.max(preferredWidth, 120), 
-                theme.getItemHeight()
-            ));
+            setPreferredSize(new Dimension(Math.max(preferredWidth, 120), theme.getItemHeight()));
             
             return this;
         }
