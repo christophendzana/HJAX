@@ -5,7 +5,7 @@
 package hcomponents;
 
 import hcomponents.vues.HButtonStyle;
-import hcomponents.vues.HCheckBoxUI;
+import hcomponents.vues.HBasicCheckBoxUI;
 import hcomponents.vues.border.HAbstractBorder;
 import hcomponents.vues.shadow.HShadow;
 import javax.swing.Action;
@@ -13,18 +13,15 @@ import javax.swing.Icon;
 import javax.swing.JCheckBox;
 
 /**
- * Composant HCheckBox - Une case à cocher personnalisée avec design moderne.
- * Étend JCheckBox pour offrir des fonctionnalités avancées : styles prédéfinis,
- * coins arrondis, ombres, bordures personnalisables et animations fluides.
- * 
- * <p>Ce composant suit la même philosophie de design que HButton et HToggleButton,
+ * Composant HCheckBox - Une case à cocher personnalisée avec design moderne.Étend JCheckBox pour offrir des fonctionnalités avancées : styles prédéfinis,
+ coins arrondis, ombres, bordures personnalisables et animations fluides.<p>Ce composant suit la même philosophie de design que HButton et HToggleButton,
  * assurant une cohérence visuelle dans l'ensemble de l'application.</p>
  * 
  * @author FIDELE
  * @version 1.0
  * @see JCheckBox
  * @see HButtonStyle
- * @see HCheckBoxUI
+ * @see HBasicCheckBoxUI
  */
 public class HCheckBox extends JCheckBox {
     
@@ -134,7 +131,7 @@ public class HCheckBox extends JCheckBox {
      */
     @Override
     public void updateUI() {
-        setUI(new HCheckBoxUI());
+        setUI(new HBasicCheckBoxUI());
         setFocusPainted(false);
         setBorderPainted(false);
         setContentAreaFilled(false);

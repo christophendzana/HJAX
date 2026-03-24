@@ -91,7 +91,8 @@ public class HList<E> extends JList<E> {
      * @return 
      */
     public HList<E> setHBorder(Color borderColor, int borderRadius) {
-        this.theme.setBorderColor(borderColor).setBorderRadius(borderRadius);
+        this.theme.setBorderColor(borderColor);
+        this.theme.setBorderRadius(borderRadius);
         refreshUI();
         return this;
     }
@@ -103,7 +104,8 @@ public class HList<E> extends JList<E> {
      * @return 
      */
     public HList<E> setHSelection(Color background, Color foreground) {
-        this.theme.setSelectionBackground(background).setSelectionForeground(foreground);
+        this.theme.setSelectionBackground(background);
+        this.theme.setSelectionForeground(foreground);
         refreshUI();
         return this;
     }
@@ -116,9 +118,9 @@ public class HList<E> extends JList<E> {
      * @return 
      */
     public HList<E> setHItems(Color normalBg, Color normalFg, int itemRadius) {
-        this.theme.setNormalBackground(normalBg)
-                .setNormalForeground(normalFg)
-                .setItemRadius(itemRadius);
+        this.theme.setNormalBackground(normalBg);
+                this.theme.setNormalForeground(normalFg);
+                this.theme.setItemRadius(itemRadius);
         refreshUI();
         return this;
     }
