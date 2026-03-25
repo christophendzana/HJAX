@@ -46,7 +46,7 @@ public class HBasicTextFieldUI extends BasicTextFieldUI {
             } else if (model.isHovered()) {
                 borderColor = new Color(120, 144, 156); // gris clair hover
             } else {
-                borderColor = new Color(189, 189, 189);                     // gris normal
+                borderColor = new Color(189, 189, 189); // gris normal
             }
             // Dessiner la bordure arrondie
             g2.setStroke(new BasicStroke(2f));
