@@ -174,6 +174,8 @@ public class HRibbonTabs extends JComponent {
         this.tabbedPane = new HRibbonTabbedPane();
         add(this.tabbedPane);
 
+        this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        
         // Quand le tabbedPane change de taille, on recalcule la hauteur des Ribbon
         tabbedPane.addComponentListener(new ComponentAdapter() {
             @Override
