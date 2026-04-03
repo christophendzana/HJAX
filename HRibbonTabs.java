@@ -55,20 +55,11 @@ public class HRibbonTabs extends JComponent {
     // L'utilisateur peut modifier cette valeur via setMinContentHeight()
     private int minContentHeight = 150;
 
-    // =========================================================================
-    // COMPOSANTS INTERNES
-    // =========================================================================
-    // Le TabbedPane qui contient visuellement les onglets
-    // Sa largeur = largeur totale - BUTTON_WIDTH - quelques pixels de marge
-    private final HRibbonTabbedPane tabbedPane;
+    private HRibbonTabPanel tabbedPane;
 
-    // Le bouton qui déclenche le collapse/expand
-    // Positionné en bas à droite en EXPANDED, en haut à droite en COLLAPSED
-    private final HButton collapseButton;
+    // Le bouton qui déclenche le collapse/expand   
+    private HButton collapseButton;
 
-    // =========================================================================
-    // ÉTATS
-    // =========================================================================
     /**
      * Les deux états du composant. EXPANDED — Ribbon visible, hauteur normale.
      * COLLAPSED — Ribbon masqué, seule la barre d'onglets reste visible.
@@ -170,12 +161,12 @@ public class HRibbonTabs extends JComponent {
         // Pas de LayoutManager — on positionne tout manuellement dans doLayout()
         setLayout(null);
 
-        // --- TabbedPane ---
-        this.tabbedPane = new HRibbonTabbedPane();
+        this.tabbedPane = new HRibbonTabPanel();
+        this.tabbedPane.setRibbonTabs(this);
         add(this.tabbedPane);
-
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-        
+        this.tabbedPane.setTabBarHeight(TAB_BAR_HEIGHT);
+
         // Quand le tabbedPane change de taille, on recalcule la hauteur des Ribbon
         tabbedPane.addComponentListener(new ComponentAdapter() {
             @Override
@@ -647,6 +638,43 @@ public class HRibbonTabs extends JComponent {
     // API PUBLIQUE — APPARENCE
     // =========================================================================
     /**
+     * Ajoute un composant Swing dans la zone de droite de la barre d'onglets.
+     * La largeur de l'ActionsPanel est recalculée automatiquement.
+     *
+     * @param comp le composant à ajouter (bouton, champ texte, etc.)
+     */
+    public void addComponent(Component comp) {
+        tabbedPane.addComponent(comp);
+    }
+
+    /**
+     * Retire un composant de la zone de droite de la barre d'onglets.
+     *
+     * @param comp le composant à retirer
+     */
+    public void removeComponent(Component comp) {
+        tabbedPane.removeComponent(comp);
+    }
+
+    /**
+     * Fixe manuellement la largeur de la zone de composants custom. Passe en
+     * mode manuel — la largeur ne sera plus calculée automatiquement.
+     *
+     * @param width largeur en pixels
+     */
+    public void setComponentsPanelWidth(int width) {
+        tabbedPane.setComponentsPanelWidth(width);
+    }
+
+    /**
+     * Repasse en mode auto pour la largeur de la zone de composants custom. La
+     * largeur sera recalculée depuis les preferredSize des composants.
+     */
+    public void resetComponentsPanelWidth() {
+        tabbedPane.resetComponentsPanelWidth();
+    }
+
+    /**
      * Modifie le rayon des coins arrondis des onglets. Délègue directement à
      * HRibbonTabbedPane.
      *
@@ -1038,13 +1066,16 @@ public class HRibbonTabs extends JComponent {
     }
 
     /**
-     * Retourne le HRibbonTabbedPane interne. Utile pour des configurations
-     * avancées non exposées par HRibbonTabs.
+     * Retourne le HRibbonTabPanel interne.
      *
-     * @return le HRibbonTabbedPane
+     * @return le HRibbonTabPanel
      */
-    public HRibbonTabbedPane getTabbedPane() {
+    public HRibbonTabPanel getTabbedPane() {
         return tabbedPane;
+    }
+
+    public void setTabbedPane(HRibbonTabPanel tabPanel) {
+        this.tabbedPane = tabPanel;
     }
 
     /**
@@ -1111,4 +1142,5 @@ public class HRibbonTabs extends JComponent {
         int width = (parent != null) ? parent.getWidth() : 800;
         return new Dimension(width, totalHeight);
     }
+
 }
