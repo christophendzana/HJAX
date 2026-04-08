@@ -7,17 +7,18 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.function.Consumer;
 import javax.swing.JPanel;
+import hsplitpane.HSplitPane.WrapDirection;
 
 /**
  * Séparateur draggable entre deux zones adjacentes d'un HSplitPane.
  *
- * Ce composant se positionne entre deux zones et permet à l'utilisateur
- * de les redimensionner en le faisant glisser. Il change de couleur
- * au survol et pendant le drag pour un retour visuel clair.
+ * Ce composant se positionne entre deux zones et permet à l'utilisateur de les
+ * redimensionner en le faisant glisser. Il change de couleur au survol et
+ * pendant le drag pour un retour visuel clair.
  *
- * Le divider notifie le HSplitPaneRootLayout via un callback chaque fois
- * que l'utilisateur le déplace, en lui transmettant le déplacement delta.
- * C'est le layout racine qui se charge du redimensionnement effectif des zones.
+ * Le divider notifie le HSplitPaneRootLayout via un callback chaque fois que
+ * l'utilisateur le déplace, en lui transmettant le déplacement delta. C'est le
+ * layout racine qui se charge du redimensionnement effectif des zones.
  *
  * Un divider peut être verrouillé dynamiquement pour empêcher tout déplacement.
  */
@@ -26,79 +27,98 @@ public class HSplitDivider extends JPanel {
     // -------------------------------------------------------------------------
     // Constantes
     // -------------------------------------------------------------------------
-
-    /** Épaisseur par défaut du séparateur en pixels. */
+    /**
+     * Épaisseur par défaut du séparateur en pixels.
+     */
     private static final int EPAISSEUR_DEFAUT = 4;
 
-    /** Couleur normale par défaut. */
+    /**
+     * Couleur normale par défaut.
+     */
     private static final Color COULEUR_DEFAUT = new Color(50, 50, 50);
 
-    /** Couleur au survol par défaut. */
+    /**
+     * Couleur au survol par défaut.
+     */
     private static final Color COULEUR_HOVER_DEFAUT = new Color(80, 130, 200);
 
-    /** Couleur pendant le drag par défaut. */
+    /**
+     * Couleur pendant le drag par défaut.
+     */
     private static final Color COULEUR_DRAG_DEFAUT = new Color(100, 160, 230);
 
     // -------------------------------------------------------------------------
     // Configuration
     // -------------------------------------------------------------------------
-
     /**
-     * Orientation du séparateur.
-     * HORIZONTAL = sépare une zone du haut et une du bas (drag vertical).
-     * VERTICAL   = sépare une zone de gauche et une de droite (drag horizontal).
+     * Orientation du séparateur. HORIZONTAL = sépare une zone du haut et une du
+     * bas (drag vertical). VERTICAL = sépare une zone de gauche et une de
+     * droite (drag horizontal).
      */
     private final WrapDirection orientation;
 
-    /** Épaisseur du séparateur en pixels. */
+    /**
+     * Épaisseur du séparateur en pixels.
+     */
     private int epaisseur;
 
-    /** Couleur affichée dans l'état normal. */
+    /**
+     * Couleur affichée dans l'état normal.
+     */
     private Color couleur;
 
-    /** Couleur affichée quand la souris survole le séparateur. */
+    /**
+     * Couleur affichée quand la souris survole le séparateur.
+     */
     private Color couleurHover;
 
-    /** Couleur affichée pendant que l'utilisateur déplace le séparateur. */
+    /**
+     * Couleur affichée pendant que l'utilisateur déplace le séparateur.
+     */
     private Color couleurDrag;
 
     // -------------------------------------------------------------------------
     // État
     // -------------------------------------------------------------------------
-
-    /** Indique si le séparateur est en cours de déplacement. */
+    /**
+     * Indique si le séparateur est en cours de déplacement.
+     */
     private boolean isDragging;
 
-    /** Indique si le séparateur est survolé par la souris. */
+    /**
+     * Indique si le séparateur est survolé par la souris.
+     */
     private boolean isHovered;
 
     /**
-     * Indique si le séparateur est verrouillé.
-     * Quand true, la souris ne change pas de forme et le drag est ignoré.
+     * Indique si le séparateur est verrouillé. Quand true, la souris ne change
+     * pas de forme et le drag est ignoré.
      */
     private boolean locked;
 
-    /** Position X de la souris au début du drag. */
+    /**
+     * Position X de la souris au début du drag.
+     */
     private int dragStartX;
 
-    /** Position Y de la souris au début du drag. */
+    /**
+     * Position Y de la souris au début du drag.
+     */
     private int dragStartY;
 
     // -------------------------------------------------------------------------
     // Callback de notification
     // -------------------------------------------------------------------------
-
     /**
-     * Fonction appelée à chaque mouvement pendant le drag.
-     * Reçoit le delta de déplacement (positif ou négatif) sur l'axe concerné.
-     * C'est le HSplitPaneRootLayout qui s'enregistre ici.
+     * Fonction appelée à chaque mouvement pendant le drag. Reçoit le delta de
+     * déplacement (positif ou négatif) sur l'axe concerné. C'est le
+     * HSplitPaneRootLayout qui s'enregistre ici.
      */
     private Consumer<Integer> onDragCallback;
 
     // =========================================================================
     // Constructeurs
     // =========================================================================
-
     /**
      * Crée un séparateur avec les valeurs par défaut.
      *
@@ -106,26 +126,26 @@ public class HSplitDivider extends JPanel {
      */
     public HSplitDivider(WrapDirection orientation) {
         this(orientation, EPAISSEUR_DEFAUT, COULEUR_DEFAUT,
-             COULEUR_HOVER_DEFAUT, COULEUR_DRAG_DEFAUT);
+                COULEUR_HOVER_DEFAUT, COULEUR_DRAG_DEFAUT);
     }
 
     /**
      * Crée un séparateur entièrement paramétré.
      *
-     * @param orientation  l'orientation du séparateur
-     * @param epaisseur    l'épaisseur en pixels
-     * @param couleur      la couleur normale
+     * @param orientation l'orientation du séparateur
+     * @param epaisseur l'épaisseur en pixels
+     * @param couleur la couleur normale
      * @param couleurHover la couleur au survol
-     * @param couleurDrag  la couleur pendant le drag
+     * @param couleurDrag la couleur pendant le drag
      */
     public HSplitDivider(WrapDirection orientation, int epaisseur,
-                          Color couleur, Color couleurHover, Color couleurDrag) {
-        this.orientation  = orientation;
-        this.epaisseur    = epaisseur;
-        this.couleur      = couleur;
+            Color couleur, Color couleurHover, Color couleurDrag) {
+        this.orientation = orientation;
+        this.epaisseur = epaisseur;
+        this.couleur = couleur;
         this.couleurHover = couleurHover;
-        this.couleurDrag  = couleurDrag;
-        this.locked       = false;
+        this.couleurDrag = couleurDrag;
+        this.locked = false;
 
         configurerCurseur();
         brancherEcouteursSouris();
@@ -134,10 +154,9 @@ public class HSplitDivider extends JPanel {
     // =========================================================================
     // Initialisation
     // =========================================================================
-
     /**
-     * Configure le curseur affiché selon l'orientation du séparateur.
-     * Le curseur change en double flèche pour indiquer la direction de drag.
+     * Configure le curseur affiché selon l'orientation du séparateur. Le
+     * curseur change en double flèche pour indiquer la direction de drag.
      */
     private void configurerCurseur() {
         if (!locked) {
@@ -194,10 +213,10 @@ public class HSplitDivider extends JPanel {
                     // On calcule le déplacement selon l'axe pertinent
                     int delta;
                     if (orientation == WrapDirection.HORIZONTAL) {
-                        delta      = e.getYOnScreen() - dragStartY;
+                        delta = e.getYOnScreen() - dragStartY;
                         dragStartY = e.getYOnScreen();
                     } else {
-                        delta      = e.getXOnScreen() - dragStartX;
+                        delta = e.getXOnScreen() - dragStartX;
                         dragStartX = e.getXOnScreen();
                     }
 
@@ -216,7 +235,6 @@ public class HSplitDivider extends JPanel {
     // =========================================================================
     // Rendu
     // =========================================================================
-
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -236,10 +254,9 @@ public class HSplitDivider extends JPanel {
     // =========================================================================
     // API publique
     // =========================================================================
-
     /**
-     * Enregistre le callback qui sera appelé à chaque déplacement du séparateur.
-     * C'est le HSplitPaneRootLayout qui s'enregistre ici.
+     * Enregistre le callback qui sera appelé à chaque déplacement du
+     * séparateur. C'est le HSplitPaneRootLayout qui s'enregistre ici.
      *
      * @param callback une fonction qui reçoit le delta de déplacement en pixels
      */
@@ -250,14 +267,13 @@ public class HSplitDivider extends JPanel {
     // =========================================================================
     // Getters et Setters
     // =========================================================================
-
     public boolean isLocked() {
         return locked;
     }
 
     /**
-     * Verrouille ou déverrouille le séparateur.
-     * Quand verrouillé, le drag est ignoré et le curseur revient à la normale.
+     * Verrouille ou déverrouille le séparateur. Quand verrouillé, le drag est
+     * ignoré et le curseur revient à la normale.
      *
      * @param locked true pour verrouiller, false pour déverrouiller
      */

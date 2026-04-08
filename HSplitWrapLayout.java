@@ -5,44 +5,56 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.LayoutManager2;
-import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.List;
+import hsplitpane.HSplitPane.WrapDirection;
+
 
 /**
  * Gestionnaire de disposition avec retour à la ligne automatique.
  *
  * Les composants enfants sont alignés dans une direction principale
- * (horizontale par défaut) et s'étirent pour occuper tout l'espace
- * disponible sur l'axe secondaire. Quand l'espace sur l'axe principal
- * est épuisé, les composants suivants passent à la ligne ou colonne
- * suivante. Si même le retour à la ligne ne suffit plus, le JScrollPane
- * parent prend le relais.
+ * (horizontale par défaut) et s'étirent pour occuper tout l'espace disponible
+ * sur l'axe secondaire. Quand l'espace sur l'axe principal est épuisé, les
+ * composants suivants passent à la ligne ou colonne suivante. Si même le retour
+ * à la ligne ne suffit plus, le JScrollPane parent prend le relais.
  *
- * Ce layout est conçu pour être utilisé à l'intérieur des zones
- * de contenu de HSplitZone.
+ * Ce layout est conçu pour être utilisé à l'intérieur des zones de contenu de
+ * HSplitZone.
  */
 public class HSplitWrapLayout implements LayoutManager2 {
 
     // -------------------------------------------------------------------------
     // Paramètres de disposition
     // -------------------------------------------------------------------------
-
-    /** Direction principale d'alignement des composants. */
+    /**
+     * Direction principale d'alignement des composants.
+     */
     private WrapDirection direction;
 
-    /** Espace horizontal en pixels entre deux composants adjacents. */
+    /**
+     * Espace horizontal en pixels entre deux composants adjacents.
+     */
     private int hGap;
 
-    /** Espace vertical en pixels entre deux composants adjacents. */
+    /**
+     * Espace vertical en pixels entre deux composants adjacents.
+     */
     private int vGap;
 
+    /**
+ * Si true, les composants s'étirent pour occuper tout l'espace disponible
+ * sur l'axe principal. Si false, chaque composant conserve sa preferredSize.
+ * False par défaut.
+ */
+private boolean etirer = false;
+    
     // =========================================================================
     // Constructeurs
     // =========================================================================
-
     /**
-     * Crée un layout avec la direction horizontale par défaut et sans espacement.
+     * Crée un layout avec la direction horizontale par défaut et sans
+     * espacement.
      */
     public HSplitWrapLayout() {
         this(WrapDirection.HORIZONTAL, 0, 0);
@@ -61,37 +73,41 @@ public class HSplitWrapLayout implements LayoutManager2 {
      * Crée un layout entièrement paramétré.
      *
      * @param direction la direction principale de disposition
-     * @param hGap      l'espacement horizontal entre composants
-     * @param vGap      l'espacement vertical entre composants
+     * @param hGap l'espacement horizontal entre composants
+     * @param vGap l'espacement vertical entre composants
      */
     public HSplitWrapLayout(WrapDirection direction, int hGap, int vGap) {
         this.direction = direction;
-        this.hGap      = hGap;
-        this.vGap      = vGap;
+        this.hGap = hGap;
+        this.vGap = vGap;
     }
 
     // =========================================================================
     // Méthodes principales du LayoutManager2
     // =========================================================================
-
     /**
      * Calcule et applique les bounds de chaque composant enfant.
      *
-     * Le calcul se fait en deux temps :
-     * 1. On regroupe les composants en lignes (ou colonnes) selon l'espace dispo.
-     * 2. On étire chaque composant pour qu'il remplisse sa portion de la ligne.
+     * Le calcul se fait en deux temps : 1. On regroupe les composants en lignes
+     * (ou colonnes) selon l'espace dispo. 2. On étire chaque composant pour
+     * qu'il remplisse sa portion de la ligne.
      *
      * @param parent le conteneur dont on dispose les enfants
      */
     @Override
     public void layoutContainer(Container parent) {
+        
+        // synchronized (parent.getTreeLock(): empêches que quelqu’un modifie la
+        // hiérarchie des composants en même temps que tu es en train de la 
+        // parcourir et de positionner les éléments.
+        
         synchronized (parent.getTreeLock()) {
 
-            Insets insets     = parent.getInsets();
-            int availableW    = parent.getWidth()  - insets.left - insets.right;
-            int availableH    = parent.getHeight() - insets.top  - insets.bottom;
-            int startX        = insets.left;
-            int startY        = insets.top;
+            Insets insets = parent.getInsets();
+            int availableW = parent.getWidth() - insets.left - insets.right;
+            int availableH = parent.getHeight() - insets.top - insets.bottom;
+            int startX = insets.left;
+            int startY = insets.top;
 
             // On récupère uniquement les composants visibles
             List<Component> visibles = getVisibleComponents(parent);
@@ -108,153 +124,216 @@ public class HSplitWrapLayout implements LayoutManager2 {
         }
     }
 
+    
+    public boolean isEtirer() {
+    return etirer;
+}
+
+public void setEtirer(boolean etirer) {
+    this.etirer = etirer;
+}
+    
     /**
      * Positionne les composants en lignes horizontales avec retour à la ligne.
      * Chaque composant est étiré pour remplir la hauteur de sa ligne.
      *
      * @param components les composants visibles à positionner
-     * @param startX     position X de départ
-     * @param startY     position Y de départ
+     * @param startX position X de départ
+     * @param startY position Y de départ
      * @param availableW largeur totale disponible
-     * @param availableH hauteur totale disponible (non utilisée ici, gérée par scroll)
+     * @param availableH hauteur totale disponible (non utilisée ici, gérée par
+     * scroll)
      */
-    private void layoutHorizontal(List<Component> components,
-                                   int startX, int startY,
-                                   int availableW, int availableH) {
+   /**
+ /**
+ * Positionne les composants en lignes horizontales avec retour à la ligne.
+ * Si etirer est true, chaque composant s'étire en hauteur pour occuper
+ * toute la hauteur de sa ligne, et la largeur est distribuée équitablement.
+ */
+private void layoutHorizontal(List<Component> components,
+                               int startX, int startY,
+                               int availableW, int availableH) {
 
-        // Découpe les composants en lignes
-        List<List<Component>> lignes = decomposerEnLignes(components, availableW);
+    List<List<Component>> lignes = decomposerEnLignes(components, availableW, availableH);
 
-        int y = startY;
+    int y = startY;
 
-        for (List<Component> ligne : lignes) {
+    for (List<Component> ligne : lignes) {
 
-            // La hauteur de la ligne est dictée par le composant le plus haut
-            int hauteurLigne = getHauteurMax(ligne);
+        int hauteurLigne = etirer ? distribuerHauteurLigne(lignes, availableH)
+                                  : getHauteurMax(ligne);
 
-            // On distribue la largeur disponible entre les composants de la ligne
-            int[] largeurs = distribuerLargeur(ligne, availableW);
+        int[] largeurs = etirer ? distribuerLargeur(ligne, availableW) : null;
 
-            int x = startX;
+        int x = startX;
+        int i = 0;
 
-            for (int i = 0; i < ligne.size(); i++) {
-                Component c = ligne.get(i);
-                c.setBounds(x, y, largeurs[i], hauteurLigne);
-                x += largeurs[i] + hGap;
-            }
-
-            y += hauteurLigne + vGap;
+        for (Component c : ligne) {
+            int w = etirer ? largeurs[i] : c.getPreferredSize().width;
+            int h = hauteurLigne;
+            c.setBounds(x, y, w, h);
+            x += w + hGap;
+            i++;
         }
+
+        y += hauteurLigne + vGap;
     }
+}
 
     /**
-     * Positionne les composants en colonnes verticales avec retour à la colonne.
-     * Chaque composant est étiré pour remplir la largeur de sa colonne.
+     * Positionne les composants en colonnes verticales avec retour à la
+     * colonne. Chaque composant est étiré pour remplir la largeur de sa
+     * colonne.
      *
      * @param components les composants visibles à positionner
-     * @param startX     position X de départ
-     * @param startY     position Y de départ
+     * @param startX position X de départ
+     * @param startY position Y de départ
      * @param availableW largeur totale disponible
      * @param availableH hauteur totale disponible
      */
-    private void layoutVertical(List<Component> components,
-                                 int startX, int startY,
-                                 int availableW, int availableH) {
+/**
+ * Positionne les composants en colonnes verticales avec retour à la colonne.
+ * Si etirer est true, chaque composant s'étire en hauteur pour occuper
+ * sa portion de la colonne ET en largeur pour occuper toute la largeur
+ * de sa colonne — particulièrement utile pour les zones WEST et EAST.
+ */
+private void layoutVertical(List<Component> components,
+                             int startX, int startY,
+                             int availableW, int availableH) {
 
-        // Découpe les composants en colonnes
-        List<List<Component>> colonnes = decomposerEnColonnes(components, availableH);
+    List<List<Component>> colonnes = decomposerEnColonnes(components, availableH, availableW);
 
-        int x = startX;
+    int x = startX;
 
-        for (List<Component> colonne : colonnes) {
+    for (List<Component> colonne : colonnes) {
 
-            // La largeur de la colonne est dictée par le composant le plus large
-            int largeurColonne = getLargeurMax(colonne);
+        // En mode étirement, la largeur de la colonne est la largeur totale
+        // disponible divisée par le nombre de colonnes — les composants
+        // occupent ainsi toute la largeur de leur colonne
+        int largeurColonne = etirer ? distribuerLargeurColonne(colonnes, availableW)
+                                    : getLargeurMax(colonne);
 
-            // On distribue la hauteur disponible entre les composants de la colonne
-            int[] hauteurs = distribuerHauteur(colonne, availableH);
+        int[] hauteurs = etirer ? distribuerHauteur(colonne, availableH) : null;
 
-            int y = startY;
+        int y = startY;
+        int i = 0;
 
-            for (int i = 0; i < colonne.size(); i++) {
-                Component c = colonne.get(i);
-                c.setBounds(x, y, largeurColonne, hauteurs[i]);
-                y += hauteurs[i] + vGap;
-            }
-
-            x += largeurColonne + hGap;
+        for (Component c : colonne) {
+            int w = etirer ? largeurColonne : c.getPreferredSize().width;
+            int h = etirer ? hauteurs[i]   : c.getPreferredSize().height;
+            c.setBounds(x, y, w, h);
+            y += h + vGap;
+            i++;
         }
+
+        x += largeurColonne + hGap;
+        i = 0;
     }
+}
+
+/**
+ * Calcule la hauteur équitable allouée à chaque ligne quand etirer est true.
+ * Les gaps entre lignes sont soustraits avant la distribution.
+ *
+ * @param lignes       toutes les lignes du layout
+ * @param hauteurDispo la hauteur totale disponible
+ * @return la hauteur allouée à chaque ligne
+ */
+private int distribuerHauteurLigne(List<List<Component>> lignes, int hauteurDispo) {
+    int n          = lignes.size();
+    int gapsTotal  = (n - 1) * vGap;
+    int espace     = Math.max(0, hauteurDispo - gapsTotal);
+    return n > 0 ? espace / n : 0;
+}
+
+/**
+ * Calcule la largeur équitable allouée à chaque colonne quand etirer est true.
+ * Les gaps entre colonnes sont soustraits avant la distribution.
+ *
+ * @param colonnes     toutes les colonnes du layout
+ * @param largeurDispo la largeur totale disponible
+ * @return la largeur allouée à chaque colonne
+ */
+private int distribuerLargeurColonne(List<List<Component>> colonnes, int largeurDispo) {
+    int n         = colonnes.size();
+    int gapsTotal = (n - 1) * hGap;
+    int espace    = Math.max(0, largeurDispo - gapsTotal);
+    return n > 0 ? espace / n : 0;
+}
 
     // =========================================================================
     // Calcul de la taille préférée
     // =========================================================================
+    
 
     /**
-     * Calcule la taille préférée du conteneur en tenant compte du wrapping.
-     * C'est cette valeur que le JScrollPane utilise pour décider
-     * si une scrollbar est nécessaire.
-     *
-     * @param parent le conteneur parent
-     * @return la dimension préférée calculée
-     */
-    @Override
-    public Dimension preferredLayoutSize(Container parent) {
-        synchronized (parent.getTreeLock()) {
+ * Calcule la taille préférée réelle du contenu après wrapping.
+ *
+ * On utilise la largeur du viewport du JScrollPane parent comme référence
+ * pour simuler le wrapping. C'est cette valeur que le JScrollPane consulte
+ * pour décider si une scrollbar est nécessaire.
+ */
+@Override
+public Dimension preferredLayoutSize(Container parent) {
+    synchronized (parent.getTreeLock()) {
 
-            Insets insets     = parent.getInsets();
-            int availableW    = parent.getWidth()  - insets.left - insets.right;
-            int availableH    = parent.getHeight() - insets.top  - insets.bottom;
+        Insets insets = parent.getInsets();
 
-            List<Component> visibles = getVisibleComponents(parent);
-
-            if (visibles.isEmpty()) {
-                return new Dimension(
-                    insets.left + insets.right,
-                    insets.top  + insets.bottom
-                );
-            }
-
-            int totalW = insets.left + insets.right;
-            int totalH = insets.top  + insets.bottom;
-
-            if (direction == WrapDirection.HORIZONTAL) {
-                List<List<Component>> lignes = decomposerEnLignes(visibles,
-                    availableW > 0 ? availableW : Integer.MAX_VALUE);
-
-                for (List<Component> ligne : lignes) {
-                    totalH += getHauteurMax(ligne) + vGap;
-                }
-                if (!lignes.isEmpty()) totalH -= vGap;
-
-                // La largeur préférée est la largeur de la ligne la plus large
-                for (List<Component> ligne : lignes) {
-                    int largeurLigne = getLargeurTotaleLigne(ligne);
-                    totalW = Math.max(totalW, largeurLigne + insets.left + insets.right);
-                }
-
-            } else {
-                List<List<Component>> colonnes = decomposerEnColonnes(visibles,
-                    availableH > 0 ? availableH : Integer.MAX_VALUE);
-
-                for (List<Component> colonne : colonnes) {
-                    totalW += getLargeurMax(colonne) + hGap;
-                }
-                if (!colonnes.isEmpty()) totalW -= hGap;
-
-                for (List<Component> colonne : colonnes) {
-                    int hauteurColonne = getHauteurTotaleColonne(colonne);
-                    totalH = Math.max(totalH, hauteurColonne + insets.top + insets.bottom);
-                }
-            }
-
-            return new Dimension(totalW, totalH);
+        // Largeur de référence pour le wrapping horizontal
+        int refW = parent.getWidth() - insets.left - insets.right;
+        if (refW <= 0 && parent.getParent() != null) {
+            refW = parent.getParent().getWidth() - insets.left - insets.right;
         }
+        if (refW <= 0) refW = Integer.MAX_VALUE;
+
+        // Hauteur de référence pour le wrapping vertical
+        int refH = parent.getHeight() - insets.top - insets.bottom;
+        if (refH <= 0 && parent.getParent() != null) {
+            refH = parent.getParent().getHeight() - insets.top - insets.bottom;
+        }
+        if (refH <= 0) refH = Integer.MAX_VALUE;
+
+        List<Component> visibles = getVisibleComponents(parent);
+
+        if (visibles.isEmpty()) {
+            return new Dimension(
+                insets.left + insets.right,
+                insets.top  + insets.bottom
+            );
+        }
+
+        int totalW = 0;
+        int totalH = insets.top + insets.bottom;
+
+        if (direction == WrapDirection.HORIZONTAL) {
+            List<List<Component>> lignes = decomposerEnLignes(visibles, refW, refH);
+
+            for (List<Component> ligne : lignes) {
+                totalH += getHauteurMax(ligne) + vGap;
+                int largeurLigne = getLargeurTotaleLigne(ligne);
+                totalW = Math.max(totalW, largeurLigne + insets.left + insets.right);
+            }
+            if (!lignes.isEmpty()) totalH -= vGap;
+
+        } else {
+            List<List<Component>> colonnes = decomposerEnColonnes(visibles, refH, refW);
+
+            for (List<Component> colonne : colonnes) {
+                totalW += getLargeurMax(colonne) + hGap;
+                int hauteurColonne = getHauteurTotaleColonne(colonne);
+                totalH = Math.max(totalH, hauteurColonne + insets.top + insets.bottom);
+            }
+            if (!colonnes.isEmpty()) totalW -= hGap;
+        }
+
+        return new Dimension(Math.max(totalW, insets.left + insets.right), totalH);
     }
+}
+
 
     /**
-     * Retourne la taille minimale du conteneur.
-     * On utilise la taille préférée comme référence minimale.
+     * Retourne la taille minimale du conteneur. On utilise la taille préférée
+     * comme référence minimale.
      */
     @Override
     public Dimension minimumLayoutSize(Container parent) {
@@ -272,93 +351,131 @@ public class HSplitWrapLayout implements LayoutManager2 {
     // =========================================================================
     // Méthodes utilitaires — décomposition en lignes et colonnes
     // =========================================================================
-
     /**
-     * Regroupe les composants en lignes en respectant la largeur disponible.
-     * Chaque composant qui dépasserait la largeur courante passe à la ligne suivante.
-     *
-     * @param components  la liste des composants à répartir
-     * @param largeurDispo la largeur maximale par ligne
-     * @return une liste de lignes, chacune contenant ses composants
-     */
-    private List<List<Component>> decomposerEnLignes(List<Component> components,
-                                                      int largeurDispo) {
-        List<List<Component>> lignes    = new ArrayList<>();
-        List<Component>       ligneCourante = new ArrayList<>();
-        int                   xCourant  = 0;
+ * Regroupe les composants en lignes en respectant la largeur disponible.
+ * Si une nouvelle ligne n'est plus possible faute de hauteur, tous les
+ * composants restants sont forcés sur la dernière ligne — le scroll prend
+ * le relais.
+ *
+ * @param components   les composants à répartir
+ * @param largeurDispo la largeur maximale par ligne
+ * @param hauteurDispo la hauteur totale disponible — sert à vérifier si
+ *                     une nouvelle ligne est encore possible
+ * @return une liste de lignes, chacune contenant ses composants
+ */
+private List<List<Component>> decomposerEnLignes(List<Component> components,
+                                                  int largeurDispo,
+                                                  int hauteurDispo) {
+    List<List<Component>> lignes        = new ArrayList<>();
+    List<Component>       ligneCourante = new ArrayList<>();
+    int                   xCourant     = 0;
+    int                   hauteurOccupee = 0;
 
-        for (Component c : components) {
-            int largeurComp = c.getPreferredSize().width;
+    for (Component c : components) {
+        int largeurComp = c.getPreferredSize().width;
+        int hauteurComp = c.getPreferredSize().height;
 
-            // Si le composant ne rentre pas sur la ligne courante, on passe à la suivante
-            // Sauf si la ligne est vide : dans ce cas on force quand même le composant
-            if (!ligneCourante.isEmpty() && xCourant + hGap + largeurComp > largeurDispo) {
+        boolean rentreEnLargeur = ligneCourante.isEmpty()
+                || xCourant + hGap + largeurComp <= largeurDispo;
+
+        if (!rentreEnLargeur) {
+            // On vérifie si la hauteur disponible permet une nouvelle ligne
+            int hauteurLigneCourante = getHauteurMax(ligneCourante);
+            boolean nouvelleLignePossible =
+                    hauteurOccupee + hauteurLigneCourante + vGap + hauteurComp <= hauteurDispo;
+
+            if (nouvelleLignePossible) {
+                // On valide la ligne courante et on en commence une nouvelle
                 lignes.add(ligneCourante);
-                ligneCourante = new ArrayList<>();
-                xCourant      = 0;
+                hauteurOccupee += hauteurLigneCourante + vGap;
+                ligneCourante  = new ArrayList<>();
+                xCourant       = 0;
             }
-
-            ligneCourante.add(c);
-            xCourant += (ligneCourante.size() > 1 ? hGap : 0) + largeurComp;
+            // Si pas possible → on force le composant sur la ligne courante
+            // et le scroll prendra le relais
         }
 
-        // Ne pas oublier la dernière ligne en cours
-        if (!ligneCourante.isEmpty()) {
-            lignes.add(ligneCourante);
-        }
-
-        return lignes;
+        ligneCourante.add(c);
+        xCourant += (ligneCourante.size() > 1 ? hGap : 0) + largeurComp;
     }
 
+    if (!ligneCourante.isEmpty()) {
+        lignes.add(ligneCourante);
+    }
+
+    return lignes;
+}
+
     /**
-     * Regroupe les composants en colonnes en respectant la hauteur disponible.
-     *
-     * @param components   la liste des composants à répartir
-     * @param hauteurDispo la hauteur maximale par colonne
-     * @return une liste de colonnes, chacune contenant ses composants
-     */
-    private List<List<Component>> decomposerEnColonnes(List<Component> components,
-                                                        int hauteurDispo) {
-        List<List<Component>> colonnes       = new ArrayList<>();
-        List<Component>       colonneCourante = new ArrayList<>();
-        int                   yCourant        = 0;
+ * Regroupe les composants en colonnes en respectant la hauteur disponible.
+ * Si une nouvelle colonne n'est plus possible faute de largeur, tous les
+ * composants restants sont forcés dans la dernière colonne — le scroll
+ * prend le relais.
+ *
+ * @param components   les composants à répartir
+ * @param hauteurDispo la hauteur maximale par colonne
+ * @param largeurDispo la largeur totale disponible — sert à vérifier si
+ *                     une nouvelle colonne est encore possible
+ * @return une liste de colonnes, chacune contenant ses composants
+ */
+private List<List<Component>> decomposerEnColonnes(List<Component> components,
+                                                    int hauteurDispo,
+                                                    int largeurDispo) {
+    List<List<Component>> colonnes       = new ArrayList<>();
+    List<Component>       colonneCourante = new ArrayList<>();
+    int                   yCourant       = 0;
+    int                   largeurOccupee = 0;
 
-        for (Component c : components) {
-            int hauteurComp = c.getPreferredSize().height;
+    for (Component c : components) {
+        int largeurComp = c.getPreferredSize().width;
+        int hauteurComp = c.getPreferredSize().height;
 
-            if (!colonneCourante.isEmpty() && yCourant + vGap + hauteurComp > hauteurDispo) {
+        boolean rentreEnHauteur = colonneCourante.isEmpty()
+                || yCourant + vGap + hauteurComp <= hauteurDispo;
+
+        if (!rentreEnHauteur) {
+            // On vérifie si la largeur disponible permet une nouvelle colonne
+            int largeurColonneCourante = getLargeurMax(colonneCourante);
+            boolean nouvelleColonnePossible =
+                    largeurOccupee + largeurColonneCourante + hGap + largeurComp <= largeurDispo;
+
+            if (nouvelleColonnePossible) {
+                // On valide la colonne courante et on en commence une nouvelle
                 colonnes.add(colonneCourante);
+                largeurOccupee += largeurColonneCourante + hGap;
                 colonneCourante = new ArrayList<>();
                 yCourant        = 0;
             }
-
-            colonneCourante.add(c);
-            yCourant += (colonneCourante.size() > 1 ? vGap : 0) + hauteurComp;
+            // Si pas possible → on force le composant dans la colonne courante
+            // et le scroll prendra le relais
         }
 
-        if (!colonneCourante.isEmpty()) {
-            colonnes.add(colonneCourante);
-        }
-
-        return colonnes;
+        colonneCourante.add(c);
+        yCourant += (colonneCourante.size() > 1 ? vGap : 0) + hauteurComp;
     }
+
+    if (!colonneCourante.isEmpty()) {
+        colonnes.add(colonneCourante);
+    }
+
+    return colonnes;
+}
 
     // =========================================================================
     // Méthodes utilitaires — distribution de l'espace
     // =========================================================================
-
     /**
      * Distribue la largeur disponible entre les composants d'une ligne.
      *
-     * On commence par attribuer à chaque composant sa largeur préférée,
-     * puis on répartit l'espace restant équitablement entre tous les composants.
+     * On commence par attribuer à chaque composant sa largeur préférée, puis on
+     * répartit l'espace restant équitablement entre tous les composants.
      *
-     * @param ligne      les composants de la ligne
+     * @param ligne les composants de la ligne
      * @param largeurDispo la largeur totale disponible
      * @return un tableau de largeurs, une par composant
      */
     private int[] distribuerLargeur(List<Component> ligne, int largeurDispo) {
-        int n        = ligne.size();
+        int n = ligne.size();
         int[] result = new int[n];
 
         // Espace total consommé par les gaps entre composants
@@ -368,7 +485,7 @@ public class HSplitWrapLayout implements LayoutManager2 {
         int espaceComposants = largeurDispo - gapsTotal;
 
         // Distribution équitable
-        int base  = espaceComposants / n;
+        int base = espaceComposants / n;
         int reste = espaceComposants % n;
 
         for (int i = 0; i < n; i++) {
@@ -380,33 +497,31 @@ public class HSplitWrapLayout implements LayoutManager2 {
     }
 
     /**
-     * Distribue la hauteur disponible entre les composants d'une colonne.
-     *
-     * @param colonne      les composants de la colonne
-     * @param hauteurDispo la hauteur totale disponible
-     * @return un tableau de hauteurs, une par composant
-     */
-    private int[] distribuerHauteur(List<Component> colonne, int hauteurDispo) {
-        int n        = colonne.size();
-        int[] result = new int[n];
+ * Distribue la hauteur disponible entre les composants d'une colonne.
+ * Les gaps entre composants sont soustraits avant la distribution.
+ */
+private int[] distribuerHauteur(List<Component> colonne, int hauteurDispo) {
+    int n        = colonne.size();
+    int[] result = new int[n];
 
-        int gapsTotal        = (n - 1) * vGap;
-        int espaceComposants = hauteurDispo - gapsTotal;
-        int base             = espaceComposants / n;
-        int reste            = espaceComposants % n;
+    int gapsTotal        = (n - 1) * vGap;
+    int espaceComposants = Math.max(0, hauteurDispo - gapsTotal);
+    int base             = espaceComposants / n;
+    int reste            = espaceComposants % n;
 
-        for (int i = 0; i < n; i++) {
-            result[i] = base + (i < reste ? 1 : 0);
-        }
-
-        return result;
+    for (int i = 0; i < n; i++) {
+        result[i] = base + (i < reste ? 1 : 0);
     }
+
+    return result;
+}
 
     // =========================================================================
     // Méthodes utilitaires — mesures
     // =========================================================================
-
-    /** Retourne la hauteur maximale parmi les composants d'une ligne. */
+    /**
+     * Retourne la hauteur maximale parmi les composants d'une ligne.
+     */
     private int getHauteurMax(List<Component> ligne) {
         int max = 0;
         for (Component c : ligne) {
@@ -415,7 +530,9 @@ public class HSplitWrapLayout implements LayoutManager2 {
         return max;
     }
 
-    /** Retourne la largeur maximale parmi les composants d'une colonne. */
+    /**
+     * Retourne la largeur maximale parmi les composants d'une colonne.
+     */
     private int getLargeurMax(List<Component> colonne) {
         int max = 0;
         for (Component c : colonne) {
@@ -424,7 +541,9 @@ public class HSplitWrapLayout implements LayoutManager2 {
         return max;
     }
 
-    /** Retourne la largeur totale occupée par une ligne (composants + gaps). */
+    /**
+     * Retourne la largeur totale occupée par une ligne (composants + gaps).
+     */
     private int getLargeurTotaleLigne(List<Component> ligne) {
         int total = 0;
         for (Component c : ligne) {
@@ -434,7 +553,9 @@ public class HSplitWrapLayout implements LayoutManager2 {
         return total;
     }
 
-    /** Retourne la hauteur totale occupée par une colonne (composants + gaps). */
+    /**
+     * Retourne la hauteur totale occupée par une colonne (composants + gaps).
+     */
     private int getHauteurTotaleColonne(List<Component> colonne) {
         int total = 0;
         for (Component c : colonne) {
@@ -444,7 +565,9 @@ public class HSplitWrapLayout implements LayoutManager2 {
         return total;
     }
 
-    /** Retourne uniquement les composants visibles du conteneur parent. */
+    /**
+     * Retourne uniquement les composants visibles du conteneur parent.
+     */
     private List<Component> getVisibleComponents(Container parent) {
         List<Component> visibles = new ArrayList<>();
         for (Component c : parent.getComponents()) {
@@ -458,7 +581,6 @@ public class HSplitWrapLayout implements LayoutManager2 {
     // =========================================================================
     // Méthodes non utilisées mais requises par l'interface LayoutManager2
     // =========================================================================
-
     @Override
     public void addLayoutComponent(Component comp, Object constraints) {
         // Pas de contraintes dans ce layout, l'ordre d'insertion suffit
@@ -492,7 +614,6 @@ public class HSplitWrapLayout implements LayoutManager2 {
     // =========================================================================
     // Getters et Setters
     // =========================================================================
-
     public WrapDirection getDirection() {
         return direction;
     }

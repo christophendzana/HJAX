@@ -12,14 +12,15 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+import hsplitpane.HSplitPane.ZonePosition;
 
 /**
  * Barre de contrôle affichée en bordure d'une HSplitZone.
  *
- * Cette fine bande contient un titre optionnel et un bouton toggle
- * qui permet à l'utilisateur de réduire ou d'agrandir la zone parente.
- * Sa position dans la zone (haut, bas, gauche, droite) est déterminée
- * automatiquement selon la position de la zone dans le HSplitPane.
+ * Cette fine bande contient un titre optionnel et un bouton toggle qui permet à
+ * l'utilisateur de réduire ou d'agrandir la zone parente. Sa position dans la
+ * zone (haut, bas, gauche, droite) est déterminée automatiquement selon la
+ * position de la zone dans le HSplitPane.
  *
  * Le bouton toggle est dessiné programmatiquement sous forme de flèche
  * directionnelle dont le sens indique l'action disponible.
@@ -29,55 +30,76 @@ public class HSplitZoneHeader extends JPanel {
     // -------------------------------------------------------------------------
     // Constantes
     // -------------------------------------------------------------------------
-
-    /** Épaisseur par défaut de la barre en pixels. */
+    /**
+     * Épaisseur par défaut de la barre en pixels.
+     */
     private static final int HAUTEUR_DEFAUT = 22;
 
-    /** Taille du bouton toggle en pixels. */
+    /**
+     * Taille du bouton toggle en pixels.
+     */
     private static final int TAILLE_BOUTON = 16;
 
-    /** Couleur de fond par défaut de la barre. */
+    /**
+     * Couleur de fond par défaut de la barre.
+     */
     private static final Color COULEUR_FOND_DEFAUT = new Color(60, 63, 65);
 
-    /** Couleur du texte du titre par défaut. */
+    /**
+     * Couleur du texte du titre par défaut.
+     */
     private static final Color COULEUR_TITRE_DEFAUT = new Color(187, 187, 187);
 
     // -------------------------------------------------------------------------
     // Champs de configuration
     // -------------------------------------------------------------------------
-
-    /** Position de la zone parente, détermine l'orientation et le sens des flèches. */
+    /**
+     * Position de la zone parente, détermine l'orientation et le sens des
+     * flèches.
+     */
     private final ZonePosition position;
 
-    /** Titre affiché dans la barre. Peut être null pour ne rien afficher. */
+    /**
+     * Titre affiché dans la barre. Peut être null pour ne rien afficher.
+     */
     private String titre;
 
-    /** Couleur de fond personnalisable de la barre. */
+    /**
+     * Couleur de fond personnalisable de la barre.
+     */
     private Color couleurFond;
 
-    /** Couleur du texte du titre. */
+    /**
+     * Couleur du texte du titre.
+     */
     private Color couleurTitre;
 
-    /** Épaisseur de la barre en pixels. */
+    /**
+     * Épaisseur de la barre en pixels.
+     */
     private int epaisseur;
 
     // -------------------------------------------------------------------------
     // Composants internes
     // -------------------------------------------------------------------------
-
-    /** Étiquette affichant le titre de la zone. */
+    /**
+     * Étiquette affichant le titre de la zone.
+     */
     private JLabel labelTitre;
 
-    /** Bouton dessiné programmatiquement pour le collapse/expand. */
+    /**
+     * Bouton dessiné programmatiquement pour le collapse/expand.
+     */
     private JButton boutonToggle;
 
-    /** État courant de la zone parente : true = réduite, false = développée. */
+    /**
+     * État courant de la zone parente : true = réduite, false = développée.
+     */
     private boolean estCollapsed;
 
     // =========================================================================
     // Constructeurs
     // =========================================================================
-
     /**
      * Crée une barre de contrôle avec des valeurs par défaut.
      *
@@ -88,10 +110,11 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     /**
-     * Crée une barre de contrôle avec un titre et des valeurs par défaut pour le reste.
+     * Crée une barre de contrôle avec un titre et des valeurs par défaut pour
+     * le reste.
      *
      * @param position la position de la zone parente
-     * @param titre    le texte affiché dans la barre, ou null pour aucun titre
+     * @param titre le texte affiché dans la barre, ou null pour aucun titre
      */
     public HSplitZoneHeader(ZonePosition position, String titre) {
         this(position, titre, COULEUR_FOND_DEFAUT, COULEUR_TITRE_DEFAUT, HAUTEUR_DEFAUT);
@@ -100,20 +123,20 @@ public class HSplitZoneHeader extends JPanel {
     /**
      * Crée une barre de contrôle entièrement paramétrée.
      *
-     * @param position     la position de la zone parente
-     * @param titre        le texte affiché, ou null
-     * @param couleurFond  la couleur de fond de la barre
+     * @param position la position de la zone parente
+     * @param titre le texte affiché, ou null
+     * @param couleurFond la couleur de fond de la barre
      * @param couleurTitre la couleur du texte du titre
-     * @param epaisseur    l'épaisseur de la barre en pixels
+     * @param epaisseur l'épaisseur de la barre en pixels
      */
     public HSplitZoneHeader(ZonePosition position, String titre,
-                             Color couleurFond, Color couleurTitre, int epaisseur) {
-        this.position      = position;
-        this.titre         = titre;
-        this.couleurFond   = couleurFond;
-        this.couleurTitre  = couleurTitre;
-        this.epaisseur     = epaisseur;
-        this.estCollapsed  = false;
+            Color couleurFond, Color couleurTitre, int epaisseur) {
+        this.position = position;
+        this.titre = titre;
+        this.couleurFond = couleurFond;
+        this.couleurTitre = couleurTitre;
+        this.epaisseur = epaisseur;
+        this.estCollapsed = false;
 
         initialiserComposants();
         appliquerDimensions();
@@ -122,7 +145,6 @@ public class HSplitZoneHeader extends JPanel {
     // =========================================================================
     // Initialisation
     // =========================================================================
-
     /**
      * Construit et positionne les composants internes de la barre.
      */
@@ -144,9 +166,10 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     /**
-     * Applique les contraintes de taille selon la position de la zone.
-     * Les zones NORTH et SOUTH ont une barre horizontale (largeur libre, hauteur fixe).
-     * Les zones EAST et WEST ont une barre verticale (largeur fixe, hauteur libre).
+     * Applique les contraintes de taille selon la position de la zone. Les
+     * zones NORTH et SOUTH ont une barre horizontale (largeur libre, hauteur
+     * fixe). Les zones EAST et WEST ont une barre verticale (largeur fixe,
+     * hauteur libre).
      */
     private void appliquerDimensions() {
         if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
@@ -162,9 +185,9 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     /**
-     * Crée le bouton toggle avec un rendu personnalisé.
-     * La flèche dessinée change de sens selon l'état collapsed/expanded
-     * et selon la position de la zone dans le HSplitPane.
+     * Crée le bouton toggle avec un rendu personnalisé. La flèche dessinée
+     * change de sens selon l'état collapsed/expanded et selon la position de la
+     * zone dans le HSplitPane.
      *
      * @return le bouton toggle prêt à l'emploi
      */
@@ -176,7 +199,7 @@ public class HSplitZoneHeader extends JPanel {
                 // On ne dessine pas le fond standard du bouton
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                                    RenderingHints.VALUE_ANTIALIAS_ON);
+                        RenderingHints.VALUE_ANTIALIAS_ON);
 
                 int w = getWidth();
                 int h = getHeight();
@@ -206,16 +229,15 @@ public class HSplitZoneHeader extends JPanel {
     /**
      * Dessine une flèche triangulaire dans la direction appropriée.
      *
-     * La logique est la suivante :
-     * - Zone NORTH : flèche vers le haut quand développée (cliquer = réduire vers le haut)
-     * - Zone SOUTH : flèche vers le bas quand développée
-     * - Zone WEST  : flèche vers la gauche quand développée
-     * - Zone EAST  : flèche vers la droite quand développée
-     * Quand la zone est réduite, la flèche pointe dans le sens inverse.
+     * La logique est la suivante : - Zone NORTH : flèche vers le haut quand
+     * développée (cliquer = réduire vers le haut) - Zone SOUTH : flèche vers le
+     * bas quand développée - Zone WEST : flèche vers la gauche quand développée
+     * - Zone EAST : flèche vers la droite quand développée Quand la zone est
+     * réduite, la flèche pointe dans le sens inverse.
      *
-     * @param g2     le contexte graphique
-     * @param cx     centre X de la flèche
-     * @param cy     centre Y de la flèche
+     * @param g2 le contexte graphique
+     * @param cx centre X de la flèche
+     * @param cy centre Y de la flèche
      * @param taille la demi-taille de la flèche en pixels
      */
     private void dessinerFleche(Graphics2D g2, int cx, int cy, int taille) {
@@ -279,7 +301,6 @@ public class HSplitZoneHeader extends JPanel {
     // =========================================================================
     // Rendu personnalisé de la barre
     // =========================================================================
-
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -290,10 +311,10 @@ public class HSplitZoneHeader extends JPanel {
     // =========================================================================
     // API publique
     // =========================================================================
-
     /**
-     * Enregistre l'action à déclencher quand l'utilisateur clique sur le bouton toggle.
-     * C'est la HSplitZone parente qui s'enregistre ici pour réagir au clic.
+     * Enregistre l'action à déclencher quand l'utilisateur clique sur le bouton
+     * toggle. C'est la HSplitZone parente qui s'enregistre ici pour réagir au
+     * clic.
      *
      * @param listener l'écouteur à notifier au clic
      */
@@ -302,10 +323,11 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     /**
-     * Met à jour l'état visuel du bouton toggle pour refléter l'état courant de la zone.
-     * Doit être appelé par HSplitZone après chaque changement d'état.
+     * Met à jour l'état visuel du bouton toggle pour refléter l'état courant de
+     * la zone. Doit être appelé par HSplitZone après chaque changement d'état.
      *
-     * @param collapsed true si la zone vient d'être réduite, false si développée
+     * @param collapsed true si la zone vient d'être réduite, false si
+     * développée
      */
     public void mettreAJourEtatCollapse(boolean collapsed) {
         this.estCollapsed = collapsed;
@@ -315,14 +337,13 @@ public class HSplitZoneHeader extends JPanel {
     // =========================================================================
     // Getters et Setters
     // =========================================================================
-
     public String getTitre() {
         return titre;
     }
 
     /**
-     * Modifie le titre affiché dans la barre.
-     * Passer null ou une chaîne vide masque le label.
+     * Modifie le titre affiché dans la barre. Passer null ou une chaîne vide
+     * masque le label.
      *
      * @param titre le nouveau titre
      */
