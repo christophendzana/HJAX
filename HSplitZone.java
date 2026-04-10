@@ -22,7 +22,7 @@ import hsplitpane.HSplitPane.WrapDirection;
  *   HSplitZone (BorderLayout)
  *   ├── HSplitZoneHeader  [bord selon la position]
  *   └── HScrollPane       [CENTER]
- *         └── panneauContenu (JPanel avec HSplitWrapLayout)
+ *         └── contentPanel (JPanel avec HSplitWrapLayout)
  * </pre>
  *
  * Quand la zone est réduite, sa taille est mise à zéro et la taille d'avant
@@ -50,13 +50,13 @@ public class HSplitZone extends JPanel {
      * Taille initiale fournie par la configuration. Null signifie que la zone
      * est flexible et prend l'espace restant.
      */
-    private Dimension tailleInitiale;
+    private Dimension initialSize;
 
     /**
      * Taille sauvegardée juste avant un collapse. Permet de restaurer
      * exactement la même taille lors de l'expansion.
      */
-    private Dimension tailleAvantCollapse;
+    private Dimension sizeBeforeCollapse;
 
     // -------------------------------------------------------------------------
     // État
@@ -77,12 +77,33 @@ public class HSplitZone extends JPanel {
     /**
      * Panneau interne qui reçoit les composants de l'utilisateur.
      */
-    private JPanel panneauContenu;
+    private JPanel contentPanel;
 
     /**
      * Conteneur de défilement qui enveloppe le panneau de contenu.
      */
     private HScrollPane scrollPane;
+
+    /**
+     * Durée totale de l'animation en millisecondes.
+     */
+    private static final int ANIMATION_DURATION = 200;
+
+    /**
+     * Nombre de pas de l'animation — plus il est élevé, plus c'est fluide.
+     */
+    private static final int STEP_COUNT = 30;
+
+    /**
+     * Timer qui pilote l'animation de collapse/expand.
+     */
+    private javax.swing.Timer animationTimer;
+
+    /**
+     * Indique qu'une animation est en cours — le layout respecte la taille
+     * courante de la zone pendant cette période.
+     */
+    private boolean inAnimation = false;
 
     // =========================================================================
     // Constructeurs
@@ -111,17 +132,17 @@ public class HSplitZone extends JPanel {
      *
      * @param position la position de cette zone dans le HSplitPane
      * @param titre le titre affiché dans la barre de contrôle, ou null
-     * @param tailleInitiale la taille initiale souhaitée, ou null pour flexible
+     * @param initialSize la taille initiale souhaitée, ou null pour flexible
      */
-    public HSplitZone(ZonePosition position, String titre, Dimension tailleInitiale) {
+    public HSplitZone(ZonePosition position, String titre, Dimension initialSize) {
         this.position = position;
         this.titre = titre;
-        this.tailleInitiale = tailleInitiale;
+        this.initialSize = initialSize;
         this.collapsed = false;
 
-        initialiserComposants();
-        assemblerZone();
-        brancherEcouteurs();
+        initializeComponents();
+        assembleZone();
+        connectListeners();
     }
 
     // =========================================================================
@@ -130,7 +151,7 @@ public class HSplitZone extends JPanel {
     /**
      * Instancie les composants internes de la zone.
      */
-    private void initialiserComposants() {
+    private void initializeComponents() {
 
         // La barre de contrôle n'est pas créée pour la zone CENTER
         if (position != ZonePosition.CENTER) {
@@ -138,11 +159,11 @@ public class HSplitZone extends JPanel {
         }
 
         // Le panneau de contenu utilise le layout wrap
-        panneauContenu = new JPanel(new HSplitWrapLayout());
-        panneauContenu.setOpaque(false);
+        contentPanel = new JPanel(new HSplitWrapLayout());
+        contentPanel.setOpaque(false);
 
         // Le scroll pane enveloppe le panneau de contenu
-        scrollPane = new HScrollPane(panneauContenu);
+        scrollPane = new HScrollPane(contentPanel);
         scrollPane.setBorder(null);
         scrollPane.setHorizontalScrollBarPolicy(HScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scrollPane.setVerticalScrollBarPolicy(HScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -153,7 +174,7 @@ public class HSplitZone extends JPanel {
      * contrôle est placée du côté intérieur de la zone pour que le bouton
      * toggle soit visible près du séparateur adjacent.
      */
-    private void assemblerZone() {
+    private void assembleZone() {
         setLayout(new BorderLayout());
         setOpaque(true);
         setBackground(new Color(43, 43, 43));
@@ -189,9 +210,9 @@ public class HSplitZone extends JPanel {
      * Connecte le bouton toggle de la barre au mécanisme de collapse/expand. À
      * chaque clic, on bascule l'état de la zone et on notifie le parent.
      */
-    private void brancherEcouteurs() {
+    private void connectListeners() {
         if (header != null) {
-            header.ajouterEcouteurToggle(e -> basculerCollapse());
+            header.addToggleListener(e -> toggleCollapse());
         }
     }
 
@@ -202,7 +223,7 @@ public class HSplitZone extends JPanel {
      * Bascule l'état de la zone entre réduit et développé. Appelé
      * automatiquement par le clic sur le bouton toggle.
      */
-    private void basculerCollapse() {
+    private void toggleCollapse() {
         if (collapsed) {
             expand();
         } else {
@@ -213,53 +234,132 @@ public class HSplitZone extends JPanel {
     /**
      * Réduit la zone à une taille nulle.
      *
-     * La taille courante est mémorisée dans tailleAvantCollapse avant que la
+     * La taille courante est mémorisée dans sizeBeforeCollapse avant que la
      * zone soit masquée. Le HSplitPaneRootLayout détectera le changement lors
      * du prochain revalidate et redistribuera l'espace.
      */
     public void collapse() {
-        if (collapsed) {
-            return;
-        }
+    if (collapsed) return;
 
-        // On mémorise la taille courante avant de réduire
-        tailleAvantCollapse = getSize();
+    if (animationTimer != null && animationTimer.isRunning()) {
+        animationTimer.stop();
+    }
 
-        collapsed = true;
+    sizeBeforeCollapse = getSize();
+    collapsed = true;
 
-        // On masque le contenu mais on garde la barre visible
-        scrollPane.setVisible(false);
+    if (header != null) {
+        header.updateCollapseState(true);
+    }
 
-        // On indique au layout parent que quelque chose a changé
-        if (header != null) {
-            header.mettreAJourEtatCollapse(true);
-        }
+    animate(sizeBeforeCollapse, getCollapsedSize());
+}
 
-        // On notifie le conteneur parent pour recalcul du layout
-        if (getParent() != null) {
-            getParent().revalidate();
-            getParent().repaint();
-        }
+    public boolean animationInProgress() {
+        return inAnimation;
     }
 
     /**
      * Développe la zone en restaurant sa taille d'avant le collapse.
      */
-    public void expand() {
-        if (!collapsed) {
-            return;
-        }
+   public void expand() {
+    if (!collapsed) return;
 
-        collapsed = false;
-        scrollPane.setVisible(true);
+    if (animationTimer != null && animationTimer.isRunning()) {
+        animationTimer.stop();
+    }
 
-        if (header != null) {
-            header.mettreAJourEtatCollapse(false);
-        }
+    collapsed = false;
+
+    if (header != null) {
+        header.updateCollapseState(false);
+    }
+
+    Dimension targetSize = sizeBeforeCollapse;
+    if (targetSize == null || (targetSize.width == 0 && targetSize.height == 0)) {
+        targetSize = getPreferredSize();
+        if (targetSize.width  <= 0) targetSize.width  = 200;
+        if (targetSize.height <= 0) targetSize.height = 150;
+    }
+
+    animate(getCollapsedSize(), targetSize);
+}
+
+    /**
+     * Lance une animation progressive entre deux tailles.
+     *
+     * À chaque tick du timer, on calcule la taille intermédiaire en interpolant
+     * linéairement entre la taille de départ et la taille cible. Quand on
+     * atteint le dernier pas, on force la taille finale exacte et on arrête le
+     * timer.
+     *
+     * @param startSize taille au début de l'animation
+     * @param targetSize taille à atteindre en fin d'animation
+     */
+    private void animate(Dimension startSize, Dimension targetSize) {
+    final int[] step = {0};
+    int interval = ANIMATION_DURATION / STEP_COUNT;
+
+    inAnimation = true;
+
+    animationTimer = new javax.swing.Timer(interval, e -> {
+        step[0]++;
+
+        float t = (float) step[0] / STEP_COUNT;
+
+        int currentWidth  = (int) (startSize.width  + t * (targetSize.width  - startSize.width));
+        int currentHeight = (int) (startSize.height + t * (targetSize.height - startSize.height));
+
+        setSize(currentWidth, currentHeight);
 
         if (getParent() != null) {
             getParent().revalidate();
             getParent().repaint();
+        }
+
+        if (step[0] >= STEP_COUNT) {
+            animationTimer.stop();
+            inAnimation = false;
+            setSize(targetSize.width, targetSize.height);
+
+            if (getParent() != null) {
+                getParent().revalidate();
+                getParent().repaint();
+            }
+        }
+    });
+
+    animationTimer.setRepeats(true);
+    animationTimer.start();
+}
+
+    /**
+     * Retourne la taille minimale visible quand la zone est réduite. Correspond
+     * à la taille du header seul, pour que le bouton toggle reste accessible
+     * même après un collapse.
+     *
+     * @return la taille du header, ou une taille nulle si pas de header
+     */
+    public Dimension getCollapsedSize() {
+        if (header == null) {
+            return new Dimension(0, 0);
+        }
+
+        Dimension headerSize = header.getPreferredSize();
+
+        switch (position) {
+            case NORTH:
+            case SOUTH:
+                // Header horizontal : on garde sa hauteur
+                return new Dimension(0, headerSize.height);
+
+            case WEST:
+            case EAST:
+                // Header vertical : on garde sa largeur
+                return new Dimension(headerSize.width, 0);
+
+            default:
+                return new Dimension(0, 0);
         }
     }
 
@@ -273,9 +373,9 @@ public class HSplitZone extends JPanel {
      * @param composant le composant à ajouter dans cette zone
      */
     public void addContainer(Component composant) {
-        panneauContenu.add(composant);
-        panneauContenu.revalidate();
-        panneauContenu.repaint();
+        contentPanel.add(composant);
+        contentPanel.revalidate();
+        contentPanel.repaint();
     }
 
     /**
@@ -284,9 +384,9 @@ public class HSplitZone extends JPanel {
      * @param composant le composant à retirer
      */
     public void removeContainer(Component composant) {
-        panneauContenu.remove(composant);
-        panneauContenu.revalidate();
-        panneauContenu.repaint();
+        contentPanel.remove(composant);
+        contentPanel.revalidate();
+        contentPanel.repaint();
     }
 
     /**
@@ -296,38 +396,37 @@ public class HSplitZone extends JPanel {
      *
      * @return true si aucun composant n'a été ajouté à cette zone
      */
-    public boolean estVide() {
-        return panneauContenu.getComponentCount() == 0;
+    public boolean isEmpty() {
+        return contentPanel.getComponentCount() == 0;
     }
 
     /**
- * Modifie la direction de disposition des composants dans cette zone.
- * Les composants seront réorganisés immédiatement après l'appel.
- *
- * @param direction la nouvelle direction de wrapping
- */
-public void setWrapDirection(WrapDirection direction) {
-    HSplitWrapLayout layout = (HSplitWrapLayout) panneauContenu.getLayout();
-    layout.setDirection(direction);
-    panneauContenu.revalidate();
-    panneauContenu.repaint();
-}
+     * Modifie la direction de disposition des composants dans cette zone. Les
+     * composants seront réorganisés immédiatement après l'appel.
+     *
+     * @param direction la nouvelle direction de wrapping
+     */
+    public void setWrapDirection(WrapDirection direction) {
+        HSplitWrapLayout layout = (HSplitWrapLayout) contentPanel.getLayout();
+        layout.setDirection(direction);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
 
-/**
- * Active ou désactive l'étirement des composants dans cette zone.
- * Quand true, les composants occupent tout l'espace disponible sur leur ligne.
- * Quand false, ils conservent leur preferredSize.
- *
- * @param etirer true pour étirer, false pour respecter la preferredSize
- */
-public void setEtirer(boolean etirer) {
-    HSplitWrapLayout layout = (HSplitWrapLayout) panneauContenu.getLayout();
-    layout.setEtirer(etirer);
-    panneauContenu.revalidate();
-    panneauContenu.repaint();
-}
+    /**
+     * Active ou désactive l'étirement des composants dans cette zone. Quand
+     * true, les composants occupent tout l'espace disponible sur leur ligne.
+     * Quand false, ils conservent leur preferredSize.
+     *
+     * @param etirer true pour étirer, false pour respecter la preferredSize
+     */
+    public void setEtirer(boolean etirer) {
+        HSplitWrapLayout layout = (HSplitWrapLayout) contentPanel.getLayout();
+        layout.setEtirer(etirer);
+        contentPanel.revalidate();
+        contentPanel.repaint();
+    }
 
-    
     // =========================================================================
     // Getters et Setters
     // =========================================================================
@@ -339,16 +438,16 @@ public void setEtirer(boolean etirer) {
         return collapsed;
     }
 
-    public Dimension getTailleInitiale() {
-        return tailleInitiale;
+    public Dimension getInitialSize() {
+        return initialSize;
     }
 
-    public void setTailleInitiale(Dimension tailleInitiale) {
-        this.tailleInitiale = tailleInitiale;
+    public void setInitialSize(Dimension initialSize) {
+        this.initialSize = initialSize;
     }
 
-    public Dimension getTailleAvantCollapse() {
-        return tailleAvantCollapse;
+    public Dimension getSizeBeforeCollapse() {
+        return sizeBeforeCollapse;
     }
 
     public String getTitre() {

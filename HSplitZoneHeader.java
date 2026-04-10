@@ -1,5 +1,8 @@
 package hsplitpane;
 
+import hcomponents.HButton;
+import hcomponents.HLabel;
+import hcomponents.vues.HLabelOrientation;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -9,7 +12,6 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
 import javax.swing.JButton;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 import hsplitpane.HSplitPane.ZonePosition;
@@ -33,22 +35,22 @@ public class HSplitZoneHeader extends JPanel {
     /**
      * Épaisseur par défaut de la barre en pixels.
      */
-    private static final int HAUTEUR_DEFAUT = 22;
+    private static final int DEFAULT_HEIGHT = 22;
 
     /**
      * Taille du bouton toggle en pixels.
      */
-    private static final int TAILLE_BOUTON = 16;
+    private static final int BUTTON_SIZE = 16;
 
     /**
      * Couleur de fond par défaut de la barre.
      */
-    private static final Color COULEUR_FOND_DEFAUT = new Color(60, 63, 65);
+    private static final Color DEFAULT_BACKGROUND_COLOR = new Color(60, 63, 65);
 
     /**
      * Couleur du texte du titre par défaut.
      */
-    private static final Color COULEUR_TITRE_DEFAUT = new Color(187, 187, 187);
+    private static final Color DEFAULT_TITLE_COLOR = new Color(187, 187, 187);
 
     // -------------------------------------------------------------------------
     // Champs de configuration
@@ -67,35 +69,37 @@ public class HSplitZoneHeader extends JPanel {
     /**
      * Couleur de fond personnalisable de la barre.
      */
-    private Color couleurFond;
+    private Color backgroundColor;
 
     /**
      * Couleur du texte du titre.
      */
-    private Color couleurTitre;
+    private Color titleColor;
 
     /**
      * Épaisseur de la barre en pixels.
      */
-    private int epaisseur;
+    private int thickness;
 
     // -------------------------------------------------------------------------
     // Composants internes
     // -------------------------------------------------------------------------
     /**
      * Étiquette affichant le titre de la zone.
+     * HLabel est utilisé pour supporter l'orientation verticale
+     * sur les zones WEST et EAST.
      */
-    private JLabel labelTitre;
+    private HLabel titleLabel;
 
     /**
      * Bouton dessiné programmatiquement pour le collapse/expand.
      */
-    private JButton boutonToggle;
+    private HButton toggleButton;
 
     /**
      * État courant de la zone parente : true = réduite, false = développée.
      */
-    private boolean estCollapsed;
+    private boolean isCollapsed;
 
     // =========================================================================
     // Constructeurs
@@ -106,7 +110,7 @@ public class HSplitZoneHeader extends JPanel {
      * @param position la position de la zone parente dans le HSplitPane
      */
     public HSplitZoneHeader(ZonePosition position) {
-        this(position, null, COULEUR_FOND_DEFAUT, COULEUR_TITRE_DEFAUT, HAUTEUR_DEFAUT);
+        this(position, null, DEFAULT_BACKGROUND_COLOR, DEFAULT_TITLE_COLOR, DEFAULT_HEIGHT);
     }
 
     /**
@@ -117,7 +121,7 @@ public class HSplitZoneHeader extends JPanel {
      * @param titre le texte affiché dans la barre, ou null pour aucun titre
      */
     public HSplitZoneHeader(ZonePosition position, String titre) {
-        this(position, titre, COULEUR_FOND_DEFAUT, COULEUR_TITRE_DEFAUT, HAUTEUR_DEFAUT);
+        this(position, titre, DEFAULT_BACKGROUND_COLOR, DEFAULT_TITLE_COLOR, DEFAULT_HEIGHT);
     }
 
     /**
@@ -125,21 +129,21 @@ public class HSplitZoneHeader extends JPanel {
      *
      * @param position la position de la zone parente
      * @param titre le texte affiché, ou null
-     * @param couleurFond la couleur de fond de la barre
-     * @param couleurTitre la couleur du texte du titre
-     * @param epaisseur l'épaisseur de la barre en pixels
+     * @param backgroundColor la couleur de fond de la barre
+     * @param titleColor la couleur du texte du titre
+     * @param thickness l'épaisseur de la barre en pixels
      */
     public HSplitZoneHeader(ZonePosition position, String titre,
-            Color couleurFond, Color couleurTitre, int epaisseur) {
+            Color backgroundColor, Color titleColor, int thickness) {
         this.position = position;
         this.titre = titre;
-        this.couleurFond = couleurFond;
-        this.couleurTitre = couleurTitre;
-        this.epaisseur = epaisseur;
-        this.estCollapsed = false;
+        this.backgroundColor = backgroundColor;
+        this.titleColor = titleColor;
+        this.thickness = thickness;
+        this.isCollapsed = false;
 
         initialiserComposants();
-        appliquerDimensions();
+        applyDimensions();
     }
 
     // =========================================================================
@@ -149,21 +153,56 @@ public class HSplitZoneHeader extends JPanel {
      * Construit et positionne les composants internes de la barre.
      */
     private void initialiserComposants() {
-        setLayout(new FlowLayout(FlowLayout.LEFT, 4, 2));
-        setOpaque(true);
+    setOpaque(true);
 
-        // Création et configuration du label titre
-        labelTitre = new JLabel(titre != null ? titre : "");
-        labelTitre.setForeground(couleurTitre);
-        labelTitre.setFont(labelTitre.getFont().deriveFont(Font.PLAIN, 11f));
-        labelTitre.setVisible(titre != null && !titre.isEmpty());
+    // Création du HLabel avec orientation automatique selon la position
+    titleLabel = new HLabel(titre != null ? titre : "");
+    titleLabel.setForeground(titleColor);
+    titleLabel.setFont(titleLabel.getFont().deriveFont(Font.PLAIN, 11f));
+    titleLabel.setVisible(titre != null && !titre.isEmpty());
 
-        // Création du bouton toggle dessiné programmatiquement
-        boutonToggle = creerBoutonToggle();
-
-        add(labelTitre);
-        add(boutonToggle);
+    switch (position) {
+        case WEST:
+            titleLabel.setOrientation(HLabelOrientation.VERTICAL_UP);
+            break;
+        case EAST:
+            titleLabel.setOrientation(HLabelOrientation.VERTICAL_DOWN);
+            break;
+        default:
+            titleLabel.setOrientation(HLabelOrientation.HORIZONTAL);
+            break;
     }
+
+    toggleButton = createToggleButton();
+
+    // Layout selon l'orientation de la zone
+    if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
+        // Header horizontal — centrage vertical via BoxLayout
+        setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.X_AXIS));
+        add(javax.swing.Box.createHorizontalStrut(4));
+        add(titleLabel);
+        add(javax.swing.Box.createHorizontalGlue());
+        add(toggleButton);
+        add(javax.swing.Box.createHorizontalStrut(4));
+
+        // Centrage vertical de chaque composant dans l'axe X
+        titleLabel.setAlignmentY(CENTER_ALIGNMENT);
+        toggleButton.setAlignmentY(CENTER_ALIGNMENT);
+
+    } else {
+        // Header vertical (EAST / WEST) — centrage horizontal via BoxLayout
+        setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS));
+        add(javax.swing.Box.createVerticalStrut(4));
+        add(toggleButton);
+        add(javax.swing.Box.createVerticalGlue());
+        add(titleLabel);
+        add(javax.swing.Box.createVerticalStrut(4));
+
+        // Centrage horizontal de chaque composant dans l'axe Y
+        titleLabel.setAlignmentX(CENTER_ALIGNMENT);
+        toggleButton.setAlignmentX(CENTER_ALIGNMENT);
+    }
+}
 
     /**
      * Applique les contraintes de taille selon la position de la zone. Les
@@ -171,15 +210,15 @@ public class HSplitZoneHeader extends JPanel {
      * fixe). Les zones EAST et WEST ont une barre verticale (largeur fixe,
      * hauteur libre).
      */
-    private void appliquerDimensions() {
+    private void applyDimensions() {
         if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
-            setPreferredSize(new Dimension(Integer.MAX_VALUE, epaisseur));
-            setMaximumSize(new Dimension(Integer.MAX_VALUE, epaisseur));
-            setMinimumSize(new Dimension(0, epaisseur));
+            setPreferredSize(new Dimension(Integer.MAX_VALUE, thickness));
+            setMaximumSize(new Dimension(Integer.MAX_VALUE, thickness));
+            setMinimumSize(new Dimension(0, thickness));
         } else if (position == ZonePosition.EAST || position == ZonePosition.WEST) {
-            setPreferredSize(new Dimension(epaisseur, Integer.MAX_VALUE));
-            setMaximumSize(new Dimension(epaisseur, Integer.MAX_VALUE));
-            setMinimumSize(new Dimension(epaisseur, 0));
+            setPreferredSize(new Dimension(thickness, Integer.MAX_VALUE));
+            setMaximumSize(new Dimension(thickness, Integer.MAX_VALUE));
+            setMinimumSize(new Dimension(thickness, 0));
         }
         // La zone CENTER n'a pas de barre de contrôle
     }
@@ -191,8 +230,8 @@ public class HSplitZoneHeader extends JPanel {
      *
      * @return le bouton toggle prêt à l'emploi
      */
-    private JButton creerBoutonToggle() {
-        JButton bouton = new JButton() {
+    private HButton createToggleButton() {
+        HButton bouton = new HButton() {
 
             @Override
             protected void paintComponent(Graphics g) {
@@ -207,10 +246,10 @@ public class HSplitZoneHeader extends JPanel {
                 int cy = h / 2;
                 int taille = 5; // demi-taille de la flèche
 
-                g2.setColor(couleurTitre);
+                g2.setColor(titleColor);
 
                 // On détermine le sens de la flèche selon la position et l'état
-                dessinerFleche(g2, cx, cy, taille);
+                drawArrow(g2, cx, cy, taille);
 
                 g2.dispose();
             }
@@ -220,7 +259,7 @@ public class HSplitZoneHeader extends JPanel {
         bouton.setContentAreaFilled(false);
         bouton.setBorderPainted(false);
         bouton.setFocusPainted(false);
-        bouton.setPreferredSize(new Dimension(TAILLE_BOUTON, TAILLE_BOUTON));
+        bouton.setPreferredSize(new Dimension(BUTTON_SIZE, BUTTON_SIZE));
         bouton.setBorder(new EmptyBorder(0, 0, 0, 0));
 
         return bouton;
@@ -240,13 +279,13 @@ public class HSplitZoneHeader extends JPanel {
      * @param cy centre Y de la flèche
      * @param taille la demi-taille de la flèche en pixels
      */
-    private void dessinerFleche(Graphics2D g2, int cx, int cy, int taille) {
+    private void drawArrow(Graphics2D g2, int cx, int cy, int taille) {
         int[] xPoints;
         int[] yPoints;
 
         switch (position) {
             case NORTH:
-                if (!estCollapsed) {
+                if (!isCollapsed) {
                     // Flèche vers le haut
                     xPoints = new int[]{cx - taille, cx + taille, cx};
                     yPoints = new int[]{cy + taille, cy + taille, cy - taille};
@@ -258,7 +297,7 @@ public class HSplitZoneHeader extends JPanel {
                 break;
 
             case SOUTH:
-                if (!estCollapsed) {
+                if (!isCollapsed) {
                     // Flèche vers le bas
                     xPoints = new int[]{cx - taille, cx + taille, cx};
                     yPoints = new int[]{cy - taille, cy - taille, cy + taille};
@@ -270,7 +309,7 @@ public class HSplitZoneHeader extends JPanel {
                 break;
 
             case WEST:
-                if (!estCollapsed) {
+                if (!isCollapsed) {
                     // Flèche vers la gauche
                     xPoints = new int[]{cx + taille, cx + taille, cx - taille};
                     yPoints = new int[]{cy - taille, cy + taille, cy};
@@ -283,7 +322,7 @@ public class HSplitZoneHeader extends JPanel {
 
             case EAST:
             default:
-                if (!estCollapsed) {
+                if (!isCollapsed) {
                     // Flèche vers la droite
                     xPoints = new int[]{cx - taille, cx - taille, cx + taille};
                     yPoints = new int[]{cy - taille, cy + taille, cy};
@@ -304,7 +343,7 @@ public class HSplitZoneHeader extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        g.setColor(couleurFond);
+        g.setColor(backgroundColor);
         g.fillRect(0, 0, getWidth(), getHeight());
     }
 
@@ -318,8 +357,8 @@ public class HSplitZoneHeader extends JPanel {
      *
      * @param listener l'écouteur à notifier au clic
      */
-    public void ajouterEcouteurToggle(ActionListener listener) {
-        boutonToggle.addActionListener(listener);
+    public void addToggleListener(ActionListener listener) {
+        toggleButton.addActionListener(listener);
     }
 
     /**
@@ -329,9 +368,9 @@ public class HSplitZoneHeader extends JPanel {
      * @param collapsed true si la zone vient d'être réduite, false si
      * développée
      */
-    public void mettreAJourEtatCollapse(boolean collapsed) {
-        this.estCollapsed = collapsed;
-        boutonToggle.repaint();
+    public void updateCollapseState(boolean collapsed) {
+        this.isCollapsed = collapsed;
+        toggleButton.repaint();
     }
 
     // =========================================================================
@@ -349,54 +388,108 @@ public class HSplitZoneHeader extends JPanel {
      */
     public void setTitre(String titre) {
         this.titre = titre;
-        labelTitre.setText(titre != null ? titre : "");
-        labelTitre.setVisible(titre != null && !titre.isEmpty());
+        titleLabel.setText(titre != null ? titre : "");
+        titleLabel.setVisible(titre != null && !titre.isEmpty());
         revalidate();
         repaint();
     }
 
+    /**
+     * Modifie la police du titre affiché dans la barre.
+     *
+     * @param font la nouvelle police
+     */
+    public void setTitleFont(Font font) {
+        titleLabel.setFont(font);
+        revalidate();
+        repaint();
+    }
+
+    /**
+     * Retourne la police courante du titre.
+     *
+     * @return la police du label titre
+     */
+    public Font getTitleFont() {
+        return titleLabel.getFont();
+    }
+
+    /**
+     * Modifie l'orientation du titre manuellement.
+     * Par défaut l'orientation est appliquée automatiquement selon la position
+     * de la zone, mais ce setter permet de la forcer si besoin.
+     *
+     * @param orientation la nouvelle orientation du titre
+     */
+    public void setTitleOrientation(HLabelOrientation orientation) {
+        titleLabel.setOrientation(orientation);
+        revalidate();
+        repaint();
+    }
+
+    /**
+     * Retourne l'orientation courante du titre.
+     *
+     * @return l'orientation du HLabel titre
+     */
+    public HLabelOrientation getTitleOrientation() {
+        return titleLabel.getOrientation();
+    }
+
     public Color getCouleurFond() {
-        return couleurFond;
+        return backgroundColor;
     }
 
     /**
      * Modifie la couleur de fond de la barre et redessine immédiatement.
      *
-     * @param couleurFond la nouvelle couleur de fond
+     * @param backgroundColor la nouvelle couleur de fond
      */
-    public void setCouleurFond(Color couleurFond) {
-        this.couleurFond = couleurFond;
+    public void setCouleurFond(Color backgroundColor) {
+        this.backgroundColor = backgroundColor;
         repaint();
     }
 
     public Color getCouleurTitre() {
-        return couleurTitre;
+        return titleColor;
     }
 
     /**
      * Modifie la couleur du texte du titre et redessine immédiatement.
      *
-     * @param couleurTitre la nouvelle couleur du texte
+     * @param titleColor la nouvelle couleur du texte
      */
-    public void setCouleurTitre(Color couleurTitre) {
-        this.couleurTitre = couleurTitre;
-        labelTitre.setForeground(couleurTitre);
+    public void setCouleurTitre(Color titleColor) {
+        this.titleColor = titleColor;
+        titleLabel.setForeground(titleColor);
         repaint();
     }
 
     public int getEpaisseur() {
-        return epaisseur;
+        return thickness;
     }
 
     /**
      * Modifie l'épaisseur de la barre et recalcule les dimensions.
      *
-     * @param epaisseur la nouvelle épaisseur en pixels
+     * @param thickness la nouvelle épaisseur en pixels
      */
-    public void setEpaisseur(int epaisseur) {
-        this.epaisseur = epaisseur;
-        appliquerDimensions();
+    public void setEpaisseur(int thickness) {
+        this.thickness = thickness;
+        applyDimensions();
         revalidate();
         repaint();
     }
+    
+    @Override
+public Dimension getPreferredSize() {
+    if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
+        // Header horizontal : hauteur fixe, largeur illimitée
+        return new Dimension(Short.MAX_VALUE, thickness);
+    } else if (position == ZonePosition.WEST || position == ZonePosition.EAST) {
+        // Header vertical : largeur fixe, hauteur illimitée
+        return new Dimension(thickness, Short.MAX_VALUE);
+    }
+    return super.getPreferredSize();
+}
 }

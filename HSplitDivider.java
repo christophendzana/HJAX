@@ -13,7 +13,7 @@ import hsplitpane.HSplitPane.WrapDirection;
  * Séparateur draggable entre deux zones adjacentes d'un HSplitPane.
  *
  * Ce composant se positionne entre deux zones et permet à l'utilisateur de les
- * redimensionner en le faisant glisser. Il change de couleur au survol et
+ * redimensionner en le faisant glisser. Il change de color au survol et
  * pendant le drag pour un retour visuel clair.
  *
  * Le divider notifie le HSplitPaneRootLayout via un callback chaque fois que
@@ -30,22 +30,22 @@ public class HSplitDivider extends JPanel {
     /**
      * Épaisseur par défaut du séparateur en pixels.
      */
-    private static final int EPAISSEUR_DEFAUT = 4;
+    private static final int DEFAULT_THICKNESS = 4;
 
     /**
      * Couleur normale par défaut.
      */
-    private static final Color COULEUR_DEFAUT = new Color(50, 50, 50);
+    private static final Color DEFAULT_COLOR = new Color(50, 50, 50);
 
     /**
      * Couleur au survol par défaut.
      */
-    private static final Color COULEUR_HOVER_DEFAUT = new Color(80, 130, 200);
+    private static final Color DEFAULT_HOVER_COLOR = new Color(80, 130, 200);
 
     /**
      * Couleur pendant le drag par défaut.
      */
-    private static final Color COULEUR_DRAG_DEFAUT = new Color(100, 160, 230);
+    private static final Color DEFAULT_DRAG_COLOR = new Color(100, 160, 230);
 
     // -------------------------------------------------------------------------
     // Configuration
@@ -65,17 +65,17 @@ public class HSplitDivider extends JPanel {
     /**
      * Couleur affichée dans l'état normal.
      */
-    private Color couleur;
+    private Color color;
 
     /**
      * Couleur affichée quand la souris survole le séparateur.
      */
-    private Color couleurHover;
+    private Color hoverColor;
 
     /**
      * Couleur affichée pendant que l'utilisateur déplace le séparateur.
      */
-    private Color couleurDrag;
+    private Color dragColor;
 
     // -------------------------------------------------------------------------
     // État
@@ -125,8 +125,8 @@ public class HSplitDivider extends JPanel {
      * @param orientation l'orientation du séparateur
      */
     public HSplitDivider(WrapDirection orientation) {
-        this(orientation, EPAISSEUR_DEFAUT, COULEUR_DEFAUT,
-                COULEUR_HOVER_DEFAUT, COULEUR_DRAG_DEFAUT);
+        this(orientation, DEFAULT_THICKNESS, DEFAULT_COLOR,
+                DEFAULT_HOVER_COLOR, DEFAULT_DRAG_COLOR);
     }
 
     /**
@@ -134,21 +134,21 @@ public class HSplitDivider extends JPanel {
      *
      * @param orientation l'orientation du séparateur
      * @param epaisseur l'épaisseur en pixels
-     * @param couleur la couleur normale
-     * @param couleurHover la couleur au survol
-     * @param couleurDrag la couleur pendant le drag
+     * @param color la color normale
+     * @param hoverColor la color au survol
+     * @param dragColor la color pendant le drag
      */
     public HSplitDivider(WrapDirection orientation, int epaisseur,
-            Color couleur, Color couleurHover, Color couleurDrag) {
+            Color color, Color hoverColor, Color dragColor) {
         this.orientation = orientation;
         this.epaisseur = epaisseur;
-        this.couleur = couleur;
-        this.couleurHover = couleurHover;
-        this.couleurDrag = couleurDrag;
+        this.color = color;
+        this.hoverColor = hoverColor;
+        this.dragColor = dragColor;
         this.locked = false;
 
-        configurerCurseur();
-        brancherEcouteursSouris();
+        configureCursor();
+        installMouseListeners();
     }
 
     // =========================================================================
@@ -158,7 +158,7 @@ public class HSplitDivider extends JPanel {
      * Configure le curseur affiché selon l'orientation du séparateur. Le
      * curseur change en double flèche pour indiquer la direction de drag.
      */
-    private void configurerCurseur() {
+    private void configureCursor() {
         if (!locked) {
             if (orientation == WrapDirection.HORIZONTAL) {
                 setCursor(Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR));
@@ -173,7 +173,7 @@ public class HSplitDivider extends JPanel {
     /**
      * Branche les écouteurs souris pour gérer le survol et le drag.
      */
-    private void brancherEcouteursSouris() {
+    private void installMouseListeners() {
         MouseAdapter adaptateur = new MouseAdapter() {
 
             @Override
@@ -239,13 +239,13 @@ public class HSplitDivider extends JPanel {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
 
-        // On choisit la couleur selon l'état courant
+        // On choisit la color selon l'état courant
         if (isDragging) {
-            g.setColor(couleurDrag);
+            g.setColor(dragColor);
         } else if (isHovered) {
-            g.setColor(couleurHover);
+            g.setColor(hoverColor);
         } else {
-            g.setColor(couleur);
+            g.setColor(color);
         }
 
         g.fillRect(0, 0, getWidth(), getHeight());
@@ -279,7 +279,7 @@ public class HSplitDivider extends JPanel {
      */
     public void setLocked(boolean locked) {
         this.locked = locked;
-        configurerCurseur();
+        configureCursor();
         repaint();
     }
 
@@ -298,27 +298,27 @@ public class HSplitDivider extends JPanel {
     }
 
     public Color getCouleur() {
-        return couleur;
+        return color;
     }
 
-    public void setCouleur(Color couleur) {
-        this.couleur = couleur;
+    public void setCouleur(Color color) {
+        this.color = color;
         repaint();
     }
 
     public Color getCouleurHover() {
-        return couleurHover;
+        return hoverColor;
     }
 
-    public void setCouleurHover(Color couleurHover) {
-        this.couleurHover = couleurHover;
+    public void setCouleurHover(Color hoverColor) {
+        this.hoverColor = hoverColor;
     }
 
     public Color getCouleurDrag() {
-        return couleurDrag;
+        return dragColor;
     }
 
-    public void setCouleurDrag(Color couleurDrag) {
-        this.couleurDrag = couleurDrag;
+    public void setCouleurDrag(Color dragColor) {
+        this.dragColor = dragColor;
     }
 }

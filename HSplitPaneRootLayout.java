@@ -84,27 +84,27 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
     /**
      * Hauteur courante de la zone NORTH en pixels.
      */
-    private int hauteurNorth;
+    private int northHeight;
 
     /**
      * Hauteur courante de la zone SOUTH en pixels.
      */
-    private int hauteurSouth;
+    private int southHeight;
 
     /**
      * Largeur courante de la zone WEST en pixels.
      */
-    private int largeurWest;
+    private int westWidth;
 
     /**
      * Largeur courante de la zone CENTER en pixels.
      */
-    private int largeurCenter;
+    private int centerWidth;
 
     /**
      * Largeur courante de la zone EAST en pixels.
      */
-    private int largeurEast;
+    private int eastWidth;
 
     // -------------------------------------------------------------------------
     // Épaisseur des séparateurs
@@ -112,7 +112,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
     /**
      * Épaisseur utilisée pour tous les séparateurs lors du calcul des bounds.
      */
-    private int epaisseurDivider;
+    private int dividerThickness;
 
     // -------------------------------------------------------------------------
     // Référence au conteneur parent
@@ -137,10 +137,10 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
     /**
      * Crée le layout racine avec une épaisseur de séparateur personnalisée.
      *
-     * @param epaisseurDivider l'épaisseur en pixels des séparateurs
+     * @param dividerThickness l'épaisseur en pixels des séparateurs
      */
-    public HSplitPaneRootLayout(int epaisseurDivider) {
-        this.epaisseurDivider = epaisseurDivider;
+    public HSplitPaneRootLayout(int dividerThickness) {
+        this.dividerThickness = dividerThickness;
     }
 
     // =========================================================================
@@ -176,7 +176,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
      * @param east séparateur à droite de CENTER ou null
      */
     public void saveDividers(HSplitDivider north, HSplitDivider south,
-        HSplitDivider west, HSplitDivider east) {
+            HSplitDivider west, HSplitDivider east) {
         this.dividerNorth = north;
         this.dividerSouth = south;
         this.dividerWest = west;
@@ -210,8 +210,8 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
         if (zoneNorth == null || zoneNorth.isCollapsed()) {
             return;
         }
-        hauteurNorth = Math.max(0, hauteurNorth + delta);
-        notifierParent();
+        northHeight = Math.max(0, northHeight + delta);
+        notifyParent();
     }
 
     /**
@@ -224,8 +224,8 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
         if (zoneSouth == null || zoneSouth.isCollapsed()) {
             return;
         }
-        hauteurSouth = Math.max(0, hauteurSouth - delta);
-        notifierParent();
+        southHeight = Math.max(0, southHeight - delta);
+        notifyParent();
     }
 
     /**
@@ -237,8 +237,8 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
         if (zoneWest == null || zoneWest.isCollapsed()) {
             return;
         }
-        largeurWest = Math.max(0, largeurWest + delta);
-        notifierParent();
+        westWidth = Math.max(0, westWidth + delta);
+        notifyParent();
     }
 
     /**
@@ -251,8 +251,8 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
         if (zoneEast == null || zoneEast.isCollapsed()) {
             return;
         }
-        largeurEast = Math.max(0, largeurEast - delta);
-        notifierParent();
+        eastWidth = Math.max(0, eastWidth - delta);
+        notifyParent();
     }
 
     // =========================================================================
@@ -282,33 +282,33 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
             int y0 = insets.top;
 
             // Initialisation des tailles si nécessaire
-            if (hauteurNorth == 0 && hauteurSouth == 0
-                    && largeurWest == 0 && largeurEast == 0) {
-                initialiserTailles(totalW, totalH);
+            if (northHeight == 0 && southHeight == 0
+                    && westWidth == 0 && eastWidth == 0) {
+                initializeSizes(totalW, totalH);
             }
 
             // --- Calcul de la hauteur effective de la rangée centrale ---
-            int hauteurNorthEffective = calculerHauteurEffective(zoneNorth, hauteurNorth);
-            int hauteurSouthEffective = calculerHauteurEffective(zoneSouth, hauteurSouth);
+            int hauteurNorthEffective = getEffectiveHeight(zoneNorth, northHeight);
+            int hauteurSouthEffective = getEffectiveHeight(zoneSouth, southHeight);
 
             // Espace consommé par les séparateurs horizontaux
             int divNorthH = (dividerNorth != null && zoneNorth != null
-                    && !zoneNorth.estVide()) ? epaisseurDivider : 0;
+                    && !zoneNorth.isEmpty()) ? dividerThickness : 0;
             int divSouthH = (dividerSouth != null && zoneSouth != null
-                    && !zoneSouth.estVide()) ? epaisseurDivider : 0;
+                    && !zoneSouth.isEmpty()) ? dividerThickness : 0;
 
             int hauteurRangeeCentrale = totalH
                     - hauteurNorthEffective - divNorthH
                     - hauteurSouthEffective - divSouthH;
 
             // --- Calcul des largeurs de la rangée centrale ---
-            int largeurWestEffective = calculerLargeurEffective(zoneWest, largeurWest);
-            int largeurEastEffective = calculerLargeurEffective(zoneEast, largeurEast);
+            int largeurWestEffective = getEffectiveWidth(zoneWest, westWidth);
+            int largeurEastEffective = getEffectiveWidth(zoneEast, eastWidth);
 
             int divWestW = (dividerWest != null && zoneWest != null
-                    && !zoneWest.estVide()) ? epaisseurDivider : 0;
+                    && !zoneWest.isEmpty()) ? dividerThickness : 0;
             int divEastW = (dividerEast != null && zoneEast != null
-                    && !zoneEast.estVide()) ? epaisseurDivider : 0;
+                    && !zoneEast.isEmpty()) ? dividerThickness : 0;
 
             int largeurCenterEffective = totalW
                     - largeurWestEffective - divWestW
@@ -318,7 +318,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
             int y = y0;
 
             // Zone NORTH
-            if (zoneNorth != null && !zoneNorth.estVide()) {
+            if (zoneNorth != null && !zoneNorth.isEmpty()) {
                 zoneNorth.setBounds(x0, y, totalW, hauteurNorthEffective);
                 y += hauteurNorthEffective;
 
@@ -331,7 +331,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
             // Rangée centrale : WEST | CENTER | EAST
             int yRangee = y;
 
-            if (zoneWest != null && !zoneWest.estVide()) {
+            if (zoneWest != null && !zoneWest.isEmpty()) {
                 zoneWest.setBounds(x0, yRangee, largeurWestEffective, hauteurRangeeCentrale);
 
                 if (dividerWest != null) {
@@ -346,7 +346,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
                         largeurCenterEffective, hauteurRangeeCentrale);
             }
 
-            if (zoneEast != null && !zoneEast.estVide()) {
+            if (zoneEast != null && !zoneEast.isEmpty()) {
                 int xEast = x0 + totalW - largeurEastEffective;
                 zoneEast.setBounds(xEast, yRangee, largeurEastEffective, hauteurRangeeCentrale);
 
@@ -359,7 +359,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
             y = yRangee + hauteurRangeeCentrale;
 
             // Zone SOUTH
-            if (zoneSouth != null && !zoneSouth.estVide()) {
+            if (zoneSouth != null && !zoneSouth.isEmpty()) {
                 if (dividerSouth != null) {
                     dividerSouth.setBounds(x0, y, totalW, divSouthH);
                     y += divSouthH;
@@ -383,27 +383,27 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
      * @param totalW largeur totale disponible
      * @param totalH hauteur totale disponible
      */
-    private void initialiserTailles(int totalW, int totalH) {
+    private void initializeSizes(int totalW, int totalH) {
 
         // -- Hauteurs verticales (NORTH / SOUTH) --
         int espaceVerticalFixe = 0;
         int nbVerticalFlexible = 0;
 
-        if (zoneNorth != null && !zoneNorth.estVide()) {
-            Dimension d = zoneNorth.getTailleInitiale();
+        if (zoneNorth != null && !zoneNorth.isEmpty()) {
+            Dimension d = zoneNorth.getInitialSize();
             if (d != null) {
-                hauteurNorth = d.height;
-                espaceVerticalFixe += hauteurNorth;
+                northHeight = d.height;
+                espaceVerticalFixe += northHeight;
             } else {
                 nbVerticalFlexible++;
             }
         }
 
-        if (zoneSouth != null && !zoneSouth.estVide()) {
-            Dimension d = zoneSouth.getTailleInitiale();
+        if (zoneSouth != null && !zoneSouth.isEmpty()) {
+            Dimension d = zoneSouth.getInitialSize();
             if (d != null) {
-                hauteurSouth = d.height;
-                espaceVerticalFixe += hauteurSouth;
+                southHeight = d.height;
+                espaceVerticalFixe += southHeight;
             } else {
                 nbVerticalFlexible++;
             }
@@ -412,35 +412,35 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
         // Distribution de l'espace vertical restant aux zones flexibles
         int espaceVerticalRestant = totalH - espaceVerticalFixe;
         int partFlexibleV = nbVerticalFlexible > 0
-                ? espaceVerticalRestant / (nbVerticalFlexible + 1)
+                ? espaceVerticalRestant / (nbVerticalFlexible)
                 : 0;
 
-        if (zoneNorth != null && zoneNorth.getTailleInitiale() == null) {
-            hauteurNorth = partFlexibleV;
+        if (zoneNorth != null && zoneNorth.getInitialSize() == null) {
+            northHeight = partFlexibleV;
         }
-        if (zoneSouth != null && zoneSouth.getTailleInitiale() == null) {
-            hauteurSouth = partFlexibleV;
+        if (zoneSouth != null && zoneSouth.getInitialSize() == null) {
+            southHeight = partFlexibleV;
         }
 
         // -- Largeurs horizontales (WEST / EAST) --
         int espaceHorizontalFixe = 0;
         int nbHorizontalFlexible = 0;
 
-        if (zoneWest != null && !zoneWest.estVide()) {
-            Dimension d = zoneWest.getTailleInitiale();
+        if (zoneWest != null && !zoneWest.isEmpty()) {
+            Dimension d = zoneWest.getInitialSize();
             if (d != null) {
-                largeurWest = d.width;
-                espaceHorizontalFixe += largeurWest;
+                westWidth = d.width;
+                espaceHorizontalFixe += westWidth;
             } else {
                 nbHorizontalFlexible++;
             }
         }
 
-        if (zoneEast != null && !zoneEast.estVide()) {
-            Dimension d = zoneEast.getTailleInitiale();
+        if (zoneEast != null && !zoneEast.isEmpty()) {
+            Dimension d = zoneEast.getInitialSize();
             if (d != null) {
-                largeurEast = d.width;
-                espaceHorizontalFixe += largeurEast;
+                eastWidth = d.width;
+                espaceHorizontalFixe += eastWidth;
             } else {
                 nbHorizontalFlexible++;
             }
@@ -448,14 +448,14 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
 
         int espaceHorizontalRestant = totalW - espaceHorizontalFixe;
         int partFlexibleH = nbHorizontalFlexible > 0
-                ? espaceHorizontalRestant / (nbHorizontalFlexible + 2)
+                ? espaceHorizontalRestant / (nbHorizontalFlexible)
                 : 0;
 
-        if (zoneWest != null && zoneWest.getTailleInitiale() == null) {
-            largeurWest = partFlexibleH;
+        if (zoneWest != null && zoneWest.getInitialSize() == null) {
+            westWidth = partFlexibleH;
         }
-        if (zoneEast != null && zoneEast.getTailleInitiale() == null) {
-            largeurEast = partFlexibleH;
+        if (zoneEast != null && zoneEast.getInitialSize() == null) {
+            eastWidth = partFlexibleH;
         }
     }
 
@@ -463,34 +463,42 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
     // Méthodes utilitaires
     // =========================================================================
     /**
-     * Retourne la hauteur effective d'une zone. Si la zone est null, vide ou
-     * réduite, retourne 0.
+     * Retourne la hauteur effective d'une zone. Si la zone est collapsed,
+     * retourne la hauteur du header uniquement pour que le bouton toggle reste
+     * visible. Si la zone est null ou vide, retourne 0.
      *
      * @param zone la zone dont on veut la hauteur
      * @param hauteur la hauteur courante stockée dans ce layout
      * @return la hauteur en pixels à utiliser pour le positionnement
      */
-    private int calculerHauteurEffective(HSplitZone zone, int hauteur) {
-        if (zone == null || zone.estVide() || zone.isCollapsed()) {
-            return 0;
-        }
-        return hauteur;
-    }
+    private int getEffectiveHeight(HSplitZone zone, int hauteur) {
+    if (zone == null || zone.isEmpty()) return 0;
+
+    // Pendant une animation, on laisse la zone gérer sa propre taille
+    if (zone.animationInProgress()) return zone.getHeight();
+
+    if (zone.isCollapsed()) return zone.getCollapsedSize().height;
+    return hauteur;
+}
 
     /**
-     * Retourne la largeur effective d'une zone. Si la zone est null, vide ou
-     * réduite, retourne 0.
+     * Retourne la largeur effective d'une zone. Si la zone est collapsed,
+     * retourne la largeur du header uniquement. Si la zone est null ou vide,
+     * retourne 0.
      *
      * @param zone la zone dont on veut la largeur
      * @param largeur la largeur courante stockée dans ce layout
      * @return la largeur en pixels à utiliser pour le positionnement
      */
-    private int calculerLargeurEffective(HSplitZone zone, int largeur) {
-        if (zone == null || zone.estVide() || zone.isCollapsed()) {
-            return 0;
-        }
-        return largeur;
-    }
+    private int getEffectiveWidth(HSplitZone zone, int largeur) {
+    if (zone == null || zone.isEmpty()) return 0;
+
+    // Pendant une animation, on laisse la zone gérer sa propre taille
+    if (zone.animationInProgress()) return zone.getWidth();
+
+    if (zone.isCollapsed()) return zone.getCollapsedSize().width;
+    return largeur;
+}
 
     // =========================================================================
     // Tailles du conteneur parent
@@ -546,7 +554,7 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
      * Notifie le parent qu'un recalcul du layout est nécessaire. Appelée
      * uniquement depuis les callbacks de drag, jamais depuis invalidateLayout.
      */
-    private void notifierParent() {
+    private void notifyParent() {
         if (parent != null) {
             parent.revalidate();
             parent.repaint();
