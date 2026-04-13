@@ -124,6 +124,16 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
      */
     private Container parent;
 
+    /**
+     * Position de la zone actuellement en fullscreen, ou null si aucune. Quand
+     * ce champ est non-null, layoutContainer délègue entièrement à
+     * layoutFullScreen() au lieu du calcul normal.
+     */
+    private HSplitPane.ZonePosition zoneFullScreen;
+
+    /** true pendant l'animation d'entrée en fullscreen — layoutContainer ne fait rien. */
+private boolean animationFullScreenEnCours = false;
+    
     // =========================================================================
     // Constructeur
     // =========================================================================
@@ -275,11 +285,24 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
             // On mémorise le parent pour pouvoir le notifier depuis les callbacks de drag
             this.parent = parent;
 
+//            // Pendant l'animation fullscreen, on ne recalcule rien.
+//// C'est animerVersBounds() dans HSplitZone qui gère directement les bounds.
+//if (animationFullScreenEnCours) return;
+            
             Insets insets = parent.getInsets();
             int totalW = parent.getWidth() - insets.left - insets.right;
             int totalH = parent.getHeight() - insets.top - insets.bottom;
             int x0 = insets.left;
             int y0 = insets.top;
+
+            
+            
+            // Si une zone est en fullscreen, on délègue à layoutFullScreen()
+// qui court-circuite tout le calcul normal.
+            if (zoneFullScreen != null) {
+                layoutFullScreen(parent, x0, y0, totalW, totalH);
+                return;
+            }
 
             // Initialisation des tailles si nécessaire
             if (northHeight == 0 && southHeight == 0
@@ -369,6 +392,141 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
         }
     }
 
+    /**
+ * Dispose les zones quand une d'elles est en mode fullscreen.
+ *
+ * La zone fullscreen occupe tout l'espace disponible, déduction faite
+ * des headers visibles des zones adjacentes.
+ * Les dividers sont masqués (taille 0) en mode fullscreen.
+ *
+ * WEST  fullscreen : x=0,           y=0,            w=totalW-headerEAST, h=totalH
+ * EAST  fullscreen : x=headerWEST,  y=0,            w=totalW-headerWEST, h=totalH
+ * NORTH fullscreen : x=0,           y=0,            w=totalW,            h=totalH-headerWEST
+ * SOUTH fullscreen : x=0,           y=headerWEST,   w=totalW,            h=totalH-headerWEST
+ * CENTER fullscreen: x=0,           y=0,            w=totalW,            h=totalH
+ */
+private void layoutFullScreen(Container parent, int x0, int y0, int totalW, int totalH) {
+
+    // Épaisseur des headers des zones adjacentes
+    int headerWestW  = obtenirEpaisseurHeader(zoneWest);
+    int headerEastW  = obtenirEpaisseurHeader(zoneEast);
+
+    // On masque tous les dividers en fullscreen
+    masquerDividers();
+
+    // Positionnement de la zone fullscreen
+    HSplitZone zoneFS = obtenirZone(zoneFullScreen);
+    if (zoneFS == null) return;
+
+    int x, y, w, h;
+
+    switch (zoneFullScreen) {
+
+        case WEST:
+            x = x0;
+            y = y0;
+            w = totalW ;
+            h = totalH;
+            break;
+
+        case EAST:
+            int offW = (zoneWest != null && !zoneWest.isEmpty() ? headerWestW : 0);
+            x = x0 + offW;
+            y = y0;
+            w = totalW;
+            h = totalH;
+            break;
+
+        case NORTH:
+            // On réserve en bas l'espace pour que les headers WEST/EAST
+            // restent accessibles verticalement
+            int resN = (zoneWest != null && !zoneWest.isEmpty()
+                     || zoneEast != null && !zoneEast.isEmpty())
+                     ? headerWestW : 0;
+            x = x0;
+            y = y0;
+            w = totalW;
+            h = totalH ;
+            break;
+
+        case SOUTH:
+            int resS = (zoneWest != null && !zoneWest.isEmpty()
+                     || zoneEast != null && !zoneEast.isEmpty())
+                     ? headerWestW : 0;
+            x = x0;
+            y = y0 ;
+            w = totalW;
+            h = totalH;
+            break;
+
+        case CENTER:
+        default:
+            x = x0;
+            y = y0;
+            w = totalW;
+            h = totalH;
+            break;
+    }
+
+    // On ne force les bounds que si la zone n'est pas en cours d'animation.
+// Pendant l'animation, c'est animerVersBounds() qui gère les bounds.
+if (!zoneFS.animationInProgress()) {
+    zoneFS.setBounds(x, y, w, h);
+}
+
+    masquerZonesHorsFullScreen();
+}
+
+
+public void setAnimationFullScreenEnCours(boolean enCours) {
+    this.animationFullScreenEnCours = enCours;
+}
+
+/**
+ * Met à taille nulle toutes les zones qui ne sont pas la zone fullscreen
+ * et qui n'ont pas été repositionnées explicitement.
+ */
+/** Masque toutes les zones sauf la zone fullscreen. */
+private void masquerZonesHorsFullScreen() {
+    if (zoneFullScreen != HSplitPane.ZonePosition.NORTH && zoneNorth != null)
+        zoneNorth.setBounds(0, 0, 0, 0);
+    if (zoneFullScreen != HSplitPane.ZonePosition.SOUTH && zoneSouth != null)
+        zoneSouth.setBounds(0, 0, 0, 0);
+    if (zoneFullScreen != HSplitPane.ZonePosition.WEST  && zoneWest  != null)
+        zoneWest.setBounds(0, 0, 0, 0);
+    if (zoneFullScreen != HSplitPane.ZonePosition.EAST  && zoneEast  != null)
+        zoneEast.setBounds(0, 0, 0, 0);
+    if (zoneFullScreen != HSplitPane.ZonePosition.CENTER && zoneCenter != null)
+        zoneCenter.setBounds(0, 0, 0, 0);
+}
+
+/** Masque tous les dividers en mode fullscreen (taille 0). */
+private void masquerDividers() {
+    if (dividerNorth != null) dividerNorth.setBounds(0, 0, 0, 0);
+    if (dividerSouth != null) dividerSouth.setBounds(0, 0, 0, 0);
+    if (dividerWest  != null) dividerWest .setBounds(0, 0, 0, 0);
+    if (dividerEast  != null) dividerEast .setBounds(0, 0, 0, 0);
+}
+
+/** Retourne l'épaisseur du header d'une zone, ou 0 si absent. */
+private int obtenirEpaisseurHeader(HSplitZone zone) {
+    if (zone == null || zone.isEmpty() || zone.getHeader() == null) return 0;
+    return zone.getHeader().getEpaisseur();
+}
+
+/** Retourne la zone correspondant à la position. */
+private HSplitZone obtenirZone(HSplitPane.ZonePosition position) {
+    if (position == null) return null;
+    switch (position) {
+        case NORTH:  return zoneNorth;
+        case SOUTH:  return zoneSouth;
+        case WEST:   return zoneWest;
+        case CENTER: return zoneCenter;
+        case EAST:   return zoneEast;
+        default:     return null;
+    }
+}
+    
     // =========================================================================
     // Initialisation des tailles
     // =========================================================================
@@ -472,14 +630,20 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
      * @return la hauteur en pixels à utiliser pour le positionnement
      */
     private int getEffectiveHeight(HSplitZone zone, int hauteur) {
-    if (zone == null || zone.isEmpty()) return 0;
+        if (zone == null || zone.isEmpty()) {
+            return 0;
+        }
 
-    // Pendant une animation, on laisse la zone gérer sa propre taille
-    if (zone.animationInProgress()) return zone.getHeight();
+        // Pendant une animation, on laisse la zone gérer sa propre taille
+        if (zone.animationInProgress()) {
+            return zone.getHeight();
+        }
 
-    if (zone.isCollapsed()) return zone.getCollapsedSize().height;
-    return hauteur;
-}
+        if (zone.isCollapsed()) {
+            return zone.getCollapsedSize().height;
+        }
+        return hauteur;
+    }
 
     /**
      * Retourne la largeur effective d'une zone. Si la zone est collapsed,
@@ -491,14 +655,30 @@ public class HSplitPaneRootLayout implements LayoutManager2 {
      * @return la largeur en pixels à utiliser pour le positionnement
      */
     private int getEffectiveWidth(HSplitZone zone, int largeur) {
-    if (zone == null || zone.isEmpty()) return 0;
+        if (zone == null || zone.isEmpty()) {
+            return 0;
+        }
 
-    // Pendant une animation, on laisse la zone gérer sa propre taille
-    if (zone.animationInProgress()) return zone.getWidth();
+        // Pendant une animation, on laisse la zone gérer sa propre taille
+        if (zone.animationInProgress()) {
+            return zone.getWidth();
+        }
 
-    if (zone.isCollapsed()) return zone.getCollapsedSize().width;
-    return largeur;
-}
+        if (zone.isCollapsed()) {
+            return zone.getCollapsedSize().width;
+        }
+        return largeur;
+    }
+
+    /**
+     * Notifie le layout qu'une zone est en fullscreen ou qu'on en sort. Appelé
+     * par HSplitPane.enterFullScreen() et exitFullScreen().
+     *
+     * @param position la zone en fullscreen, ou null pour sortir du mode
+     */
+    public void setZoneFullScreen(HSplitPane.ZonePosition position) {
+        this.zoneFullScreen = position;
+    }
 
     // =========================================================================
     // Tailles du conteneur parent

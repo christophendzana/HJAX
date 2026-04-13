@@ -4,6 +4,8 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.util.EnumMap;
+import java.util.Map;
 import hcomponents.vues.HLabelOrientation;
 import javax.swing.JPanel;
 
@@ -13,26 +15,32 @@ import javax.swing.JPanel;
  *
  * HSplitPane divise son espace en cinq zones positionnelles : NORTH, SOUTH,
  * WEST, CENTER et EAST. Chaque zone peut accueillir plusieurs composants
- * positionnés automatiquement en mode wrapping par HSplitWrapLayout. Les zones
- * sont séparées par des diviseurs draggables (HSplitDivider) et peuvent être
- * réduites individuellement via leur barre de contrôle.
+ * positionnés automatiquement en mode wrapping par HSplitWrapLayout.
  *
- * Utilisation typique :
- * <pre>
- *   HSplitPane pane = new HSplitPane();
- *   pane.addContainer(monComposant, ZonePosition.WEST);
- *   pane.addContainer(autreComposant, ZonePosition.CENTER);
- * </pre>
- *
- * Avec configuration personnalisée :
- * <pre>
- *   HSplitPaneConfig config = new HSplitPaneConfig();
- *   config.setWestSize(new Dimension(200, 0));
- *   config.setNorthSize(new Dimension(0, 120));
- *   HSplitPane pane = new HSplitPane(config);
- * </pre>
+ * Fonctionnalités principales : - Zones redimensionnables via des séparateurs
+ * draggables - Collapse / expand animé par zone - Mode fullscreen : une zone
+ * occupe tout l'espace, les autres se collapsent - Mode flottant : une zone se
+ * détache dans une fenêtre HDialog indépendante - API publique complète pour
+ * personnaliser zones, headers et séparateurs
  */
 public class HSplitPane extends JPanel {
+
+    // -------------------------------------------------------------------------
+    // Enums imbriquées
+    // -------------------------------------------------------------------------
+    /**
+     * Positions disponibles pour les zones dans le HSplitPane.
+     */
+    public enum ZonePosition {
+        NORTH, SOUTH, WEST, EAST, CENTER
+    }
+
+    /**
+     * Directions de disposition des composants dans une zone.
+     */
+    public enum WrapDirection {
+        HORIZONTAL, VERTICAL
+    }
 
     // -------------------------------------------------------------------------
     // Zones
@@ -54,123 +62,101 @@ public class HSplitPane extends JPanel {
     // -------------------------------------------------------------------------
     // Layout racine
     // -------------------------------------------------------------------------
-    private HSplitPaneRootLayout rootLayout ;
+    private HSplitPaneRootLayout rootLayout;
 
-    
-    /** Positions disponibles pour les zones dans le HSplitPane. */
-    public enum ZonePosition {
-        NORTH, SOUTH, WEST, EAST, CENTER
-    }
+    // -------------------------------------------------------------------------
+    // Fullscreen
+    // Quand une zone est en fullscreen, on mémorise les tailles de toutes
+    // les zones pour les restaurer à la sortie du mode fullscreen.
+    // -------------------------------------------------------------------------
+    /**
+     * Position de la zone actuellement en fullscreen, ou null si aucune. Une
+     * seule zone fullscreen à la fois.
+     */
+    private ZonePosition zoneFullScreen;
 
-    /** Directions de disposition des composants dans une zone. */
-    public enum WrapDirection {
-        HORIZONTAL, VERTICAL
-    }
-    
+    /**
+     * Tailles sauvegardées de toutes les zones avant l'entrée en fullscreen.
+     * Permet de restaurer exactement l'état précédent.
+     */
+    private Map<ZonePosition, Dimension> taillesAvantFullScreen;
+
     // =========================================================================
     // Constructeurs
     // =========================================================================
-    /**
-     * Crée un HSplitPane avec les paramètres par défaut. Toutes les zones sont
-     * créées et la zone CENTER est visible. Les tailles sont calculées
-     * automatiquement au premier rendu.
-     */
     public HSplitPane() {
         this(new HSplitPaneConfig());
     }
 
-    /**
-     * Crée un HSplitPane à partir d'un objet de configuration. Seuls les champs
-     * renseignés dans la config seront appliqués, les autres zones prendront
-     * des tailles calculées automatiquement.
-     *
-     * @param config la configuration initiale du composant, non null
-     */
     public HSplitPane(HSplitPaneConfig config) {
         if (config == null) {
             config = new HSplitPaneConfig();
         }
         initializeComponents(config);
         assembleComponents(config);
+        enregistrerReferences();
     }
 
     // =========================================================================
     // Initialisation
     // =========================================================================
-    /**
-     * Instancie toutes les zones et séparateurs selon la configuration.
-     *
-     * @param config la configuration fournie par l'utilisateur
-     */
     private void initializeComponents(HSplitPaneConfig config) {
-
-        // Création des zones avec leur taille initiale respective
         zoneNorth = new HSplitZone(ZonePosition.NORTH, null, config.getNorthSize());
         zoneSouth = new HSplitZone(ZonePosition.SOUTH, null, config.getSouthSize());
         zoneWest = new HSplitZone(ZonePosition.WEST, null, config.getWestSize());
         zoneEast = new HSplitZone(ZonePosition.EAST, null, config.getEastSize());
 
-        // La zone CENTER n'est créée que si l'utilisateur la demande
         if (config.isShowCenter()) {
             zoneCenter = new HSplitZone(ZonePosition.CENTER, null, config.getCenterSize());
         }
 
-        // Séparateurs horizontaux (drag vertical)
         northDivider = new HSplitDivider(WrapDirection.HORIZONTAL);
         southDivider = new HSplitDivider(WrapDirection.HORIZONTAL);
-
-        // Séparateurs verticaux (drag horizontal)
         westDivider = new HSplitDivider(WrapDirection.VERTICAL);
         eastDivider = new HSplitDivider(WrapDirection.VERTICAL);
     }
 
-    /**
-     * Assemble les zones et séparateurs dans le HSplitPane et configure le
-     * layout.
-     *
-     * @param config la configuration fournie par l'utilisateur
-     */
     private void assembleComponents(HSplitPaneConfig config) {
-
-        // Création et configuration du layout racine
-        rootLayout  = new HSplitPaneRootLayout();
-        setLayout(rootLayout );
-
+        rootLayout = new HSplitPaneRootLayout();
+//        rootLayout.setSplitPane(this);
+        setLayout(rootLayout);
         setOpaque(true);
         setBackground(new Color(30, 30, 30));
 
-        // On enregistre les zones et dividers dans le layout
-        rootLayout .saveZones(zoneNorth, zoneSouth, zoneWest, zoneCenter, zoneEast);
-        rootLayout .saveDividers(northDivider, southDivider, westDivider, eastDivider);
+        rootLayout.saveZones(zoneNorth, zoneSouth, zoneWest, zoneCenter, zoneEast);
+        rootLayout.saveDividers(northDivider, southDivider, westDivider, eastDivider);
 
-        // Ajout des composants dans le panel
         add(zoneNorth);
         add(northDivider);
-
         add(zoneWest);
         add(westDivider);
-
         if (zoneCenter != null) {
             add(zoneCenter);
         }
-
         add(eastDivider);
         add(zoneEast);
-
         add(southDivider);
         add(zoneSouth);
+    }
+
+    /**
+     * Enregistre la référence à ce HSplitPane dans chaque zone. Nécessaire pour
+     * que les boutons fullscreen et float puissent coordonner leurs actions
+     * avec le parent.
+     */
+    private void enregistrerReferences() {
+        zoneNorth.setSplitPaneRef(this);
+        zoneSouth.setSplitPaneRef(this);
+        zoneWest.setSplitPaneRef(this);
+        zoneEast.setSplitPaneRef(this);
+        if (zoneCenter != null) {
+            zoneCenter.setSplitPaneRef(this);
+        }
     }
 
     // =========================================================================
     // API publique — ajout et retrait de composants
     // =========================================================================
-
-    /**
-     * Ajoute un composant dans la zone spécifiée.
-     *
-     * @param composant le composant à ajouter
-     * @param position  la zone de destination
-     */
     public void addContainer(Component composant, ZonePosition position) {
         if (position == null) {
             throw new IllegalArgumentException("La position ne peut pas être null.");
@@ -186,12 +172,6 @@ public class HSplitPane extends JPanel {
         repaint();
     }
 
-    /**
-     * Retire un composant d'une zone spécifique.
-     *
-     * @param composant le composant à retirer
-     * @param position  la zone dont retirer le composant
-     */
     public void removeContainer(Component composant, ZonePosition position) {
         HSplitZone zone = getZone(position);
         if (zone != null) {
@@ -202,228 +182,261 @@ public class HSplitPane extends JPanel {
     }
 
     // =========================================================================
-    // API publique — collapse / expand des zones
+    // API publique — collapse / expand
     // =========================================================================
-
-    /**
-     * Réduit la zone spécifiée programmatiquement.
-     *
-     * @param position la zone à réduire
-     */
     public void collapseZone(ZonePosition position) {
         HSplitZone zone = getZone(position);
-        if (zone != null) zone.collapse();
+        if (zone != null) {
+            zone.collapse();
+        }
     }
 
-    /**
-     * Développe la zone spécifiée programmatiquement.
-     *
-     * @param position la zone à développer
-     */
     public void expandZone(ZonePosition position) {
         HSplitZone zone = getZone(position);
-        if (zone != null) zone.expand();
+        if (zone != null) {
+            zone.expand();
+        }
     }
 
-    /**
-     * Indique si la zone spécifiée est actuellement réduite.
-     *
-     * @param position la zone à vérifier
-     * @return true si la zone est réduite
-     */
     public boolean isZoneCollapsed(ZonePosition position) {
         HSplitZone zone = getZone(position);
         return zone != null && zone.isCollapsed();
     }
 
     // =========================================================================
-    // API publique — disposition des composants dans les zones
+    // API publique — fullscreen
     // =========================================================================
-
     /**
-     * Modifie la direction de disposition des composants dans la zone spécifiée.
+     * Fait passer la zone spécifiée en mode fullscreen.
      *
-     * @param position  la zone concernée
-     * @param direction la nouvelle direction de wrapping
+     * La zone fullscreen occupe tout l'espace disponible du HSplitPane. Toutes
+     * les autres zones sont masquées — celles qui ont un header le conservent
+     * visible (via collapse), la zone CENTER qui n'a pas de header est
+     * simplement rendue invisible via setVisible(false).
+     *
+     * Si une autre zone est déjà en fullscreen, elle est d'abord restaurée.
+     *
+     * @param position la zone à passer en fullscreen
      */
-    public void setZoneDirection(ZonePosition position, WrapDirection direction) {
+    public void enterFullScreen(ZonePosition position) {
+        if (zoneFullScreen != null && zoneFullScreen != position) {
+            exitFullScreen();
+        }
+
         HSplitZone zone = getZone(position);
-        if (zone != null) zone.setWrapDirection(direction);
+        if (zone == null || zone.isEmpty()) {
+            return;
+        }
+
+        zoneFullScreen = position;
+
+        // Sauvegarde des tailles
+        taillesAvantFullScreen = new EnumMap<>(ZonePosition.class);
+        for (ZonePosition pos : ZonePosition.values()) {
+            HSplitZone z = getZone(pos);
+            if (z != null) {
+                taillesAvantFullScreen.put(pos, z.getSize());
+            }
+        }
+
+        // Masquage de toutes les autres zones
+        // Masquage immédiat de toutes les zones sauf la fullscreen
+        for (ZonePosition pos : ZonePosition.values()) {
+            if (pos == position) {
+                continue;
+            }
+            HSplitZone z = getZone(pos);
+            if (z != null) {
+                z.setVisible(false);
+            }
+        }
+
+        zone.setFullScreenState(true);
+
+// On notifie le layout pour qu'il passe en mode fullscreen
+        rootLayout.setZoneFullScreen(position);
+
+// Calcul des bounds cibles pour l'animation
+        int totalW = getWidth();
+        int totalH = getHeight();
+
+// Lancement de l'animation vers les bounds fullscreen
+        zone.animerVersBounds(0, 0, totalW, totalH);
+
+        repaint();
     }
 
     /**
-     * Active ou désactive l'étirement des composants dans la zone spécifiée.
-     *
-     * @param position la zone concernée
-     * @param etirer   true pour étirer, false pour respecter la preferredSize
+     * Quitte le mode fullscreen et restaure toutes les zones à leur état
+     * d'avant l'entrée en fullscreen.
      */
+    public void exitFullScreen() {
+        if (zoneFullScreen == null) {
+            return;
+        }
+
+        HSplitZone zonePleinEcran = getZone(zoneFullScreen);
+        if (zonePleinEcran != null) {
+            zonePleinEcran.setFullScreenState(false);
+        }
+
+        // On notifie le layout AVANT de restaurer les zones
+        // pour qu'il revienne au calcul normal dès le prochain revalidate
+        rootLayout.setZoneFullScreen(null);
+
+        for (ZonePosition pos : ZonePosition.values()) {
+    if (pos == zoneFullScreen) continue;
+    HSplitZone z = getZone(pos);
+    if (z != null) z.setVisible(true);
+}
+
+        zoneFullScreen = null;
+        taillesAvantFullScreen = null;
+        revalidate();
+        repaint();
+    }
+
+  
+
+    public boolean isZoneFullScreen(ZonePosition position) {
+        return zoneFullScreen != null && zoneFullScreen == position;
+    }
+
+    // =========================================================================
+    // API publique — float
+    // =========================================================================
+    /**
+     * Détache la zone spécifiée dans une fenêtre flottante.
+     *
+     * @param position la zone à détacher
+     */
+    public void floatZone(ZonePosition position) {
+        HSplitZone zone = getZone(position);
+        if (zone != null) {
+            zone.floatZone();
+        }
+    }
+
+    /**
+     * Réintègre la zone flottante spécifiée dans le HSplitPane.
+     *
+     * @param position la zone à réintégrer
+     */
+    public void reintegrateZone(ZonePosition position) {
+        HSplitZone zone = getZone(position);
+        if (zone != null) {
+            zone.reintegrateZone();
+        }
+    }
+
+    public boolean isZoneFloating(ZonePosition position) {
+        HSplitZone zone = getZone(position);
+        return zone != null && zone.isFloating();
+    }
+
+    // =========================================================================
+    // API publique — disposition des composants dans les zones
+    // =========================================================================
+    public void setZoneDirection(ZonePosition position, WrapDirection direction) {
+        HSplitZone zone = getZone(position);
+        if (zone != null) {
+            zone.setWrapDirection(direction);
+        }
+    }
+
     public void setZoneStretch(ZonePosition position, boolean etirer) {
         HSplitZone zone = getZone(position);
-        if (zone != null) zone.setEtirer(etirer);
+        if (zone != null) {
+            zone.setEtirer(etirer);
+        }
     }
 
     // =========================================================================
     // API publique — personnalisation du fond des zones
     // =========================================================================
-
-    /**
-     * Modifie la couleur de fond d'une zone.
-     *
-     * @param position la zone concernée
-     * @param couleur  la nouvelle couleur de fond
-     */
     public void setZoneBackground(ZonePosition position, Color couleur) {
         HSplitZone zone = getZone(position);
         if (zone != null) {
             zone.setBackground(couleur);
-            zone.revalidate();
             zone.repaint();
         }
     }
 
-    /**
-     * Retourne la couleur de fond d'une zone.
-     *
-     * @param position la zone concernée
-     * @return la couleur de fond, ou null si la zone n'existe pas
-     */
     public Color getZoneBackground(ZonePosition position) {
         HSplitZone zone = getZone(position);
         return zone != null ? zone.getBackground() : null;
     }
 
     // =========================================================================
-    // API publique — personnalisation du header
+    // API publique — personnalisation des headers
     // =========================================================================
-
-    /**
-     * Modifie le titre affiché dans la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @param titre    le nouveau titre, ou null pour masquer le titre
-     */
     public void setZoneTitle(ZonePosition position, String titre) {
         HSplitZone zone = getZone(position);
-        if (zone != null) zone.setTitre(titre);
+        if (zone != null) {
+            zone.setTitre(titre);
+        }
     }
 
-    /**
-     * Retourne le titre affiché dans la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @return le titre courant, ou null
-     */
     public String getZoneTitle(ZonePosition position) {
         HSplitZone zone = getZone(position);
         return zone != null ? zone.getTitre() : null;
     }
 
-    /**
-     * Modifie la couleur de fond de la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @param couleur  la nouvelle couleur de fond du header
-     */
     public void setHeaderBackground(ZonePosition position, Color couleur) {
         HSplitZoneHeader header = getHeader(position);
-        if (header != null) header.setCouleurFond(couleur);
+        if (header != null) {
+            header.setCouleurFond(couleur);
+        }
     }
 
-    /**
-     * Retourne la couleur de fond de la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @return la couleur de fond du header, ou null
-     */
     public Color getHeaderBackground(ZonePosition position) {
         HSplitZoneHeader header = getHeader(position);
         return header != null ? header.getCouleurFond() : null;
     }
 
-    /**
-     * Modifie la couleur du texte du titre dans la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @param couleur  la nouvelle couleur du titre
-     */
     public void setHeaderTitleColor(ZonePosition position, Color couleur) {
         HSplitZoneHeader header = getHeader(position);
-        if (header != null) header.setCouleurTitre(couleur);
+        if (header != null) {
+            header.setCouleurTitre(couleur);
+        }
     }
 
-    /**
-     * Retourne la couleur du texte du titre d'une barre de contrôle.
-     *
-     * @param position la zone concernée
-     * @return la couleur du titre, ou null
-     */
     public Color getHeaderTitleColor(ZonePosition position) {
         HSplitZoneHeader header = getHeader(position);
         return header != null ? header.getCouleurTitre() : null;
     }
 
-    /**
-     * Modifie la police du titre dans la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @param font     la nouvelle police
-     */
     public void setHeaderTitleFont(ZonePosition position, Font font) {
         HSplitZoneHeader header = getHeader(position);
-        if (header != null) header.setTitleFont(font);
+        if (header != null) {
+            header.setTitleFont(font);
+        }
     }
 
-    /**
-     * Retourne la police courante du titre d'une barre de contrôle.
-     *
-     * @param position la zone concernée
-     * @return la police du titre, ou null
-     */
     public Font getHeaderTitleFont(ZonePosition position) {
         HSplitZoneHeader header = getHeader(position);
         return header != null ? header.getTitleFont() : null;
     }
 
-    /**
-     * Modifie l'orientation du titre dans la barre de contrôle d'une zone.
-     * Par défaut l'orientation est automatique, mais ce setter permet de la forcer.
-     *
-     * @param position    la zone concernée
-     * @param orientation la nouvelle orientation du titre
-     */
     public void setHeaderTitleOrientation(ZonePosition position, HLabelOrientation orientation) {
         HSplitZoneHeader header = getHeader(position);
-        if (header != null) header.setTitleOrientation(orientation);
+        if (header != null) {
+            header.setTitleOrientation(orientation);
+        }
     }
 
-    /**
-     * Retourne l'orientation courante du titre d'une barre de contrôle.
-     *
-     * @param position la zone concernée
-     * @return l'orientation du titre, ou null
-     */
     public HLabelOrientation getHeaderTitleOrientation(ZonePosition position) {
         HSplitZoneHeader header = getHeader(position);
         return header != null ? header.getTitleOrientation() : null;
     }
 
-    /**
-     * Modifie l'épaisseur de la barre de contrôle d'une zone.
-     *
-     * @param position  la zone concernée
-     * @param epaisseur la nouvelle épaisseur en pixels
-     */
     public void setHeaderThickness(ZonePosition position, int epaisseur) {
         HSplitZoneHeader header = getHeader(position);
-        if (header != null) header.setEpaisseur(epaisseur);
+        if (header != null) {
+            header.setEpaisseur(epaisseur);
+        }
     }
 
-    /**
-     * Retourne l'épaisseur de la barre de contrôle d'une zone.
-     *
-     * @param position la zone concernée
-     * @return l'épaisseur en pixels, ou -1 si la zone n'a pas de header
-     */
     public int getHeaderThickness(ZonePosition position) {
         HSplitZoneHeader header = getHeader(position);
         return header != null ? header.getEpaisseur() : -1;
@@ -432,156 +445,108 @@ public class HSplitPane extends JPanel {
     // =========================================================================
     // API publique — personnalisation des séparateurs
     // =========================================================================
-
-    /**
-     * Verrouille ou déverrouille le séparateur adjacent à la zone spécifiée.
-     *
-     * @param position la zone concernée
-     * @param locked   true pour verrouiller, false pour déverrouiller
-     */
     public void setDividerLocked(ZonePosition position, boolean locked) {
         HSplitDivider divider = getDivider(position);
-        if (divider != null) divider.setLocked(locked);
+        if (divider != null) {
+            divider.setLocked(locked);
+        }
     }
 
-    /**
-     * Indique si le séparateur adjacent à la zone spécifiée est verrouillé.
-     *
-     * @param position la zone concernée
-     * @return true si le séparateur est verrouillé
-     */
     public boolean isDividerLocked(ZonePosition position) {
         HSplitDivider divider = getDivider(position);
         return divider != null && divider.isLocked();
     }
 
-    /**
-     * Modifie la couleur normale du séparateur adjacent à la zone spécifiée.
-     *
-     * @param position la zone concernée
-     * @param couleur  la nouvelle couleur normale
-     */
     public void setDividerColor(ZonePosition position, Color couleur) {
         HSplitDivider divider = getDivider(position);
-        if (divider != null) divider.setCouleur(couleur);
+        if (divider != null) {
+            divider.setCouleur(couleur);
+        }
     }
 
-    /**
-     * Retourne la couleur normale du séparateur d'une zone.
-     *
-     * @param position la zone concernée
-     * @return la couleur normale, ou null
-     */
     public Color getDividerColor(ZonePosition position) {
         HSplitDivider divider = getDivider(position);
         return divider != null ? divider.getCouleur() : null;
     }
 
-    /**
-     * Modifie la couleur de survol du séparateur adjacent à la zone spécifiée.
-     *
-     * @param position la zone concernée
-     * @param couleur  la nouvelle couleur au survol
-     */
     public void setDividerHoverColor(ZonePosition position, Color couleur) {
         HSplitDivider divider = getDivider(position);
-        if (divider != null) divider.setCouleurHover(couleur);
+        if (divider != null) {
+            divider.setCouleurHover(couleur);
+        }
     }
 
-    /**
-     * Retourne la couleur de survol du séparateur d'une zone.
-     *
-     * @param position la zone concernée
-     * @return la couleur au survol, ou null
-     */
     public Color getDividerHoverColor(ZonePosition position) {
         HSplitDivider divider = getDivider(position);
         return divider != null ? divider.getCouleurHover() : null;
     }
 
-    /**
-     * Modifie la couleur de drag du séparateur adjacent à la zone spécifiée.
-     *
-     * @param position la zone concernée
-     * @param couleur  la nouvelle couleur pendant le drag
-     */
     public void setDividerDragColor(ZonePosition position, Color couleur) {
         HSplitDivider divider = getDivider(position);
-        if (divider != null) divider.setCouleurDrag(couleur);
+        if (divider != null) {
+            divider.setCouleurDrag(couleur);
+        }
     }
 
-    /**
-     * Retourne la couleur de drag du séparateur d'une zone.
-     *
-     * @param position la zone concernée
-     * @return la couleur de drag, ou null
-     */
     public Color getDividerDragColor(ZonePosition position) {
         HSplitDivider divider = getDivider(position);
         return divider != null ? divider.getCouleurDrag() : null;
     }
 
-    /**
-     * Modifie l'épaisseur du séparateur adjacent à la zone spécifiée.
-     *
-     * @param position  la zone concernée
-     * @param epaisseur la nouvelle épaisseur en pixels
-     */
     public void setDividerThickness(ZonePosition position, int epaisseur) {
         HSplitDivider divider = getDivider(position);
-        if (divider != null) divider.setEpaisseur(epaisseur);
+        if (divider != null) {
+            divider.setEpaisseur(epaisseur);
+        }
     }
 
-    /**
-     * Retourne l'épaisseur du séparateur d'une zone.
-     *
-     * @param position la zone concernée
-     * @return l'épaisseur en pixels, ou -1 si pas de séparateur
-     */
     public int getDividerThickness(ZonePosition position) {
         HSplitDivider divider = getDivider(position);
         return divider != null ? divider.getEpaisseur() : -1;
-    }    
+    }
 
     // =========================================================================
     // Méthodes utilitaires internes
     // =========================================================================
-
     private HSplitZone getZone(ZonePosition position) {
         switch (position) {
-            case NORTH:  return zoneNorth;
-            case SOUTH:  return zoneSouth;
-            case WEST:   return zoneWest;
-            case CENTER: return zoneCenter;
-            case EAST:   return zoneEast;
-            default:     return null;
+            case NORTH:
+                return zoneNorth;
+            case SOUTH:
+                return zoneSouth;
+            case WEST:
+                return zoneWest;
+            case CENTER:
+                return zoneCenter;
+            case EAST:
+                return zoneEast;
+            default:
+                return null;
         }
     }
 
     private HSplitDivider getDivider(ZonePosition position) {
         switch (position) {
-            case NORTH:  return northDivider;
-            case SOUTH:  return southDivider;
-            case WEST:   return westDivider;
-            case EAST:   return eastDivider;
-            default:     return null;
+            case NORTH:
+                return northDivider;
+            case SOUTH:
+                return southDivider;
+            case WEST:
+                return westDivider;
+            case EAST:
+                return eastDivider;
+            default:
+                return null;
         }
     }
 
-    /**
-     * Retourne la barre de contrôle de la zone spécifiée.
-     * La zone CENTER n'a pas de header — retourne null dans ce cas.
-     *
-     * @param position la zone concernée
-     * @return le header ou null
-     */
     private HSplitZoneHeader getHeader(ZonePosition position) {
         HSplitZone zone = getZone(position);
         return zone != null ? zone.getHeader() : null;
     }
-    
+
     // =========================================================================
-    // Getters — accès aux zones pour personnalisation avancée
+    // Getters — accès direct aux zones et séparateurs
     // =========================================================================
     public HSplitZone getZoneNorth() {
         return zoneNorth;
