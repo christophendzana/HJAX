@@ -31,21 +31,15 @@ public enum HTextEffect {
      */
     OUTLINE,
 
-    /**
-     * Relief : donne l'impression que le texte "sort" de la surface.
-     * Obtenu par deux ombres : claire en haut-gauche, sombre en bas-droite.
-     */
-    EMBOSS,
+    LIGHT,
 
-    /**
-     * Gravure : inverse du relief — le texte semble "enfoncé" dans la surface.
-     * Obtenu par deux ombres : sombre en haut-gauche, claire en bas-droite.
-     */
-    ENGRAVE,
+    
 
     /**
      * Lueur (glow) : halo coloré rayonnant autour du texte.
      * Simulé par plusieurs couches d'ombres concentriques de plus en plus transparentes.
      */
-    GLOW
+    GLOW,
+    
+    REFLECTION
 }

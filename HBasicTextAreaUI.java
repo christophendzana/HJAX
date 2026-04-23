@@ -1,64 +1,157 @@
 package htextarea;
 
-
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicTextPaneUI;
-import javax.swing.text.StyledDocument;
-import javax.swing.text.View;
+import javax.swing.text.JTextComponent;
 import java.awt.*;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.geom.Area;
+import java.awt.geom.RoundRectangle2D;
+import javax.swing.text.StyledDocument;
 
 /**
- * Delegate d'interface utilisateur pour {@link HTextArea}.
- *
- * <p>Hérite de {@link BasicTextPaneUI} puisque {@code HTextArea} étend désormais
- * {@link JTextPane}. Cette classe est responsable du rendu visuel : fond arrondi
- * et délégation du rendu du texte stylisé au pipeline standard de {@code JTextPane}.</p>
- *
- * <p>Deux points importants sur les signatures imposées par {@code BasicTextUI} :</p>
+ * UI delegate moderne pour {@link HTextArea}.
+ * <p>
+ * Gère :
  * <ul>
- *   <li>{@code paintBackground(Graphics)} — prend un seul argument (pas de JComponent).</li>
- *   <li>{@code paint(Graphics, JComponent)} est {@code final} — on passe par
- *       {@code paintSafely(Graphics)} pour injecter notre rendu personnalisé.</li>
+ * <li>Fond arrondi avec couleurs différentes selon l'état (normal, hover,
+ * focus)</li>
+ * <li>Bordure arrondie personnalisable (épaisseur, couleur selon état)</li>
+ * <li>Ombre portée du composant (drop shadow)</li>
+ * <li>Délégation du rendu du texte stylisé au parent
+ * {@link BasicTextPaneUI}</li>
  * </ul>
+ * <p>
+ * L'état "hover" est détecté via un {@link MouseAdapter}, l'état "focus" via un
+ * {@link FocusAdapter}.
+ * </p>
  *
  * @author FIDELE
- * @version 2.0
- * @see BasicTextPaneUI
+ * @version 3.0
  */
 public class HBasicTextAreaUI extends BasicTextPaneUI {
 
-    // -------------------------------------------------------------------------
-    // Rendu du fond
-    // -------------------------------------------------------------------------
+    // États internes pour le rendu
+    private boolean hover = false;
+    private boolean focus = false;
 
-    /**
-     * Peint le fond du composant avec des coins arrondis.
-     *
-     * <p>Signature imposée par {@link javax.swing.plaf.basic.BasicTextUI} :
-     * le composant est récupéré via {@code getComponent()} et non en paramètre.</p>
-     *
-     * @param g le contexte graphique fourni par Swing
-     */
-    @Override
-    protected void paintBackground(Graphics g) {
-        JComponent c = getComponent();
+    // Référence au composant (casté en HTextArea)
+    private HTextArea textArea;
 
-        if (!(c instanceof HTextArea textArea)) {
-            super.paintBackground(g);
-            return;
+    // Listeners pour détecter les changements d'état
+    private final MouseAdapter mouseListener = new MouseAdapter() {
+        @Override
+        public void mouseEntered(MouseEvent e) {
+            hover = true;
+            getComponent().repaint();
         }
 
+        @Override
+        public void mouseExited(MouseEvent e) {
+            hover = false;
+            getComponent().repaint();
+        }
+    };
+
+    private final FocusAdapter focusListener = new FocusAdapter() {
+        @Override
+        public void focusGained(FocusEvent e) {
+            focus = true;
+            getComponent().repaint();
+        }
+
+        @Override
+        public void focusLost(FocusEvent e) {
+            focus = false;
+            getComponent().repaint();
+        }
+    };
+
+    // -------------------------------------------------------------------------
+    // Installation / désinstallation
+    // -------------------------------------------------------------------------
+    @Override
+    public void installUI(JComponent c) {
+        super.installUI(c);
+        if (!(c instanceof HTextArea)) {
+            return;
+        }
+        this.textArea = (HTextArea) c;
+        textArea.setOpaque(false);      // nécessaire pour la transparence des coins
+
+        // Ajout des listeners
+        textArea.addMouseListener(mouseListener);
+        textArea.addFocusListener(focusListener);
+    }
+
+    @Override
+    public void uninstallUI(JComponent c) {
+        if (textArea != null) {
+            textArea.removeMouseListener(mouseListener);
+            textArea.removeFocusListener(focusListener);
+        }
+        super.uninstallUI(c);
+    }
+
+    // -------------------------------------------------------------------------
+    // Rendu personnalisé
+    // -------------------------------------------------------------------------
+    /**
+     * Point d'entrée du rendu.
+     * <p>
+     * Ordre des opérations :
+     * <ol>
+     * <li>Ombre portée du composant (si activée)</li>
+     * <li>Fond arrondi avec la couleur correspondant à l'état</li>
+     * <li>Bordure arrondie (épaisseur, couleur selon état)</li>
+     * <li>Délégation au parent pour le texte (après avoir sauvegardé le
+     * clip)</li>
+     * </ol>
+     * </p>
+     *
+     * @param g le contexte graphique
+     */
+    @Override
+    protected void paintSafely(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                                RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                    RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
-            int rayon   = textArea.getCornerRadius();
-            int largeur = c.getWidth();
-            int hauteur = c.getHeight();
+            int w = textArea.getWidth();
+            int h = textArea.getHeight();
+            int radius = textArea.getCornerRadius();
 
-            g2.setColor(resoudreCouleurFond(textArea));
-            g2.fillRoundRect(0, 0, largeur, hauteur, rayon * 2, rayon * 2);
+            // 1. Ombre du composant (drop shadow)
+            if (textArea.isComponentShadowEnabled()) {
+                paintComponentShadow(g2, textArea.getWidth(), textArea.getHeight(),
+                        textArea.getCornerRadius(), 0.15f, textArea.getComponentShadowOffset());
+            }
+
+            // 2. Fond arrondi
+            paintBackground(g2, w, h, radius);
+
+            // 3. Bordure arrondie
+            paintBorder(g2, w, h, radius);
+
+            // 4. On laisse le parent peindre le texte (et les effets typographiques
+            //    sont déjà gérés dans super.paintSafely via HEffectPainter)
+            //    Mais avant, on doit s'assurer que le clip n'inclut pas les bords arrondis
+            //    pour que le texte ne déborde pas. On applique un clip arrondi.
+            Shape oldClip = g2.getClip();
+            g2.clip(new RoundRectangle2D.Float(0, 0, w, h, radius * 2, radius * 2));
+            HEffectPainter.peindreEffets(
+                    g2,
+                    (StyledDocument) textArea.getDocument(),
+                    getRootView(textArea)
+            );
+            super.paintSafely(g2);
+            g2.setClip(oldClip);
 
         } finally {
             g2.dispose();
@@ -66,78 +159,96 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
     }
 
     /**
-     * Résout la couleur de fond selon le {@link HTextAreaStyle} actif.
+     * Peint l'ombre portée du composant. Simule un flou en dessinant plusieurs
+     * couches translucides décalées.
      *
-     * @param textArea le composant dont on lit le style
-     * @return la couleur de fond à appliquer
+     * @param g2 le contexte graphique 2D
+     * @param w largeur du composant
+     * @param h hauteur du composant
+     * @param radius rayon des coins arrondis
      */
-    private Color resoudreCouleurFond(HTextArea textArea) {
-        HTextAreaStyle style = textArea.getTextAreaStyle();
-        if (style == null) return textArea.getBackground();
-
-        return switch (style) {
-            case PRIMARY   -> textArea.getBackground();
-            case SECONDARY -> textArea.getBackground().darker();
-        };
+    private void paintComponentShadow(Graphics2D g2, int width, int height, int cornerRadius, float shadowOpacity, int shadowOffset) {
+        int shadowSize = Math.max(5, (int) (textArea.getComponentShadowBlur() * 2));
+        float alphaMax = shadowOpacity * (textArea.getComponentShadowColor().getAlpha() / 255f);
+        for (int i = 0; i < shadowSize; i++) {
+            float alpha = (shadowSize - i) / (float) shadowSize * alphaMax;
+            g2.setColor(new Color(0, 0, 0, (int) (alpha * 255)));
+            RoundRectangle2D shadow = new RoundRectangle2D.Float(
+                    shadowOffset - i, shadowOffset - i,
+                    width - shadowOffset * 2 + i * 2, height - shadowOffset * 2 + i * 2,
+                    cornerRadius + i, cornerRadius + i
+            );
+            g2.draw(shadow);
+        }
     }
 
-
-    // -------------------------------------------------------------------------
-    // Rendu complet : effets typographiques + texte standard
-    // -------------------------------------------------------------------------
+    /**
+     * Peint le fond arrondi en utilisant la couleur correspondant à l'état
+     * actuel.
+     *
+     * @param g2 contexte graphique
+     * @param w largeur
+     * @param h hauteur
+     * @param radius rayon des coins
+     */
+    private void paintBackground(Graphics2D g2, int w, int h, int radius) {
+        Color bg;
+        if (focus) {
+            bg = textArea.getBackgroundFocus();
+        } else if (hover) {
+            bg = textArea.getBackgroundHover();
+        } else {
+            bg = textArea.getBackgroundNormal();
+        }
+        g2.setColor(bg);
+        g2.fillRoundRect(0, 0, w, h, radius * 2, radius * 2);
+    }
 
     /**
-     * Point d'entrée du rendu personnalisé.
+     * Peint la bordure arrondie avec l'épaisseur et la couleur d'état.
      *
-     * <p>{@code paint(Graphics, JComponent)} étant {@code final} dans
-     * {@link javax.swing.plaf.basic.BasicTextUI}, on surcharge {@code paintSafely}
-     * qui est appelé après les vérifications de sécurité Swing.</p>
-     *
-     * <p>Ordre des passes de rendu :</p>
-     * <ol>
-     *   <li>Fond arrondi ({@link #paintBackground(Graphics)}) — déjà géré
-     *       en interne par {@code super.paintSafely}.</li>
-     *   <li>Effets typographiques ({@link HEffectPainter}) — peints <em>avant</em>
-     *       le texte pour apparaître derrière lui (ombre, halo…).</li>
-     *   <li>Texte stylisé — délégué au pipeline standard de {@code BasicTextPaneUI}
-     *       via {@code super.paintSafely(g)}.</li>
-     * </ol>
-     *
-     * @param g le contexte graphique
+     * @param g2 contexte graphique
+     * @param w largeur
+     * @param h hauteur
+     * @param radius rayon des coins
      */
-    @Override
-    protected void paintSafely(Graphics g) {
-        JComponent c = getComponent();
-
-        // Passe 1 : effets typographiques (ombre, contour, relief, glow…)
-        // On les peint AVANT le texte pour qu'ils apparaissent derrière
-        if (c instanceof HTextArea textArea) {
-            StyledDocument doc  = textArea.getStyledDocument();
-            View           view = getRootView(textArea);
-            HEffectPainter.peindreEffets(g, doc, view);
+    private void paintBorder(Graphics2D g2, int w, int h, int radius) {
+        int thickness = textArea.getBorderThickness();
+        if (thickness <= 0) {
+            return;
         }
 
-        // Passe 2 : fond arrondi + texte stylisé (pipeline standard)
-        super.paintSafely(g);
+        Color borderColor;
+        if (focus) {
+            borderColor = textArea.getBorderFocus();
+        } else if (hover) {
+            borderColor = textArea.getBorderHover();
+        } else {
+            borderColor = textArea.getBorderNormal();
+        }
+
+        g2.setColor(borderColor);
+        g2.setStroke(new BasicStroke(thickness));
+        // On dessine un rectangle arrondi légèrement décalé pour que le trait soit centré sur le bord
+        int adjust = thickness / 2;
+        g2.drawRoundRect(adjust, adjust,
+                w - thickness,
+                h - thickness,
+                radius * 2, radius * 2);
     }
 
-
     // -------------------------------------------------------------------------
-    // Installation
+    // Méthodes héritées – on ne modifie pas paintBackground(Graphics) d'origine,
+    // mais on la surcharge pour qu'elle ne fasse rien (car on peint tout dans paintSafely).
     // -------------------------------------------------------------------------
-
     /**
-     * Installe ce delegate sur le composant.
+     * Surchargée pour ne rien faire : le fond est déjà peint dans
+     * {@link #paintSafely(Graphics)}.
      *
-     * <p>On force {@code opaque = false} pour que notre fond personnalisé
-     * (avec coins arrondis) soit visible. Sans ça, Swing peindrait un
-     * rectangle plein par-dessus nos arrondis.</p>
-     *
-     * @param c le composant cible
+     * @param g ignoré
      */
     @Override
-    public void installUI(JComponent c) {
-        super.installUI(c);
-        c.setOpaque(false);
+    protected void paintBackground(Graphics g) {
+        // Rien – on évite le fond rectangulaire par défaut
     }
 }
