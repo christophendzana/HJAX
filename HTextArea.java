@@ -58,7 +58,7 @@ public class HTextArea extends JTextPane {
     private float componentShadowBlur = 4f;
 
     private Insets padding = new Insets(8, 8, 8, 8);
-    
+
     // -------------------------------------------------------------------------
     // Constructeurs
     // -------------------------------------------------------------------------
@@ -460,58 +460,251 @@ public class HTextArea extends JTextPane {
     // GROUPE 5 — Effets typographiques
     // =========================================================================
     /**
-     * Applique un effet typographique à la sélection courante.
+     * Applique un effet typographique à la sélection courante avec une config
+     * complète.
      *
      * <p>
-     * L'effet est stocké comme attribut custom dans le {@link StyledDocument}
-     * via la clé {@link HEffectPainter#EFFECT_ATTRIBUTE}, puis lu et peint par
-     * {@link hcomponents.vues.HBasicTextAreaUI} à chaque cycle de rendu.</p>
+     * C'est la méthode centrale par laquelle passent toutes les variantes.
+     * L'effet et sa config sont stockés comme attributs custom dans le
+     * {@link StyledDocument} via les clés
+     * {@link HEffectPainter#EFFECT_ATTRIBUTE} et
+     * {@link HEffectPainter#EFFECT_CONFIG_ATTRIBUTE}.</p>
      *
      * <p>
      * Passer {@link HTextEffect#NONE} supprime tout effet sur la sélection.</p>
      *
+     * <h3>Exemple</h3>
+     * <pre>
+     *     // Ombre vers le bas-gauche, distance 4px, flou 2, semi-transparent
+     *     HTextEffectConfig config = new HTextEffectConfig()
+     *         .setDirection(HEffectDirection.BAS_GAUCHE)
+     *         .setDistance(4)
+     *         .setFlou(2)
+     *         .setTransparence(100);
+     *
+     *     textArea.setTextEffect(HTextEffect.SHADOW, Color.DARK_GRAY, config);
+     * </pre>
+     *
      * @param effet l'effet à appliquer (ne doit pas être {@code null})
+     * @param couleurEffet la couleur de l'effet (peut être {@code null} →
+     * couleur par défaut)
+     * @param config les paramètres de l'effet (peut être {@code null} → valeurs
+     * par défaut)
      */
-    public void setTextEffect(HTextEffect effet) {
+    public void setTextEffect(HTextEffect effet, Color couleurEffet, HTextEffectConfig config) {
         if (effet == null) {
             return;
         }
+
         SimpleAttributeSet attrs = new SimpleAttributeSet();
+
+        // Attribut 1 : le type d'effet
         attrs.addAttribute(HEffectPainter.EFFECT_ATTRIBUTE, effet);
+
+        // Attribut 2 : la couleur (optionnelle)
+        if (couleurEffet != null) {
+            attrs.addAttribute(HEffectPainter.EFFECT_COLOR_ATTRIBUTE, couleurEffet);
+        }
+
+        // Attribut 3 : la config (on stocke toujours une instance non nulle
+        // pour garantir la compatibilité dans HEffectPainter.resoudreConfig())
+        attrs.addAttribute(
+                HEffectPainter.EFFECT_CONFIG_ATTRIBUTE,
+                config != null ? config : new HTextEffectConfig()
+        );
+
         appliquerAttribut(attrs);
-        // Forcer un repaint complet — les effets sont peints hors du pipeline standard
         repaint();
     }
 
     /**
-     * Applique un effet typographique avec une couleur personnalisée.
+     * Applique un effet avec une couleur et la configuration par défaut.
      *
      * <p>
-     * La couleur est utilisée différemment selon l'effet :</p>
-     * <ul>
-     * <li>{@code SHADOW} → couleur de l'ombre (ex: gris sombre)</li>
-     * <li>{@code OUTLINE} → couleur du trait de contour</li>
-     * <li>{@code GLOW} → couleur du halo lumineux</li>
-     * <li>{@code EMBOSS} / {@code ENGRAVE} → la couleur est ignorée (les ombres
-     * blanc/noir sont fixes pour un rendu réaliste)</li>
-     * </ul>
+     * Compatibilité avec le code existant : cette signature est identique à
+     * celle de la version 1.0, le comportement est préservé.</p>
      *
      * @param effet l'effet à appliquer
-     * @param couleurEffet la couleur associée à l'effet
+     * @param couleurEffet la couleur de l'effet
      */
     public void setTextEffect(HTextEffect effet, Color couleurEffet) {
-        if (effet == null) {
-            return;
-        }
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        attrs.addAttribute(HEffectPainter.EFFECT_ATTRIBUTE, effet);
-        if (couleurEffet != null) {
-            attrs.addAttribute(HEffectPainter.EFFECT_COLOR_ATTRIBUTE, couleurEffet);
-        }
-        appliquerAttribut(attrs);
-        repaint();
+        setTextEffect(effet, couleurEffet, new HTextEffectConfig());
     }
 
+    /**
+     * Applique un effet sans couleur personnalisée ni config (valeurs par
+     * défaut).
+     *
+     * <p>
+     * Compatibilité avec le code existant : cette signature est identique à
+     * celle de la version 1.0.</p>
+     *
+     * @param effet l'effet à appliquer
+     */
+    public void setTextEffect(HTextEffect effet) {
+        setTextEffect(effet, null, new HTextEffectConfig());
+    }
+
+    // -------------------------------------------------------------------------
+    // Méthodes spécialisées SHADOW — les plus utilisées
+    // -------------------------------------------------------------------------
+    /**
+     * Applique une ombre portée avec contrôle complet sur tous les paramètres.
+     *
+     * @param couleur couleur de l'ombre
+     * @param direction direction de projection ({@link HEffectDirection})
+     * @param distance décalage en pixels
+     * @param flou niveau de flou (0 = net, 5 = très flou)
+     * @param transparence alpha de l'ombre (0 = invisible, 255 = opaque)
+     */
+    public void setShadow(Color couleur, HEffectDirection direction,
+            int distance, int flou, int transparence) {
+        HTextEffectConfig config = HTextEffectConfig.ombre(direction, distance, flou, transparence);
+        setTextEffect(HTextEffect.SHADOW, couleur, config);
+    }
+
+    /**
+     * Applique une ombre portée vers le bas-droite (direction classique).
+     *
+     * @param couleur couleur de l'ombre
+     * @param distance décalage en pixels
+     * @param flou niveau de flou (0–5)
+     * @param transparence alpha (0–255)
+     */
+    public void setShadowBasDroite(Color couleur, int distance, int flou, int transparence) {
+        setShadow(couleur, HEffectDirection.BAS_DROITE, distance, flou, transparence);
+    }
+
+    /**
+     * Applique une ombre portée vers le bas-gauche.
+     *
+     * @param couleur couleur de l'ombre
+     * @param distance décalage en pixels
+     * @param flou niveau de flou (0–5)
+     * @param transparence alpha (0–255)
+     */
+    public void setShadowBasGauche(Color couleur, int distance, int flou, int transparence) {
+        setShadow(couleur, HEffectDirection.BAS_GAUCHE, distance, flou, transparence);
+    }
+
+    /**
+     * Applique une ombre portée vers le haut-droite.
+     *
+     * @param couleur couleur de l'ombre
+     * @param distance décalage en pixels
+     * @param flou niveau de flou (0–5)
+     * @param transparence alpha (0–255)
+     */
+    public void setShadowHautDroite(Color couleur, int distance, int flou, int transparence) {
+        setShadow(couleur, HEffectDirection.HAUT_DROITE, distance, flou, transparence);
+    }
+
+    /**
+     * Applique une ombre portée vers le haut-gauche.
+     *
+     * @param couleur couleur de l'ombre
+     * @param distance décalage en pixels
+     * @param flou niveau de flou (0–5)
+     * @param transparence alpha (0–255)
+     */
+    public void setShadowHautGauche(Color couleur, int distance, int flou, int transparence) {
+        setShadow(couleur, HEffectDirection.HAUT_GAUCHE, distance, flou, transparence);
+    }
+
+    /**
+     * Applique une ombre centrée (projetée dans les 4 directions
+     * simultanément).
+     *
+     * <p>
+     * Produit un halo d'ombre uniforme autour de chaque lettre, similaire au
+     * flou "centré" de Word.</p>
+     *
+     * @param couleur couleur de l'ombre
+     * @param distance rayon de l'ombre en pixels
+     * @param flou niveau de flou (0–5)
+     * @param transparence alpha (0–255)
+     */
+    public void setShadowCentree(Color couleur, int distance, int flou, int transparence) {
+        setShadow(couleur, HEffectDirection.CENTREE, distance, flou, transparence);
+    }
+
+    // -------------------------------------------------------------------------
+    // Méthodes spécialisées OUTLINE — contour
+    // -------------------------------------------------------------------------
+    /**
+     * Applique un effet contour (outline) avec contrôle complet.
+     *
+     * @param couleur couleur du contour
+     * @param epaisseur épaisseur du trait en pixels (min 0.5)
+     * @param transparence alpha du contour (0–255)
+     */
+    public void setOutline(Color couleur, int epaisseur, int transparence) {
+        HTextEffectConfig config = HTextEffectConfig.contour(epaisseur, transparence);
+        setTextEffect(HTextEffect.OUTLINE, couleur, config);
+    }
+
+    /**
+     * Applique un effet contour avec épaisseur et transparence par défaut.
+     *
+     * @param couleur couleur du contour
+     */
+    public void setOutline(Color couleur) {
+        setTextEffect(HTextEffect.OUTLINE, couleur, new HTextEffectConfig());
+    }
+
+    // -------------------------------------------------------------------------
+    // Méthodes spécialisées LIGHT — halo lumineux
+    // -------------------------------------------------------------------------
+    /**
+     * Applique un halo lumineux avec contrôle complet.
+     *
+     * @param couleur couleur du halo
+     * @param rayon rayon du halo en pixels
+     * @param transparence alpha maximal du halo (0–255)
+     */
+    public void setLight(Color couleur, int rayon, int transparence) {
+        HTextEffectConfig config = HTextEffectConfig.lumiere(rayon, transparence);
+        setTextEffect(HTextEffect.LIGHT, couleur, config);
+    }
+
+    /**
+     * Applique un halo lumineux avec rayon et transparence par défaut.
+     *
+     * @param couleur couleur du halo
+     */
+    public void setLight(Color couleur) {
+        setTextEffect(HTextEffect.LIGHT, couleur, new HTextEffectConfig());
+    }
+
+    // -------------------------------------------------------------------------
+    // Méthodes spécialisées REFLECTION — reflet
+    // -------------------------------------------------------------------------
+    /**
+     * Applique un effet de reflet sous le texte avec contrôle complet.
+     *
+     * @param espacement espace en pixels entre le bas du texte et le reflet
+     * @param transparence opacité maximale du reflet (0–255)
+     */
+    public void setReflection(int espacement, int transparence) {
+        HTextEffectConfig config = HTextEffectConfig.reflection(espacement, transparence);
+        setTextEffect(HTextEffect.REFLECTION, null, config);
+    }
+
+    /**
+     * Applique un effet de reflet avec les valeurs par défaut (espacement 2px,
+     * transparence 110).
+     */
+    public void setReflection() {
+        HTextEffectConfig config = HTextEffectConfig.reflection(
+                HTextEffectConfig.DISTANCE_DEFAUT,
+                HTextEffectConfig.TRANSPARENCE_DEFAUT
+        );
+        setTextEffect(HTextEffect.REFLECTION, null, config);
+    }
+
+    // -------------------------------------------------------------------------
+    // Suppression d'effet
+    // -------------------------------------------------------------------------
     /**
      * Supprime tout effet typographique de la sélection courante.
      *
@@ -522,6 +715,9 @@ public class HTextArea extends JTextPane {
         setTextEffect(HTextEffect.NONE);
     }
 
+    // -------------------------------------------------------------------------
+    // Interrogation de l'effet courant
+    // -------------------------------------------------------------------------
     /**
      * Retourne l'effet typographique actif au niveau du curseur (ou de la
      * sélection).
@@ -535,6 +731,21 @@ public class HTextArea extends JTextPane {
             return effet;
         }
         return HTextEffect.NONE;
+    }
+
+    /**
+     * Retourne la configuration d'effet active au niveau du curseur (ou de la
+     * sélection).
+     *
+     * @return la config courante, ou une config par défaut si aucune n'est
+     * définie
+     */
+    public HTextEffectConfig getSelectionTextEffectConfig() {
+        Object valeur = getInputAttributes().getAttribute(HEffectPainter.EFFECT_CONFIG_ATTRIBUTE);
+        if (valeur instanceof HTextEffectConfig config) {
+            return config;
+        }
+        return new HTextEffectConfig();
     }
 
     // =========================================================================
@@ -634,9 +845,9 @@ public class HTextArea extends JTextPane {
      * @param style le nouveau style à appliquer
      */
     public void setTextAreaStyle(HTextAreaStyle style) {
-    this.textAreaStyle = style;
-    applyStyle(style);
-}
+        this.textAreaStyle = style;
+        applyStyle(style);
+    }
 
     // =========================================================================
     // Méthodes factory
@@ -766,169 +977,167 @@ public class HTextArea extends JTextPane {
             throw new IllegalStateException("Erreur lors de la transformation de casse", e);
         }
     }
-    
+
     // =========================================================================
 // Gestion des couleurs de fond (normal, hover, focus)
 // =========================================================================
+    public Color getBackgroundNormal() {
+        return backgroundNormal;
+    }
 
-public Color getBackgroundNormal() {
-    return backgroundNormal;
-}
+    /**
+     * Définit la couleur de fond à l'état normal.
+     *
+     * @param color nouvelle couleur
+     */
+    public void setBackgroundNormal(Color color) {
+        this.backgroundNormal = color;
+        repaint();
+    }
 
-/**
- * Définit la couleur de fond à l'état normal.
- * @param color nouvelle couleur
- */
-public void setBackgroundNormal(Color color) {
-    this.backgroundNormal = color;
-    repaint();
-}
+    public Color getBackgroundHover() {
+        return backgroundHover;
+    }
 
-public Color getBackgroundHover() {
-    return backgroundHover;
-}
+    public void setBackgroundHover(Color color) {
+        this.backgroundHover = color;
+        repaint();
+    }
 
-public void setBackgroundHover(Color color) {
-    this.backgroundHover = color;
-    repaint();
-}
+    public Color getBackgroundFocus() {
+        return backgroundFocus;
+    }
 
-public Color getBackgroundFocus() {
-    return backgroundFocus;
-}
-
-public void setBackgroundFocus(Color color) {
-    this.backgroundFocus = color;
-    repaint();
-}
+    public void setBackgroundFocus(Color color) {
+        this.backgroundFocus = color;
+        repaint();
+    }
 
 // =========================================================================
 // Gestion des couleurs de bordure (normal, hover, focus)
 // =========================================================================
+    public Color getBorderNormal() {
+        return borderNormal;
+    }
 
-public Color getBorderNormal() {
-    return borderNormal;
-}
+    public void setBorderNormal(Color color) {
+        this.borderNormal = color;
+        repaint();
+    }
 
-public void setBorderNormal(Color color) {
-    this.borderNormal = color;
-    repaint();
-}
+    public Color getBorderHover() {
+        return borderHover;
+    }
 
-public Color getBorderHover() {
-    return borderHover;
-}
+    public void setBorderHover(Color color) {
+        this.borderHover = color;
+        repaint();
+    }
 
-public void setBorderHover(Color color) {
-    this.borderHover = color;
-    repaint();
-}
+    public Color getBorderFocus() {
+        return borderFocus;
+    }
 
-public Color getBorderFocus() {
-    return borderFocus;
-}
-
-public void setBorderFocus(Color color) {
-    this.borderFocus = color;
-    repaint();
-}
+    public void setBorderFocus(Color color) {
+        this.borderFocus = color;
+        repaint();
+    }
 
 // =========================================================================
 // Épaisseur de la bordure
 // =========================================================================
+    public int getBorderThickness() {
+        return borderThickness;
+    }
 
-public int getBorderThickness() {
-    return borderThickness;
-}
-
-public void setBorderThickness(int thickness) {
-    this.borderThickness = Math.max(0, thickness);
-    repaint();
-}
+    public void setBorderThickness(int thickness) {
+        this.borderThickness = Math.max(0, thickness);
+        repaint();
+    }
 
 // =========================================================================
 // Ombre portée du composant
 // =========================================================================
+    public boolean isComponentShadowEnabled() {
+        return componentShadowEnabled;
+    }
 
-public boolean isComponentShadowEnabled() {
-    return componentShadowEnabled;
-}
+    public void setComponentShadowEnabled(boolean enabled) {
+        this.componentShadowEnabled = enabled;
+        repaint();
+    }
 
-public void setComponentShadowEnabled(boolean enabled) {
-    this.componentShadowEnabled = enabled;
-    repaint();
-}
+    public Color getComponentShadowColor() {
+        return componentShadowColor;
+    }
 
-public Color getComponentShadowColor() {
-    return componentShadowColor;
-}
+    public void setComponentShadowColor(Color color) {
+        this.componentShadowColor = color;
+        repaint();
+    }
 
-public void setComponentShadowColor(Color color) {
-    this.componentShadowColor = color;
-    repaint();
-}
+    public int getComponentShadowOffset() {
+        return componentShadowOffset;
+    }
 
-public int getComponentShadowOffset() {
-    return componentShadowOffset;
-}
+    public void setComponentShadowOffset(int offset) {
+        this.componentShadowOffset = offset;
+        repaint();
+    }
 
-public void setComponentShadowOffset(int offset) {
-    this.componentShadowOffset = offset;
-    repaint();
-}
+    public float getComponentShadowBlur() {
+        return componentShadowBlur;
+    }
 
-public float getComponentShadowBlur() {
-    return componentShadowBlur;
-}
+    public void setComponentShadowBlur(float blur) {
+        this.componentShadowBlur = Math.max(0, blur);
+        repaint();
+    }
 
-public void setComponentShadowBlur(float blur) {
-    this.componentShadowBlur = Math.max(0, blur);
-    repaint();
-}
+    public Insets getPadding() {
+        return padding;
+    }
 
-public Insets getPadding() {
-    return padding;
-}
-
-public void setPadding(Insets padding) {
-    this.padding = padding;
-    setBorder(BorderFactory.createEmptyBorder(padding.top, padding.left, padding.bottom, padding.right));
-}
+    public void setPadding(Insets padding) {
+        this.padding = padding;
+        setBorder(BorderFactory.createEmptyBorder(padding.top, padding.left, padding.bottom, padding.right));
+    }
 
 // =========================================================================
 // Utilitaire pour appliquer un style prédéfini (HTextAreaStyle)
 // =========================================================================
+    /**
+     * Applique un style visuel prédéfini à tous les attributs du composant.
+     * <p>
+     * Cette méthode utilise les valeurs de l'énumération {@link HTextAreaStyle}
+     * pour initialiser : fond normal (background), couleurs de bordure, ombre,
+     * etc. Elle ne modifie pas les attributs typographiques du texte.
+     * </p>
+     *
+     * @param style le style à appliquer (ne doit pas être {@code null})
+     */
+    public void applyStyle(HTextAreaStyle style) {
+        if (style == null) {
+            return;
+        }
 
-/**
- * Applique un style visuel prédéfini à tous les attributs du composant.
- * <p>
- * Cette méthode utilise les valeurs de l'énumération {@link HTextAreaStyle}
- * pour initialiser : fond normal (background), couleurs de bordure,
- * ombre, etc. Elle ne modifie pas les attributs typographiques du texte.
- * </p>
- *
- * @param style le style à appliquer (ne doit pas être {@code null})
- */
-public void applyStyle(HTextAreaStyle style) {
-    if (style == null) return;
+        // Fond : même couleur pour normal, hover et focus (mais on peut les différencier plus tard)
+        setBackgroundNormal(style.getBackgroundColor());
+        setBackgroundHover(style.getHoverBackground());
+        setBackgroundFocus(style.getFocusBackground());
 
-    // Fond : même couleur pour normal, hover et focus (mais on peut les différencier plus tard)
-    setBackgroundNormal(style.getBackgroundColor());
-    setBackgroundHover(style.getHoverBackground());
-    setBackgroundFocus(style.getFocusBackground());
+        // Bordure
+        setBorderNormal(style.getBorderColor());
+        setBorderHover(style.getHoverBorderColor());
+        setBorderFocus(style.getFocusBorderColor());
 
-    // Bordure
-    setBorderNormal(style.getBorderColor());
-    setBorderHover(style.getHoverBorderColor());
-    setBorderFocus(style.getFocusBorderColor());
+        // Ombre
+        setComponentShadowColor(style.getShadowColor());
+        // On peut aussi activer l'ombre par défaut pour les styles sombres
+        setComponentShadowEnabled(true);
 
-    // Ombre
-    setComponentShadowColor(style.getShadowColor());
-    // On peut aussi activer l'ombre par défaut pour les styles sombres
-    setComponentShadowEnabled(true);
+        // On conserve le textAreaStyle si vous voulez garder la compatibilité
+        this.textAreaStyle = style;
+    }
 
-    // On conserve le textAreaStyle si vous voulez garder la compatibilité
-    this.textAreaStyle = style;
-}
-    
 }

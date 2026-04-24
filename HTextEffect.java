@@ -32,14 +32,6 @@ public enum HTextEffect {
     OUTLINE,
 
     LIGHT,
-
-    
-
-    /**
-     * Lueur (glow) : halo coloré rayonnant autour du texte.
-     * Simulé par plusieurs couches d'ombres concentriques de plus en plus transparentes.
-     */
-    GLOW,
     
     REFLECTION
 }

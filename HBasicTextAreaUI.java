@@ -96,67 +96,60 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         super.uninstallUI(c);
     }
 
-    // -------------------------------------------------------------------------
-    // Rendu personnalisé
-    // -------------------------------------------------------------------------
-    /**
-     * Point d'entrée du rendu.
-     * <p>
-     * Ordre des opérations :
-     * <ol>
-     * <li>Ombre portée du composant (si activée)</li>
-     * <li>Fond arrondi avec la couleur correspondant à l'état</li>
-     * <li>Bordure arrondie (épaisseur, couleur selon état)</li>
-     * <li>Délégation au parent pour le texte (après avoir sauvegardé le
-     * clip)</li>
-     * </ol>
-     * </p>
-     *
-     * @param g le contexte graphique
-     */
     @Override
-    protected void paintSafely(Graphics g) {
-        Graphics2D g2 = (Graphics2D) g.create();
-        try {
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                    RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+protected void paintSafely(Graphics g) {
+    Graphics2D g2 = (Graphics2D) g.create();
+    try {
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
-            int w = textArea.getWidth();
-            int h = textArea.getHeight();
-            int radius = textArea.getCornerRadius();
+        int w      = textArea.getWidth();
+        int h      = textArea.getHeight();
+        int radius = textArea.getCornerRadius();
 
-            // 1. Ombre du composant (drop shadow)
-            if (textArea.isComponentShadowEnabled()) {
-                paintComponentShadow(g2, textArea.getWidth(), textArea.getHeight(),
-                        textArea.getCornerRadius(), 0.15f, textArea.getComponentShadowOffset());
-            }
-
-            // 2. Fond arrondi
-            paintBackground(g2, w, h, radius);
-
-            // 3. Bordure arrondie
-            paintBorder(g2, w, h, radius);
-
-            // 4. On laisse le parent peindre le texte (et les effets typographiques
-            //    sont déjà gérés dans super.paintSafely via HEffectPainter)
-            //    Mais avant, on doit s'assurer que le clip n'inclut pas les bords arrondis
-            //    pour que le texte ne déborde pas. On applique un clip arrondi.
-            Shape oldClip = g2.getClip();
-            g2.clip(new RoundRectangle2D.Float(0, 0, w, h, radius * 2, radius * 2));
-            HEffectPainter.peindreEffets(
-                    g2,
-                    (StyledDocument) textArea.getDocument(),
-                    getRootView(textArea)
-            );
-            super.paintSafely(g2);
-            g2.setClip(oldClip);
-
-        } finally {
-            g2.dispose();
+        // 1. Ombre du composant
+        if (textArea.isComponentShadowEnabled()) {
+            paintComponentShadow(g2, w, h, radius, 0.15f,
+                    textArea.getComponentShadowOffset());
         }
+
+        // 2. Fond arrondi
+        paintBackground(g2, w, h, radius);
+
+        // 3. Bordure arrondie
+        paintBorder(g2, w, h, radius);
+
+        // 4. Clip arrondi pour que le texte ne déborde pas sur les coins
+        Shape oldClip = g2.getClip();
+        g2.clip(new RoundRectangle2D.Float(0, 0, w, h, radius * 2, radius * 2));
+
+        // 5. Correction critique : les coordonnées retournées par modelToView()
+        //    sont dans l'espace du composant (0,0 = coin supérieur gauche du JTextPane).
+        //    Or, Swing paint le texte en tenant compte des insets du border.
+        //    On doit appliquer le même décalage au Graphics2D passé à HEffectPainter
+        //    pour que les effets soient dessinés exactement sur le texte.
+        Insets insets = textArea.getInsets();
+        g2.translate(insets.left, insets.top);
+
+        HEffectPainter.peindreEffets(
+                g2,
+                (StyledDocument) textArea.getDocument(),
+                getRootView(textArea)
+        );
+
+        // On retire la translation avant d'appeler super.paintSafely(),
+        // car Swing gère lui-même les insets dans sa propre passe de rendu.
+        g2.translate(-insets.left, -insets.top);
+
+        super.paintSafely(g2);
+        g2.setClip(oldClip);
+
+    } finally {
+        g2.dispose();
     }
+}
 
     /**
      * Peint l'ombre portée du composant. Simule un flou en dessinant plusieurs
