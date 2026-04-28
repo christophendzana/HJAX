@@ -8,7 +8,11 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.Color;
 import java.awt.Insets;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.BorderFactory;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.Element;
 
 /**
  * Composant HTextArea - Un text area Swing personnalisé.
@@ -59,6 +63,24 @@ public class HTextArea extends JTextPane {
 
     private Insets padding = new Insets(8, 8, 8, 8);
 
+     /**
+     * Clé custom pour marquer un caractère comme exposant.
+     * Stocke un {@code Boolean} dans le {@code StyledDocument}.
+     * N'utilise PAS {@code StyleConstants.Superscript} pour éviter
+     * le bug de hauteur de ligne dans {@code GlyphView}.
+     */
+    private static final Object SUPERSCRIPT_CUSTOM = new Object() {
+        @Override public String toString() { return "HTextArea_Superscript"; }
+    };
+
+    /**
+     * Clé custom pour marquer un caractère comme indice.
+     * Même principe que {@link #SUPERSCRIPT_CUSTOM}.
+     */
+    private static final Object SUBSCRIPT_CUSTOM = new Object() {
+        @Override public String toString() { return "HTextArea_Subscript"; }
+    };
+    
     // -------------------------------------------------------------------------
     // Constructeurs
     // -------------------------------------------------------------------------
@@ -285,13 +307,47 @@ public class HTextArea extends JTextPane {
      * désactiver
      */
     public void setSuperscript(boolean superscript) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setSuperscript(attrs, superscript);
-        // Désactiver l'indice pour éviter un état incohérent
-        if (superscript) {
-            StyleConstants.setSubscript(attrs, false);
+        int debut = getSelectionStart();
+        int longueur = getSelectionEnd() - debut;
+        if (longueur == 0) {
+            return;
         }
-        appliquerAttribut(attrs);
+
+        StyledDocument doc = getStyledDocument();
+
+        for (int i = debut; i < debut + longueur; i++) {
+            AttributeSet attrsExistants = doc.getCharacterElement(i).getAttributes();
+            int tailleCourante = StyleConstants.getFontSize(attrsExistants);
+
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+
+            if (superscript) {
+                // Désactiver l'indice si actif, pour éviter un état incohérent
+                attrs.addAttribute(SUBSCRIPT_CUSTOM, false);
+                attrs.addAttribute(SUPERSCRIPT_CUSTOM, true);
+
+                // Réduire à 58 % de la taille courante, minimum 7pt pour rester lisible
+                // On ne touche pas à la taille si elle est déjà réduite (évite la cascade)
+                boolean dejaActif = Boolean.TRUE.equals(
+                        attrsExistants.getAttribute(SUPERSCRIPT_CUSTOM));
+                if (!dejaActif) {
+                    int nouvelleTaille = Math.max(7, Math.round(tailleCourante * 0.58f));
+                    StyleConstants.setFontSize(attrs, nouvelleTaille);
+                }
+            } else {
+                // Désactivation : on restaure la taille d'origine (approximation)
+                attrs.addAttribute(SUPERSCRIPT_CUSTOM, false);
+                boolean etaitActif = Boolean.TRUE.equals(
+                        attrsExistants.getAttribute(SUPERSCRIPT_CUSTOM));
+                if (etaitActif) {
+                    // Restaurer en divisant par 0.58 — arrondi à l'entier le plus proche
+                    int tailleRestauree = Math.round(tailleCourante / 0.58f);
+                    StyleConstants.setFontSize(attrs, tailleRestauree);
+                }
+            }
+
+            doc.setCharacterAttributes(i, 1, attrs, false);
+        }
     }
 
     /**
@@ -304,13 +360,42 @@ public class HTextArea extends JTextPane {
      * @param subscript {@code true} pour activer, {@code false} pour désactiver
      */
     public void setSubscript(boolean subscript) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setSubscript(attrs, subscript);
-        // Désactiver l'exposant pour éviter un état incohérent
-        if (subscript) {
-            StyleConstants.setSuperscript(attrs, false);
+        int debut = getSelectionStart();
+        int longueur = getSelectionEnd() - debut;
+        if (longueur == 0) {
+            return;
         }
-        appliquerAttribut(attrs);
+
+        StyledDocument doc = getStyledDocument();
+
+        for (int i = debut; i < debut + longueur; i++) {
+            AttributeSet attrsExistants = doc.getCharacterElement(i).getAttributes();
+            int tailleCourante = StyleConstants.getFontSize(attrsExistants);
+
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+
+            if (subscript) {
+                attrs.addAttribute(SUPERSCRIPT_CUSTOM, false);
+                attrs.addAttribute(SUBSCRIPT_CUSTOM, true);
+
+                boolean dejaActif = Boolean.TRUE.equals(
+                        attrsExistants.getAttribute(SUBSCRIPT_CUSTOM));
+                if (!dejaActif) {
+                    int nouvelleTaille = Math.max(7, Math.round(tailleCourante * 0.58f));
+                    StyleConstants.setFontSize(attrs, nouvelleTaille);
+                }
+            } else {
+                attrs.addAttribute(SUBSCRIPT_CUSTOM, false);
+                boolean etaitActif = Boolean.TRUE.equals(
+                        attrsExistants.getAttribute(SUBSCRIPT_CUSTOM));
+                if (etaitActif) {
+                    int tailleRestauree = Math.round(tailleCourante / 0.58f);
+                    StyleConstants.setFontSize(attrs, tailleRestauree);
+                }
+            }
+
+            doc.setCharacterAttributes(i, 1, attrs, false);
+        }
     }
 
     /**
@@ -460,84 +545,85 @@ public class HTextArea extends JTextPane {
     // GROUPE 5 — Effets typographiques
     // =========================================================================
     /**
-     * Applique un effet typographique à la sélection courante avec une config
-     * complète.
-     *
+     * Applique un effet typographique à la sélection courante.
      * <p>
-     * C'est la méthode centrale par laquelle passent toutes les variantes.
-     * L'effet et sa config sont stockés comme attributs custom dans le
-     * {@link StyledDocument} via les clés
-     * {@link HEffectPainter#EFFECT_ATTRIBUTE} et
-     * {@link HEffectPainter#EFFECT_CONFIG_ATTRIBUTE}.</p>
-     *
-     * <p>
-     * Passer {@link HTextEffect#NONE} supprime tout effet sur la sélection.</p>
-     *
-     * <h3>Exemple</h3>
-     * <pre>
-     *     // Ombre vers le bas-gauche, distance 4px, flou 2, semi-transparent
-     *     HTextEffectConfig config = new HTextEffectConfig()
-     *         .setDirection(HEffectDirection.BAS_GAUCHE)
-     *         .setDistance(4)
-     *         .setFlou(2)
-     *         .setTransparence(100);
-     *
-     *     textArea.setTextEffect(HTextEffect.SHADOW, Color.DARK_GRAY, config);
-     * </pre>
+     * La nouvelle architecture stocke une {@code List<HEffetEntree>} sous la
+     * clé {@link HEffectPainter#EFFECTS_LIST_ATTRIBUTE}. Chaque appel à
+     * {@code setTextEffect} <em>ajoute</em> une entrée à cette liste s'il
+     * n'existe pas déjà un effet du même type — dans ce cas il le remplace
+     * (comportement intuitif : réappliquer SHADOW avec de nouveaux paramètres
+     * met à jour l'ombre existante sans dupliquer).</p>
      *
      * @param effet l'effet à appliquer (ne doit pas être {@code null})
-     * @param couleurEffet la couleur de l'effet (peut être {@code null} →
-     * couleur par défaut)
-     * @param config les paramètres de l'effet (peut être {@code null} → valeurs
-     * par défaut)
+     * @param couleurEffet la couleur de l'effet ({@code null} = couleur du
+     * texte)
+     * @param config les paramètres ({@code null} = valeurs par défaut)
      */
     public void setTextEffect(HTextEffect effet, Color couleurEffet, HTextEffectConfig config) {
         if (effet == null) {
             return;
         }
 
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        int debut = getSelectionStart();
+        int longueur = getSelectionEnd() - debut;
 
-        // Attribut 1 : le type d'effet
-        attrs.addAttribute(HEffectPainter.EFFECT_ATTRIBUTE, effet);
-
-        // Attribut 2 : la couleur (optionnelle)
-        if (couleurEffet != null) {
-            attrs.addAttribute(HEffectPainter.EFFECT_COLOR_ATTRIBUTE, couleurEffet);
+        // Si NONE → on efface tous les effets de la sélection
+        if (effet == HTextEffect.NONE) {
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+            attrs.addAttribute(HEffectPainter.EFFECTS_LIST_ATTRIBUTE, new ArrayList<HEffetEntree>());
+            appliquerAttribut(attrs);
+            repaint();
+            return;
         }
 
-        // Attribut 3 : la config (on stocke toujours une instance non nulle
-        // pour garantir la compatibilité dans HEffectPainter.resoudreConfig())
-        attrs.addAttribute(
-                HEffectPainter.EFFECT_CONFIG_ATTRIBUTE,
-                config != null ? config : new HTextEffectConfig()
-        );
+        HTextEffectConfig configEffective = (config != null) ? config : new HTextEffectConfig();
+        HEffetEntree nouvelleEntree = new HEffetEntree(effet, couleurEffet, configEffective);
 
-        appliquerAttribut(attrs);
+        if (longueur > 0) {
+            // Appliquer segment par segment pour préserver les listes d'effets
+            // existantes sur chaque sous-segment de la sélection
+            StyledDocument doc = getStyledDocument();
+            for (int i = debut; i < debut + longueur;) {
+                Element elem = doc.getCharacterElement(i);
+                int finElem = Math.min(elem.getEndOffset(), debut + longueur);
+
+                // Lire la liste existante sur ce segment et y ajouter/remplacer l'effet
+                List<HEffetEntree> listeExistante = lireListeEffets(elem.getAttributes());
+                List<HEffetEntree> nouvelleList = construireListeAvecEffet(listeExistante, nouvelleEntree);
+
+                SimpleAttributeSet attrs = new SimpleAttributeSet();
+                attrs.addAttribute(HEffectPainter.EFFECTS_LIST_ATTRIBUTE, nouvelleList);
+                doc.setCharacterAttributes(i, finElem - i, attrs, false);
+
+                i = finElem;
+            }
+        } else {
+            // Pas de sélection → mémoriser pour la prochaine frappe
+            // On lit la liste sur le curseur courant
+            AttributeSet attrsActuels = getInputAttributes();
+            List<HEffetEntree> listeExistante = lireListeEffets(attrsActuels);
+            List<HEffetEntree> nouvelleList = construireListeAvecEffet(listeExistante, nouvelleEntree);
+
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+            attrs.addAttribute(HEffectPainter.EFFECTS_LIST_ATTRIBUTE, nouvelleList);
+            getInputAttributes().addAttributes(attrs);
+        }
+
         repaint();
     }
 
     /**
      * Applique un effet avec une couleur et la configuration par défaut.
      *
-     * <p>
-     * Compatibilité avec le code existant : cette signature est identique à
-     * celle de la version 1.0, le comportement est préservé.</p>
-     *
-     * @param effet l'effet à appliquer
+     * @param effet        l'effet à appliquer
      * @param couleurEffet la couleur de l'effet
      */
     public void setTextEffect(HTextEffect effet, Color couleurEffet) {
         setTextEffect(effet, couleurEffet, new HTextEffectConfig());
     }
 
-    /**
-     * Applique un effet sans couleur personnalisée ni config (valeurs par
-     * défaut).
-     *
-     * <p>
-     * Compatibilité avec le code existant : cette signature est identique à
-     * celle de la version 1.0.</p>
+     /**
+     * Applique un effet avec couleur et config par défaut.
      *
      * @param effet l'effet à appliquer
      */
@@ -558,7 +644,7 @@ public class HTextArea extends JTextPane {
      * @param transparence alpha de l'ombre (0 = invisible, 255 = opaque)
      */
     public void setShadow(Color couleur, HEffectDirection direction,
-            int distance, int flou, int transparence) {
+                          int distance, int flou, int transparence) {
         HTextEffectConfig config = HTextEffectConfig.ombre(direction, distance, flou, transparence);
         setTextEffect(HTextEffect.SHADOW, couleur, config);
     }
@@ -639,8 +725,7 @@ public class HTextArea extends JTextPane {
      * @param transparence alpha du contour (0–255)
      */
     public void setOutline(Color couleur, int epaisseur, int transparence) {
-        HTextEffectConfig config = HTextEffectConfig.contour(epaisseur, transparence);
-        setTextEffect(HTextEffect.OUTLINE, couleur, config);
+        setTextEffect(HTextEffect.OUTLINE, couleur, HTextEffectConfig.contour(epaisseur, transparence));
     }
 
     /**
@@ -663,8 +748,7 @@ public class HTextArea extends JTextPane {
      * @param transparence alpha maximal du halo (0–255)
      */
     public void setLight(Color couleur, int rayon, int transparence) {
-        HTextEffectConfig config = HTextEffectConfig.lumiere(rayon, transparence);
-        setTextEffect(HTextEffect.LIGHT, couleur, config);
+        setTextEffect(HTextEffect.LIGHT, couleur, HTextEffectConfig.lumiere(rayon, transparence));
     }
 
     /**
@@ -686,8 +770,8 @@ public class HTextArea extends JTextPane {
      * @param transparence opacité maximale du reflet (0–255)
      */
     public void setReflection(int espacement, int transparence) {
-        HTextEffectConfig config = HTextEffectConfig.reflection(espacement, transparence);
-        setTextEffect(HTextEffect.REFLECTION, null, config);
+        setTextEffect(HTextEffect.REFLECTION, null,
+                HTextEffectConfig.reflection(espacement, transparence));
     }
 
     /**
@@ -695,11 +779,7 @@ public class HTextArea extends JTextPane {
      * transparence 110).
      */
     public void setReflection() {
-        HTextEffectConfig config = HTextEffectConfig.reflection(
-                HTextEffectConfig.DISTANCE_DEFAUT,
-                HTextEffectConfig.TRANSPARENCE_DEFAUT
-        );
-        setTextEffect(HTextEffect.REFLECTION, null, config);
+        setTextEffect(HTextEffect.REFLECTION, null, new HTextEffectConfig());
     }
 
     // -------------------------------------------------------------------------
@@ -714,36 +794,78 @@ public class HTextArea extends JTextPane {
     public void clearTextEffect() {
         setTextEffect(HTextEffect.NONE);
     }
+    
+    /**
+     * Supprime un effet spécifique de la sélection, en conservant les autres.
+     *
+     * <p>Exemple : supprimer uniquement l'ombre sans toucher au contour
+     * ni au halo.</p>
+     *
+     * @param effetASupprimer le type d'effet à retirer
+     */
+    public void removeTextEffect(HTextEffect effetASupprimer) {
+        if (effetASupprimer == null || effetASupprimer == HTextEffect.NONE) return;
+
+        int debut    = getSelectionStart();
+        int longueur = getSelectionEnd() - debut;
+        if (longueur == 0) return;
+
+        StyledDocument doc = getStyledDocument();
+
+        for (int i = debut; i < debut + longueur; ) {
+            Element elem = doc.getCharacterElement(i);
+            int finElem  = Math.min(elem.getEndOffset(), debut + longueur);
+
+            List<HEffetEntree> listeExistante = lireListeEffets(elem.getAttributes());
+            List<HEffetEntree> nouvelleList   = construireSansEffet(listeExistante, effetASupprimer);
+
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+            attrs.addAttribute(HEffectPainter.EFFECTS_LIST_ATTRIBUTE, nouvelleList);
+            doc.setCharacterAttributes(i, finElem - i, attrs, false);
+
+            i = finElem;
+        }
+        repaint();
+    }
+    
+     /**
+     * Retourne l'effet typographique principal actif au niveau du curseur.
+     *
+     * <p>Si plusieurs effets sont actifs, retourne le premier de la liste.
+     * Pour lire la liste complète, utiliser {@link #getSelectionTextEffects()}.</p>
+     *
+     * @return le premier effet actif, ou {@link HTextEffect#NONE} si aucun
+     */
+    public HTextEffect getSelectionTextEffect() {
+        List<HEffetEntree> liste = lireListeEffets(getInputAttributes());
+        if (liste != null && !liste.isEmpty()) {
+            return liste.get(0).getEffet();
+        }
+        return HTextEffect.NONE;
+    }
+    
+     /**
+     * Retourne la liste complète des effets actifs au niveau du curseur.
+     *
+     * @return la liste des effets (jamais {@code null}, peut être vide)
+     */
+    public List<HEffetEntree> getSelectionTextEffects() {
+        List<HEffetEntree> liste = lireListeEffets(getInputAttributes());
+        return (liste != null) ? new ArrayList<>(liste) : new ArrayList<>();
+    }       
 
     // -------------------------------------------------------------------------
     // Interrogation de l'effet courant
     // -------------------------------------------------------------------------
     /**
-     * Retourne l'effet typographique actif au niveau du curseur (ou de la
-     * sélection).
+     * Retourne la configuration du premier effet actif au niveau du curseur.
      *
-     * @return l'effet courant, ou {@link HTextEffect#NONE} si aucun n'est
-     * défini
-     */
-    public HTextEffect getSelectionTextEffect() {
-        Object valeur = getInputAttributes().getAttribute(HEffectPainter.EFFECT_ATTRIBUTE);
-        if (valeur instanceof HTextEffect effet) {
-            return effet;
-        }
-        return HTextEffect.NONE;
-    }
-
-    /**
-     * Retourne la configuration d'effet active au niveau du curseur (ou de la
-     * sélection).
-     *
-     * @return la config courante, ou une config par défaut si aucune n'est
-     * définie
+     * @return la config courante, ou une config par défaut si aucun effet
      */
     public HTextEffectConfig getSelectionTextEffectConfig() {
-        Object valeur = getInputAttributes().getAttribute(HEffectPainter.EFFECT_CONFIG_ATTRIBUTE);
-        if (valeur instanceof HTextEffectConfig config) {
-            return config;
+        List<HEffetEntree> liste = lireListeEffets(getInputAttributes());
+        if (liste != null && !liste.isEmpty()) {
+            return liste.get(0).getConfig();
         }
         return new HTextEffectConfig();
     }
@@ -793,10 +915,16 @@ public class HTextArea extends JTextPane {
     /**
      * Indique si le texte au niveau du curseur est en exposant.
      *
+     * <p>
+     * Lit l'attribut custom {@link #SUPERSCRIPT_CUSTOM} plutôt que
+     * {@code StyleConstants.Superscript} pour rester cohérent avec notre
+     * implémentation custom.</p>
+     *
      * @return {@code true} si le style courant est exposant
      */
     public boolean isSelectionSuperscript() {
-        return StyleConstants.isSuperscript(getInputAttributes());
+        Object val = getInputAttributes().getAttribute(SUPERSCRIPT_CUSTOM);
+        return Boolean.TRUE.equals(val);
     }
 
     /**
@@ -805,7 +933,8 @@ public class HTextArea extends JTextPane {
      * @return {@code true} si le style courant est indice
      */
     public boolean isSelectionSubscript() {
-        return StyleConstants.isSubscript(getInputAttributes());
+        Object val = getInputAttributes().getAttribute(SUBSCRIPT_CUSTOM);
+        return Boolean.TRUE.equals(val);
     }
 
     // =========================================================================
@@ -880,31 +1009,108 @@ public class HTextArea extends JTextPane {
     // =========================================================================
     // Méthodes utilitaires privées
     // =========================================================================
-    /**
-     * Applique un jeu d'attributs ({@link SimpleAttributeSet}) à la sélection
-     * courante.
+   /**
+     * Applique un jeu d'attributs à la sélection courante.
      *
-     * <p>
-     * C'est le point central par lequel passent toutes les méthodes de style.
-     * Le paramètre {@code replace=false} signifie qu'on <em>fusionne</em> les
-     * nouveaux attributs avec ceux déjà présents, sans écraser les autres.</p>
+     * <p>Point central par lequel passent toutes les méthodes de style de base
+     * (gras, italique, taille…). Les effets typographiques passent quant à eux
+     * directement par {@link #setTextEffect} qui gère la logique de liste.</p>
+     *
+     * <p>{@code replace=false} signifie qu'on <em>fusionne</em> les nouveaux
+     * attributs avec ceux déjà présents, sans écraser les autres.</p>
      *
      * @param attrs les attributs à appliquer
      */
     private void appliquerAttribut(SimpleAttributeSet attrs) {
-        int debut = getSelectionStart();
+        int debut    = getSelectionStart();
         int longueur = getSelectionEnd() - debut;
 
         StyledDocument doc = getStyledDocument();
 
         if (longueur > 0) {
-            // Du texte est sélectionné → on l'applique directement au document
             doc.setCharacterAttributes(debut, longueur, attrs, false);
         } else {
-            // Rien n'est sélectionné → on mémorise le style pour la prochaine frappe
-            // getInputAttributes() retourne les attributs "en attente" sur le curseur
+            // Rien de sélectionné → mémoriser pour la prochaine frappe
             getInputAttributes().addAttributes(attrs);
         }
+    }
+    
+     /**
+     * Lit la liste d'effets depuis un {@link AttributeSet}.
+     *
+     * @param attrs les attributs à lire
+     * @return la liste existante, ou {@code null} si absente
+     */
+    @SuppressWarnings("unchecked")
+    private List<HEffetEntree> lireListeEffets(AttributeSet attrs) {
+        Object valeur = attrs.getAttribute(HEffectPainter.EFFECTS_LIST_ATTRIBUTE);
+        if (valeur instanceof List<?> liste && !liste.isEmpty()
+                && liste.get(0) instanceof HEffetEntree) {
+            return (List<HEffetEntree>) liste;
+        }
+        return null;
+    }
+
+    /**
+     * Construit une nouvelle liste en ajoutant ou remplaçant un effet.
+     *
+     * <p>Règle : si la liste contient déjà un effet du même type que
+     * {@code nouvelleEntree}, il est remplacé à la même position (mise à jour
+     * des paramètres). Sinon, l'entrée est ajoutée en fin de liste.</p>
+     *
+     * <p>Ce comportement est intuitif : réappliquer SHADOW met à jour l'ombre
+     * existante sans la dupliquer, mais ajouter OUTLINE sur une sélection qui
+     * a déjà SHADOW conserve les deux effets.</p>
+     *
+     * @param listeExistante la liste actuelle (peut être {@code null})
+     * @param nouvelleEntree l'entrée à ajouter ou remplacer
+     * @return une nouvelle liste (l'originale n'est jamais modifiée)
+     */
+    private List<HEffetEntree> construireListeAvecEffet(List<HEffetEntree> listeExistante,
+                                                         HEffetEntree nouvelleEntree) {
+        List<HEffetEntree> result = new ArrayList<>();
+
+        if (listeExistante != null) {
+            boolean remplace = false;
+            for (HEffetEntree entree : listeExistante) {
+                if (entree.getEffet() == nouvelleEntree.getEffet()) {
+                    // Même type → on remplace par les nouveaux paramètres
+                    result.add(nouvelleEntree);
+                    remplace = true;
+                } else {
+                    result.add(entree);
+                }
+            }
+            if (!remplace) {
+                // Type nouveau → on ajoute en fin de liste
+                result.add(nouvelleEntree);
+            }
+        } else {
+            // Pas de liste existante → on crée avec ce seul effet
+            result.add(nouvelleEntree);
+        }
+
+        return result;
+    }
+
+    /**
+     * Construit une nouvelle liste en retirant tous les effets d'un type donné.
+     *
+     * @param listeExistante la liste actuelle (peut être {@code null})
+     * @param effetARetirer  le type d'effet à supprimer de la liste
+     * @return une nouvelle liste sans les effets du type spécifié
+     */
+    private List<HEffetEntree> construireSansEffet(List<HEffetEntree> listeExistante,
+                                                    HTextEffect effetARetirer) {
+        if (listeExistante == null) return new ArrayList<>();
+
+        List<HEffetEntree> result = new ArrayList<>();
+        for (HEffetEntree entree : listeExistante) {
+            if (entree.getEffet() != effetARetirer) {
+                result.add(entree);
+            }
+        }
+        return result;
     }
 
     /**

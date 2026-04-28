@@ -5,65 +5,83 @@ import java.awt.*;
 import java.awt.font.TextLayout;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Moteur de rendu des effets typographiques pour {@link HTextArea}.
  *
- * <p>Cette classe est appelée par {@link HBasicTextAreaUI} lors du rendu du
- * composant, <em>avant</em> que Swing ne peigne le texte normal. Elle travaille
- * segment par segment : pour chaque portion de texte portant un
- * {@link HTextEffect} différent de {@code NONE}, elle lit la
- * {@link HTextEffectConfig} associée et délègue au moteur de peinture
- * correspondant.</p>
+ * <p>Appelé par {@link HBasicTextAreaUI#paintSafely(Graphics)} avant le rendu
+ * standard de Swing. Parcourt le document segment par segment et peint tous
+ * les effets enregistrés dans la liste {@link #EFFECTS_LIST_ATTRIBUTE}.</p>
  *
- * <h3>Clés d'attributs stockées dans le StyledDocument</h3>
+ * <h3>Architecture multi-effets</h3>
+ * <p>Chaque segment peut porter une {@code List<HEffetEntree>} — une liste
+ * ordonnée d'effets. {@link HEffectPainter} les peint dans l'ordre, de sorte
+ * qu'un segment peut simultanément avoir une ombre ET un contour par exemple.</p>
+ *
+ * <h3>Clés stockées dans le StyledDocument</h3>
  * <ul>
- *   <li>{@link #EFFECT_ATTRIBUTE}        — l'enum {@link HTextEffect}</li>
- *   <li>{@link #EFFECT_COLOR_ATTRIBUTE}  — la {@link Color} de l'effet</li>
- *   <li>{@link #EFFECT_CONFIG_ATTRIBUTE} — le {@link HTextEffectConfig}</li>
+ *   <li>{@link #EFFECTS_LIST_ATTRIBUTE} — {@code List<HEffetEntree>} (nouvelle clé principale)</li>
+ *   <li>{@link #EFFECT_ATTRIBUTE}        — rétrocompatibilité lecture seule</li>
+ *   <li>{@link #EFFECT_COLOR_ATTRIBUTE}  — rétrocompatibilité lecture seule</li>
+ *   <li>{@link #EFFECT_CONFIG_ATTRIBUTE} — rétrocompatibilité lecture seule</li>
  * </ul>
  *
  * @author FIDELE
- * @version 2.0
- * @see HTextEffect
- * @see HTextEffectConfig
- * @see HEffectDirection
- * @see HBasicTextAreaUI
+ * @version 3.0
  */
 public class HEffectPainter {
 
     // =========================================================================
-    // Clés d'attributs custom pour le StyledDocument
+    // Clés d'attributs dans le StyledDocument
     // =========================================================================
 
     /**
-     * Clé pour stocker le type d'effet ({@link HTextEffect}) dans le document.
+     * Clé principale (v3) : stocke une {@code List<HEffetEntree>}.
+     * C'est cette liste qu'on lit pour peindre les effets.
+     */
+    public static final Object EFFECTS_LIST_ATTRIBUTE = new AttributeKey("HEffectsList");
+
+    /**
+     * Clé legacy (v1/v2) — conservée pour la rétrocompatibilité.
+     * Plus utilisée en écriture depuis la v3.
      */
     public static final Object EFFECT_ATTRIBUTE = new AttributeKey("HTextEffect");
 
-    /**
-     * Clé pour stocker la couleur de l'effet ({@link Color}) dans le document.
-     */
+    /** Clé legacy : couleur d'effet. */
     public static final Object EFFECT_COLOR_ATTRIBUTE = new AttributeKey("HTextEffectColor");
 
-    /**
-     * Clé pour stocker la configuration de l'effet ({@link HTextEffectConfig})
-     * dans le document.
-     */
+    /** Clé legacy : configuration d'effet. */
     public static final Object EFFECT_CONFIG_ATTRIBUTE = new AttributeKey("HTextEffectConfig");
+
+    // =========================================================================
+    // Constantes visuelles
+    // =========================================================================
+
+    /** Décalage en pixels de l'ombre portée (SHADOW). */
+    private static final int SHADOW_OFFSET = 2;
+
+    /** Épaisseur par défaut du trait pour l'effet OUTLINE. */
+    private static final float OUTLINE_STROKE = 1.4f;
+
+    /** Nombre de couches pour l'effet LIGHT (halo). */
+    private static final int GLOW_LAYERS = 5;
+
+    /** Rayon maximum du halo LIGHT en pixels. */
+    private static final int GLOW_RADIUS = 4;
 
     // =========================================================================
     // Point d'entrée principal
     // =========================================================================
 
     /**
-     * Peint les effets typographiques pour toute la plage de texte visible.
+     * Peint tous les effets typographiques enregistrés sur le document.
      *
-     * <p>Appelée par {@link HBasicTextAreaUI#paintSafely(Graphics)} avant le
-     * rendu standard de Swing, pour que les effets apparaissent derrière le
-     * texte.</p>
+     * <p>Appelée avant {@code super.paintSafely()} dans {@link HBasicTextAreaUI}
+     * pour que les effets apparaissent visuellement derrière le texte principal.</p>
      *
-     * @param g    le contexte graphique (sera casté en {@link Graphics2D})
+     * @param g    contexte graphique (sera casté en {@link Graphics2D})
      * @param doc  le document stylisé du composant
      * @param view la vue racine de Swing (pour convertir position → pixels)
      */
@@ -81,7 +99,6 @@ public class HEffectPainter {
             g2.setRenderingHint(RenderingHints.KEY_RENDERING,
                     RenderingHints.VALUE_RENDER_QUALITY);
 
-            // Parcourir tous les éléments (segments) du document
             parcourirElements(g2, doc, view, doc.getDefaultRootElement());
 
         } finally {
@@ -95,7 +112,7 @@ public class HEffectPainter {
 
     /**
      * Parcourt récursivement les éléments du document.
-     * Seuls les éléments feuilles portent du texte et des attributs de style.
+     * Seuls les éléments feuilles portent du texte et des attributs.
      */
     private static void parcourirElements(Graphics2D g2, StyledDocument doc,
             View view, Element element) {
@@ -109,27 +126,46 @@ public class HEffectPainter {
     }
 
     /**
-     * Traite un segment feuille : si un effet est défini, calcule la position
-     * exacte du texte dans le composant et délègue au moteur de peinture.
+     * Traite un segment feuille : récupère sa liste d'effets et les peint tous.
      *
-     * <p>La position est calculée via {@code modelToView()} qui traduit un index
-     * de caractère (espace document) en coordonnées pixels (espace composant).
-     * L'ascent du {@link TextLayout} est ajouté au {@code y} du rectangle pour
-     * obtenir la baseline — le point d'ancrage que {@code layout.draw()} attend.</p>
+     * <h3>Correction bug 2 & 3 — le -1 conditionnel</h3>
+     * <p>Chaque paragraphe dans un {@code StyledDocument} se termine par un
+     * caractère {@code '\n'} (code 10) implicite ajouté par Swing. Ce caractère
+     * appartient toujours au <em>dernier</em> segment du paragraphe.
+     * L'ancienne version faisait systématiquement {@code endOffset - 1}, ce qui
+     * excluait le dernier caractère visible de tous les segments, même ceux
+     * qui ne contiennent pas de saut de ligne. Désormais on lit le vrai dernier
+     * caractère : si c'est {@code '\n'}, on soustrait 1 ; sinon on prend
+     * {@code endOffset} tel quel.</p>
      */
     private static void traiterSegment(Graphics2D g2, StyledDocument doc,
             View view, Element element) {
 
         AttributeSet attrs = element.getAttributes();
-        Object valeurEffet = attrs.getAttribute(EFFECT_ATTRIBUTE);
 
-        // Pas d'effet ou effet NONE → rien à faire, Swing s'en charge
-        if (!(valeurEffet instanceof HTextEffect effet) || effet == HTextEffect.NONE) {
+        // Lire la liste d'effets (architecture v3)
+        List<HEffetEntree> listeEffets = lireListeEffets(attrs);
+        if (listeEffets == null || listeEffets.isEmpty()) {
             return;
         }
 
         int debut = element.getStartOffset();
-        int fin   = element.getEndOffset() - 1; // -1 pour exclure le '\n' de fin
+        int finBrut = element.getEndOffset();
+
+        // ----------------------------------------------------------------
+        // Correction bug 2 : le -1 n'est appliqué QUE si le dernier
+        // caractère du segment est un '\n' (saut de paragraphe implicite).
+        // ----------------------------------------------------------------
+        int fin;
+        try {
+            String dernierChar = doc.getText(finBrut - 1, 1);
+            // '\n' = code 10 → c'est le saut implicite, on l'exclut
+            fin = (dernierChar.charAt(0) == '\n') ? finBrut - 1 : finBrut;
+        } catch (BadLocationException e) {
+            // En cas de position invalide, on exclut prudemment le dernier char
+            fin = finBrut - 1;
+        }
+
         if (debut >= fin) {
             return;
         }
@@ -140,29 +176,27 @@ public class HEffectPainter {
                 return;
             }
 
-            // Coordonnées du premier caractère du segment dans l'espace composant
+            // Position du segment dans le composant (coordonnées pixels)
             Rectangle rectDebut = calculerRectangle(view, debut);
             if (rectDebut == null) {
                 return;
             }
 
             Font police = resoudreFont(attrs);
-
-            // TextLayout pour mesurer la typométrie exacte de ce segment
             TextLayout layout = new TextLayout(texte, police, g2.getFontRenderContext());
 
-            // x = bord gauche du segment
-            // baseline = haut de la ligne + ascent du layout (comme Swing le fait en interne)
             int x        = rectDebut.x;
             int baseline = rectDebut.y + (int) Math.ceil(layout.getAscent());
 
-            // Lire la config — si absente, on utilise une config par défaut
-            HTextEffectConfig config = resoudreConfig(attrs);
-
-            // Lire la couleur de l'effet
-            Color couleurEffet = resoudreCouleurEffet(attrs);
-
-            peindreEffet(g2, layout, police, x, baseline, effet, couleurEffet, config);
+            // Peindre TOUS les effets de la liste dans l'ordre d'insertion
+            for (HEffetEntree entree : listeEffets) {
+                if (entree.getEffet() == HTextEffect.NONE) {
+                    continue;
+                }
+                Color couleur = resoudreCouleurEffet(attrs, entree.getCouleur());
+                peindreEffet(g2, layout, police, x, baseline,
+                        entree.getEffet(), couleur, entree.getConfig());
+            }
 
         } catch (BadLocationException e) {
             // Segment hors limites — on ignore silencieusement
@@ -170,20 +204,11 @@ public class HEffectPainter {
     }
 
     // =========================================================================
-    // Dispatch vers le bon moteur
+    // Dispatch
     // =========================================================================
 
     /**
-     * Dispatche vers le moteur de peinture correspondant à l'effet demandé.
-     *
-     * @param g2           contexte graphique
-     * @param layout       layout du segment, déjà calculé
-     * @param police       police résolue du segment
-     * @param x            position X du segment (bord gauche)
-     * @param y            baseline du segment
-     * @param effet        effet à appliquer
-     * @param couleurEffet couleur de l'effet
-     * @param config       paramètres de l'effet
+     * Dispatche vers le moteur de peinture correspondant à l'effet.
      */
     private static void peindreEffet(Graphics2D g2, TextLayout layout, Font police,
             int x, int y, HTextEffect effet, Color couleurEffet, HTextEffectConfig config) {
@@ -202,101 +227,63 @@ public class HEffectPainter {
             case OUTLINE    -> peindreContour(g2, layout, x, y, couleurEffet, config);
             case LIGHT      -> peindreLumiere(g2, layout, x, y, couleurEffet, config);
             case REFLECTION -> peindreReflection(g2, layout, x, y, config);
-            case NONE       -> {  }
+            case NONE       -> { /* jamais atteint */ }
         }
     }
 
     // =========================================================================
-    // Moteurs de peinture — SHADOW
+    // SHADOW
     // =========================================================================
 
     /**
      * Peint une ombre portée derrière le texte.
      *
-     * <h3>Direction</h3>
-     * <p>La {@link HEffectDirection} contenue dans {@code config} est traduite
-     * en un vecteur {@code (dx, dy)} :</p>
-     * <ul>
-     *   <li>BAS_DROITE  → (+distance, +distance)</li>
-     *   <li>BAS_GAUCHE  → (-distance, +distance)</li>
-     *   <li>HAUT_DROITE → (+distance, -distance)</li>
-     *   <li>HAUT_GAUCHE → (-distance, -distance)</li>
-     *   <li>CENTREE     → ombre dans les 4 diagonales simultanément</li>
-     * </ul>
-     *
-     * <h3>Flou simulé</h3>
-     * <p>Le flou est simulé par plusieurs couches d'ombres superposées, chacune
-     * légèrement décalée et de plus en plus transparente. Plus {@code config.getFlou()}
-     * est élevé, plus il y a de couches (0 = 1 couche, 5 = 6 couches).</p>
-     *
-     * @param g2           contexte graphique
-     * @param layout       layout du segment
-     * @param x            position X du texte (bord gauche)
-     * @param y            baseline du texte
-     * @param couleurOmbre couleur de l'ombre
-     * @param config       paramètres : direction, distance, flou, transparence
+     * <p>La {@link HEffectDirection} est traduite en vecteur {@code (dx, dy)}.
+     * Le flou est simulé par plusieurs couches de plus en plus transparentes
+     * et légèrement décalées. {@code CENTREE} peint dans les 4 diagonales.</p>
      */
     private static void peindreOmbre(Graphics2D g2, TextLayout layout,
             int x, int y, Color couleurOmbre, HTextEffectConfig config) {
 
-        int distance    = config.getDistance();
-        int flou        = config.getFlou();        // 0 à 5
-        int transparence = config.getTransparence(); // 0 à 255
+        int distance     = config.getDistance();
+        int flou         = config.getFlou();
+        int transparence = config.getTransparence();
         HEffectDirection direction = config.getDirection();
 
-        // Nombre de couches de flou : 1 couche si flou=0, 6 couches si flou=5
         int nbCouches = flou + 1;
 
         if (direction == HEffectDirection.CENTREE) {
-            // Ombre centrée : on peint dans les 4 directions diagonales
             int[] signesX = {+1, -1, +1, -1};
             int[] signesY = {+1, +1, -1, -1};
-
-            for (int dir = 0; dir < 4; dir++) {
-                peindreOmbreDansDirection(g2, layout, x, y,
-                        couleurOmbre, transparence, nbCouches, distance,
-                        signesX[dir], signesY[dir]);
+            for (int d = 0; d < 4; d++) {
+                peindreOmbreDansDirection(g2, layout, x, y, couleurOmbre,
+                        transparence, nbCouches, distance, signesX[d], signesY[d]);
             }
         } else {
-            // Ombre directionnelle classique
             int[] vecteur = resoudreVecteurDirection(direction);
-            peindreOmbreDansDirection(g2, layout, x, y,
-                    couleurOmbre, transparence, nbCouches, distance,
-                    vecteur[0], vecteur[1]);
+            peindreOmbreDansDirection(g2, layout, x, y, couleurOmbre,
+                    transparence, nbCouches, distance, vecteur[0], vecteur[1]);
         }
     }
 
     /**
      * Peint toutes les couches de flou d'une ombre dans une seule direction.
      *
-     * <p>Chaque couche est légèrement plus décalée et plus transparente que la
-     * précédente, créant l'illusion d'une diffusion progressive de l'ombre.</p>
-     *
-     * @param g2          contexte graphique
-     * @param layout      layout du segment
-     * @param x           position X de base du texte
-     * @param y           baseline de base du texte
-     * @param couleur     couleur de base de l'ombre
-     * @param transparence alpha maximal de l'ombre (couche la plus proche)
-     * @param nbCouches   nombre de couches à peindre (1 + niveau de flou)
-     * @param distance    décalage maximal en pixels
-     * @param signeX      signe du décalage horizontal (-1 ou +1)
-     * @param signeY      signe du décalage vertical (-1 ou +1)
+     * <p>Couche 0 = la plus proche du texte (la plus opaque et la moins décalée).
+     * Dernière couche = la plus éloignée (la plus transparente).</p>
      */
     private static void peindreOmbreDansDirection(Graphics2D g2, TextLayout layout,
             int x, int y, Color couleur, int transparence, int nbCouches,
             int distance, int signeX, int signeY) {
 
         for (int couche = 0; couche < nbCouches; couche++) {
-            // La couche 0 est la plus proche du texte (la plus opaque)
-            // La dernière couche est la plus éloignée (la plus transparente)
+
             float facteurOpacite = (nbCouches == 1)
                     ? 1f
                     : 1f - ((float) couche / (nbCouches - 1)) * 0.7f;
 
             int alpha = Math.clamp(Math.round(transparence * facteurOpacite), 0, 255);
 
-            // Le décalage augmente légèrement d'une couche à l'autre pour simuler la diffusion
             float facteurDecalage = (nbCouches == 1)
                     ? 1f
                     : 0.5f + 0.5f * ((float) couche / (nbCouches - 1));
@@ -315,10 +302,7 @@ public class HEffectPainter {
     }
 
     /**
-     * Traduit une {@link HEffectDirection} en vecteur de signe {@code [signeX, signeY]}.
-     *
-     * @param direction la direction à traduire
-     * @return un tableau {@code [signeX, signeY]} dont chaque valeur est -1 ou +1
+     * Traduit une {@link HEffectDirection} en vecteur de signes {@code [signeX, signeY]}.
      */
     private static int[] resoudreVecteurDirection(HEffectDirection direction) {
         return switch (direction) {
@@ -326,50 +310,30 @@ public class HEffectPainter {
             case BAS_GAUCHE  -> new int[]{-1,  1};
             case HAUT_DROITE -> new int[]{ 1, -1};
             case HAUT_GAUCHE -> new int[]{-1, -1};
-            // CENTREE est traité séparément dans peindreOmbre()
             default          -> new int[]{ 1,  1};
         };
     }
 
     // =========================================================================
-    // Moteurs de peinture — OUTLINE
+    // OUTLINE
     // =========================================================================
 
     /**
-     * Peint uniquement le contour vectoriel des glyphes (effet outline).
+     * Peint le contour vectoriel des glyphes.
      *
-     * <p>{@link TextLayout#getOutline(AffineTransform)} retourne la {@link Shape}
-     * exacte du contour de chaque lettre, translatée à la position du segment.
-     * On trace ce contour sans remplissage avec un trait dont l'épaisseur
-     * correspond à {@code config.getDistance()}.</p>
-     *
-     * <p>Swing repeint le texte par-dessus après cette passe, ce qui donne
-     * l'effet "lettre remplie avec un contour visible".</p>
-     *
-     * @param g2           contexte graphique
-     * @param layout       layout du segment
-     * @param x            position X du texte
-     * @param y            baseline du texte
-     * @param couleurContour couleur du trait de contour
-     * @param config       paramètres : distance (= épaisseur), transparence
+     * <p>{@code config.getDistance()} contrôle l'épaisseur du trait (min 0.5px).
+     * La forme est obtenue via {@link TextLayout#getOutline(AffineTransform)}
+     * translateée à la position exacte du segment.</p>
      */
     private static void peindreContour(Graphics2D g2, TextLayout layout,
             int x, int y, Color couleurContour, HTextEffectConfig config) {
 
-        // distance = épaisseur du trait (minimum 0.5px pour rester visible)
         float epaisseur  = Math.max(0.5f, config.getDistance());
         int transparence = config.getTransparence();
 
-        // Translate la forme vectorielle des lettres à la position exacte du segment
-        Shape contour = layout.getOutline(
-                AffineTransform.getTranslateInstance(x, y)
-        );
+        Shape contour = layout.getOutline(AffineTransform.getTranslateInstance(x, y));
 
-        g2.setStroke(new BasicStroke(
-                epaisseur,
-                BasicStroke.CAP_ROUND,
-                BasicStroke.JOIN_ROUND
-        ));
+        g2.setStroke(new BasicStroke(epaisseur, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g2.setColor(new Color(
                 couleurContour.getRed(),
                 couleurContour.getGreen(),
@@ -380,46 +344,27 @@ public class HEffectPainter {
     }
 
     // =========================================================================
-    // Moteurs de peinture — LIGHT
+    // LIGHT
     // =========================================================================
 
     /**
-     * Peint un halo lumineux (effet lumière/glow) autour du texte.
+     * Peint un halo lumineux autour du texte.
      *
-     * <p>Technique : on dessine le {@link TextLayout} plusieurs fois en couches
-     * concentriques, chacune décalée d'un pixel supplémentaire dans les 8
-     * directions cardinales et de plus en plus transparente en s'éloignant du
-     * centre. L'ensemble simule la diffusion lumineuse d'un halo.</p>
-     *
-     * <p>Le paramètre {@code config.getDistance()} contrôle le rayon maximal du
-     * halo. {@code config.getTransparence()} contrôle l'alpha de la couche
-     * intérieure (la plus opaque).</p>
-     *
-     * @param g2           contexte graphique
-     * @param layout       layout du segment
-     * @param x            position X du texte
-     * @param y            baseline du texte
-     * @param couleurHalo  couleur du halo
-     * @param config       paramètres : distance (= rayon), transparence
+     * <p>Technique : {@value #GLOW_LAYERS} couches concentriques, chacune
+     * décalée dans les 8 directions et de plus en plus transparente en
+     * s'éloignant du centre. {@code config.getDistance()} = rayon maximal.</p>
      */
     private static void peindreLumiere(Graphics2D g2, TextLayout layout,
             int x, int y, Color couleurHalo, HTextEffectConfig config) {
 
-        // Nombre de couches fixe (5 couches suffisent pour un rendu fluide)
-        final int NB_COUCHES = 5;
-
-        // Le rayon est contrôlé par config.getDistance()
         int rayonMax     = Math.max(1, config.getDistance());
         int transparence = config.getTransparence();
 
-        // On peint du plus éloigné vers le centre pour que les couches
-        // intérieures (plus opaques) soient dessinées en dernier et dominent
-        for (int couche = NB_COUCHES; couche >= 1; couche--) {
-            float facteur = (float) couche / NB_COUCHES;
+        // Du plus éloigné vers le centre pour que les couches intérieures dominent
+        for (int couche = GLOW_LAYERS; couche >= 1; couche--) {
+            float facteur = (float) couche / GLOW_LAYERS;
             int   rayon   = Math.round(facteur * rayonMax);
 
-            // Transparence décroissante en s'éloignant du centre :
-            // couche intérieure = transparence config, couche externe ≈ 20
             int alpha = Math.round((1f - facteur) * transparence + 20);
             alpha = Math.clamp(alpha, 0, 255);
 
@@ -430,12 +375,9 @@ public class HEffectPainter {
                     alpha
             ));
 
-            // Peindre dans les 8 directions pour un halo uniforme
             for (int dx = -rayon; dx <= rayon; dx += Math.max(1, rayon)) {
                 for (int dy = -rayon; dy <= rayon; dy += Math.max(1, rayon)) {
-                    if (dx == 0 && dy == 0) {
-                        continue; // le centre est peint par Swing
-                    }
+                    if (dx == 0 && dy == 0) continue;
                     layout.draw(g2, x + dx, y + dy);
                 }
             }
@@ -443,31 +385,21 @@ public class HEffectPainter {
     }
 
     // =========================================================================
-    // Moteurs de peinture — REFLECTION
+    // REFLECTION
     // =========================================================================
 
     /**
-     * Peint un reflet en miroir sous le texte (effet réflexion).
+     * Peint un reflet en miroir sous le texte.
      *
-     * <h3>Algorithme</h3>
+     * <p>Algorithme :</p>
      * <ol>
-     *   <li>Obtenir la {@link Shape} vectorielle du texte via
-     *       {@link TextLayout#getOutline(AffineTransform)}.</li>
-     *   <li>Calculer l'axe de symétrie : {@code baseline + descent + espacement}.</li>
-     *   <li>Appliquer une transformation miroir (scale 1, -1) autour de cet axe.</li>
-     *   <li>Remplir la forme obtenue avec un dégradé vertical qui s'efface
-     *       progressivement vers le bas.</li>
+     *   <li>Forme vectorielle du texte via {@link TextLayout#getOutline}.</li>
+     *   <li>Axe de symétrie = baseline + descent + espacement.</li>
+     *   <li>Transformation miroir : {@code translate(0, 2*axe) ∘ scale(1,-1)}.</li>
+     *   <li>Remplissage avec un dégradé opaque→transparent vers le bas.</li>
      * </ol>
      *
-     * <p>{@code config.getDistance()} contrôle l'espace en pixels entre le bas
-     * du texte et le début du reflet. {@code config.getTransparence()} contrôle
-     * l'opacité maximale du reflet (en haut).</p>
-     *
-     * @param g2     contexte graphique
-     * @param layout layout du segment
-     * @param x      position X du texte
-     * @param y      baseline du texte
-     * @param config paramètres : distance (= espacement), transparence
+     * <p>{@code config.getDistance()} = espace entre le bas du texte et le reflet.</p>
      */
     private static void peindreReflection(Graphics2D g2, TextLayout layout,
             int x, int y, HTextEffectConfig config) {
@@ -475,19 +407,11 @@ public class HEffectPainter {
         int espacement   = Math.max(0, config.getDistance());
         int transparence = Math.clamp(config.getTransparence(), 0, 255);
 
-        // Étape 1 — Forme vectorielle du texte à sa position réelle
-        Shape formeOriginale = layout.getOutline(
-                AffineTransform.getTranslateInstance(x, y)
-        );
+        Shape formeOriginale = layout.getOutline(AffineTransform.getTranslateInstance(x, y));
 
-        // Étape 2 — Axe de symétrie = pied du texte + espacement voulu
-        // descent = distance entre la baseline et le bas des lettres descendantes
-        float descent    = layout.getDescent();
-        float axeMiroir  = y + descent + espacement;
+        float descent   = layout.getDescent();
+        float axeMiroir = y + descent + espacement;
 
-        // Étape 3 — Transformation miroir vertical autour de l'axe
-        // Réflexion : y' = 2 * axeMiroir - y
-        // Décomposée en : translate(0, 2*axe) ∘ scale(1, -1)
         AffineTransform miroir = new AffineTransform();
         miroir.translate(0, 2.0 * axeMiroir);
         miroir.scale(1, -1);
@@ -495,38 +419,44 @@ public class HEffectPainter {
         Shape formeReflet = miroir.createTransformedShape(formeOriginale);
         Rectangle2D bounds = formeReflet.getBounds2D();
 
-        // Étape 4 — Dégradé vertical : opaque en haut du reflet → transparent en bas
-        float yDebut  = (float) bounds.getMinY();
-        float yFin    = (float) bounds.getMaxY();
-
-        // On évite une hauteur nulle qui ferait planter GradientPaint
-        if (yFin <= yDebut) {
-            return;
-        }
+        float yDebut = (float) bounds.getMinY();
+        float yFin   = (float) bounds.getMaxY();
+        if (yFin <= yDebut) return;
 
         GradientPaint degrade = new GradientPaint(
                 0, yDebut, new Color(0, 0, 0, transparence),
                 0, yFin,   new Color(0, 0, 0, 0)
         );
 
-        // Étape 5 — Peinture du reflet
         g2.setPaint(degrade);
         g2.fill(formeReflet);
     }
 
     // =========================================================================
-    // Méthodes utilitaires privées
+    // Utilitaires privés
     // =========================================================================
+
+    /**
+     * Lit la liste d'effets depuis les attributs d'un segment.
+     *
+     * <p>Si aucune liste n'est trouvée (segment sans effet ou segment créé
+     * avant la v3), retourne {@code null}.</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static List<HEffetEntree> lireListeEffets(AttributeSet attrs) {
+        Object valeur = attrs.getAttribute(EFFECTS_LIST_ATTRIBUTE);
+        if (valeur instanceof List<?> liste && !liste.isEmpty()
+                && liste.get(0) instanceof HEffetEntree) {
+            return (List<HEffetEntree>) liste;
+        }
+        return null;
+    }
 
     /**
      * Calcule le rectangle en pixels correspondant à une position dans le document.
      *
-     * <p>{@code view.modelToView()} traduit un index de caractère en coordonnées
-     * écran. C'est le pont entre le modèle (le texte) et la vue (les pixels).</p>
-     *
-     * @param view la vue racine du composant
-     * @param pos  la position dans le document
-     * @return le rectangle en pixels, ou {@code null} en cas d'erreur
+     * <p>{@code view.modelToView()} est le pont entre le modèle (index de caractère)
+     * et la vue (coordonnées pixels dans le composant).</p>
      */
     private static Rectangle calculerRectangle(View view, int pos) {
         try {
@@ -542,10 +472,8 @@ public class HEffectPainter {
     }
 
     /**
-     * Reconstruit la {@link Font} à partir des attributs d'un segment.
-     *
-     * @param attrs les attributs du segment
-     * @return la police correspondante, avec des valeurs de repli si besoin
+     * Reconstruit la {@link Font} à partir des attributs du segment.
+     * Applique des valeurs de repli si les attributs sont absents.
      */
     private static Font resoudreFont(AttributeSet attrs) {
         String famille = StyleConstants.getFontFamily(attrs);
@@ -557,7 +485,6 @@ public class HEffectPainter {
         if (gras)   style |= Font.BOLD;
         if (italic) style |= Font.ITALIC;
 
-        // Valeurs de repli si les attributs sont absents du segment
         if (famille == null || famille.isBlank()) famille = "SansSerif";
         if (taille <= 0)                          taille  = 12;
 
@@ -565,50 +492,27 @@ public class HEffectPainter {
     }
 
     /**
-     * Lit la couleur d'effet depuis les attributs du segment.
+     * Résout la couleur à utiliser pour un effet.
      *
      * <p>Ordre de priorité :</p>
      * <ol>
-     *   <li>L'attribut custom {@link #EFFECT_COLOR_ATTRIBUTE}</li>
-     *   <li>La couleur de texte (Foreground) du segment</li>
+     *   <li>La couleur stockée dans l'{@link HEffetEntree} (choix explicite de l'utilisateur)</li>
+     *   <li>La couleur de texte du segment ({@code StyleConstants.Foreground})</li>
      *   <li>Gris neutre par défaut</li>
      * </ol>
      *
-     * @param attrs les attributs du segment
-     * @return la couleur à utiliser pour l'effet
+     * @param attrs          attributs du segment (pour le fallback Foreground)
+     * @param couleurEntree  couleur stockée dans l'entrée d'effet ({@code null} possible)
      */
-    private static Color resoudreCouleurEffet(AttributeSet attrs) {
-        // 1. Couleur explicitement choisie pour l'effet
-        Object valeur = attrs.getAttribute(EFFECT_COLOR_ATTRIBUTE);
-        if (valeur instanceof Color couleur) {
-            return couleur;
+    private static Color resoudreCouleurEffet(AttributeSet attrs, Color couleurEntree) {
+        if (couleurEntree != null) {
+            return couleurEntree;
         }
-        // 2. Couleur de texte du segment
         Color foreground = StyleConstants.getForeground(attrs);
         if (foreground != null) {
             return foreground;
         }
-        // 3. Repli neutre
         return Color.GRAY;
-    }
-
-    /**
-     * Lit la configuration d'effet depuis les attributs du segment.
-     *
-     * <p>Si aucune config n'est trouvée (l'effet a été appliqué sans config),
-     * on retourne une instance par défaut pour ne pas casser les appels
-     * existants faits avec les anciennes méthodes de {@link HTextArea}.</p>
-     *
-     * @param attrs les attributs du segment
-     * @return la config trouvée, ou une config par défaut
-     */
-    private static HTextEffectConfig resoudreConfig(AttributeSet attrs) {
-        Object valeur = attrs.getAttribute(EFFECT_CONFIG_ATTRIBUTE);
-        if (valeur instanceof HTextEffectConfig config) {
-            return config;
-        }
-        // Compatibilité ascendante : si pas de config, on utilise les valeurs par défaut
-        return new HTextEffectConfig();
     }
 
     // =========================================================================
@@ -618,12 +522,9 @@ public class HEffectPainter {
     /**
      * Clé d'attribut typée pour le {@link StyledDocument}.
      *
-     * <p>Swing identifie les attributs par des objets utilisés comme clés dans
-     * une {@code AttributeSet}. On crée nos propres clés pour éviter toute
+     * <p>Swing identifie les attributs par identité d'objet ({@code ==}) dans
+     * une {@code AttributeSet}. On crée nos propres instances pour éviter toute
      * collision avec les clés standard de {@link StyleConstants}.</p>
-     *
-     * <p>La méthode {@code toString()} est importante : Swing l'utilise lors
-     * de la sérialisation et du débogage des attributs.</p>
      */
     private static final class AttributeKey {
         private final String nom;
