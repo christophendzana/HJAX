@@ -1,6 +1,5 @@
-package stable;
+package hsupertable;
 
-import hsupertable.*;
 import java.awt.Color;
 import java.awt.Insets;
 import java.io.Serializable;
@@ -91,7 +90,8 @@ public class HSuperTableCellModel implements Serializable {
 
     // =========================================================================
     // DIRECTION DU TEXTE
-    // Les constantes valides sont déclarées dans HSuperTable.
+    // Stockée sous forme d'entier pour éviter une dépendance circulaire avec
+    // HSuperTable. Les constantes valides sont déclarées dans HSuperTable.
     // =========================================================================
     /**
      * Direction du texte dans la cellule. Valeurs attendues :
@@ -301,7 +301,7 @@ public class HSuperTableCellModel implements Serializable {
     }
 
     /**
-     * Applique la même bordure sur les quatre côtés d'un coup. Sera utilisée pour
+     * Applique la même bordure sur les quatre côtés d'un coup. Pratique pour
      * les méthodes setBorderAll() de HSuperTable.
      *
      * @param color couleur de la bordure
@@ -419,7 +419,8 @@ public class HSuperTableCellModel implements Serializable {
     // =========================================================================
     /**
      * Remet la cellule dans son état initial — comme si elle venait d'être
-     * créée. Sera utilisée quand on efface le formatage d'une cellule 
+     * créée. Utile quand on efface le formatage d'une cellule via l'API de
+     * HSuperTable.
      */
     public void reset() {
         background = null;
@@ -432,7 +433,7 @@ public class HSuperTableCellModel implements Serializable {
     }
 
     /**
-     * Crée une copie indépendante de cette cellule. Sera utilisée lors du déplacement
+     * Crée une copie indépendante de cette cellule. Utile lors du déplacement
      * ou de la duplication de lignes/colonnes.
      */
     public HSuperTableCellModel copy() {
