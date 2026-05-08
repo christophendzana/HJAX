@@ -10,47 +10,19 @@ import java.awt.geom.AffineTransform;
 /**
  * HBasicTableUI — Moteur de rendu visuel de HSuperTable.
  *
- * C'est ici que tout ce qui est "dessin" se passe. Cette classe remplace le
- * moteur de rendu par défaut de JTable pour prendre en charge :
- *
- * - La fusion de cellules : les cellules absorbées sont sautées, la cellule
- * principale est peinte sur toute la zone fusionnée.
- *
- * - Les bordures personnalisées par cellule, indépendantes de la grille globale
- * du tableau.
- *
- * - L'alignement horizontal et vertical du contenu dans chaque cellule.
- *
- * - La direction du texte : horizontal, vertical vers le haut, vertical vers le
- * bas.
- *
- * - Les marges internes par cellule.
- *
- * - Tous les effets visuels existants : survol, surbrillance, sélection, bandes
- * de couleur, en-tête, ligne totale.
- *
- * Point d'architecture important : cette classe ne connaît que HSuperTable et
- * HDefaultTableModel. Elle ne touche jamais aux données métier — elle lit, elle
- * dessine, c'est tout.
- *
  * @author FIDELE
  * @version 2.0
  */
 public class HBasicTableUI extends BasicTableUI {
 
-    // =========================================================================
     // CONSTANTES DE RENDU
-    // =========================================================================
     private static final int CELL_PADDING_H = 12;  // padding horizontal par défaut
     private static final int CELL_PADDING_V = 6;   // padding vertical par défaut
     private static final int OVERLAY_ALPHA = 18;  // transparence des superpositions
 
-    // =========================================================================
     // RENDERER DE L'EN-TÊTE
-    // =========================================================================
     /**
-     * Renderer de l'en-tête — fond coloré, texte en gras, bordure basse. Pas de
-     * logique de fusion ici : l'en-tête reste toujours une ligne simple.
+     * Renderer de l'en-tête — fond coloré, texte en gras, bordure basse.
      */
     private class ModernHeaderRenderer extends DefaultTableCellRenderer {
 
@@ -63,6 +35,7 @@ public class HBasicTableUI extends BasicTableUI {
             if (!(jTable instanceof HSuperTable)) {
                 return this;
             }
+
             HSuperTable t = (HSuperTable) jTable;
             HSuperTableStyle style = t.getTableStyle();
 
@@ -204,11 +177,14 @@ public class HBasicTableUI extends BasicTableUI {
     // MÉTHODE PRINCIPALE DE PEINTURE
     // =========================================================================
     /**
-     * Point d'entrée du rendu. On peint dans cet ordre : 1. Le fond du tableau
+     * Point d'entrée du rendu.On peint dans cet ordre : 1.Le fond du tableau
      * (couleur unie derrière tout) 2. Les cellules (en sautant les absorbées,
      * en élargissant les fusionnées) 3. La grille globale (si activée) 4. Les
      * bordures custom par cellule (par-dessus la grille) 5. Les superpositions
      * de sélection 6. L'indicateur de focus
+     *
+     * @param g
+     * @param c
      */
     @Override
     public void paint(Graphics g, JComponent c) {
@@ -498,37 +474,41 @@ public class HBasicTableUI extends BasicTableUI {
      * d'une zone fusionnée pour ne pas "couper" visuellement la fusion.
      */
     private void paintGlobalGrid(Graphics2D g2, HSuperTable t,
-                              int firstRow, int lastRow,
-                              int firstCol, int lastCol) {
+            int firstRow, int lastRow,
+            int firstCol, int lastCol) {
 
-    HSuperDefaultTableModel model = t.getHModel();
-    Color gridColor = t.getGridColor();
-    if (gridColor == null) gridColor = new Color(220, 220, 220);
+        HSuperDefaultTableModel model = t.getHModel();
+        Color gridColor = t.getGridColor();
+        if (gridColor == null) {
+            gridColor = new Color(220, 220, 220);
+        }
 
-    g2.setColor(gridColor);
-    g2.setStroke(new BasicStroke(1f));
+        g2.setColor(gridColor);
+        g2.setStroke(new BasicStroke(1f));
 
-    for (int row = firstRow; row <= lastRow; row++) {
-        for (int col = firstCol; col <= lastCol; col++) {
+        for (int row = firstRow; row <= lastRow; row++) {
+            for (int col = firstCol; col <= lastCol; col++) {
 
-            // On ne dessine rien pour les cellules absorbées
-            if (model.isAbsorbed(row, col)) continue;
+                // On ne dessine rien pour les cellules absorbées
+                if (model.isAbsorbed(row, col)) {
+                    continue;
+                }
 
-            HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
-            Rectangle r = (cell.spanRow > 1 || cell.spanCol > 1)
-                          ? computeMergedRect(t, row, col,
-                                             cell.spanRow, cell.spanCol)
-                          : t.getCellRect(row, col, false);
+                HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
+                Rectangle r = (cell.spanRow > 1 || cell.spanCol > 1)
+                        ? computeMergedRect(t, row, col,
+                                cell.spanRow, cell.spanCol)
+                        : t.getCellRect(row, col, false);
 
-            // Ligne du bas — seulement si on n'est pas dans une fusion
-            // qui continue vers le bas
-            g2.drawLine(r.x, r.y + r.height, r.x + r.width, r.y + r.height);
+                // Ligne du bas — seulement si on n'est pas dans une fusion
+                // qui continue vers le bas
+                g2.drawLine(r.x, r.y + r.height, r.x + r.width, r.y + r.height);
 
-            // Ligne de droite
-            g2.drawLine(r.x + r.width, r.y, r.x + r.width, r.y + r.height);
+                // Ligne de droite
+                g2.drawLine(r.x + r.width, r.y, r.x + r.width, r.y + r.height);
+            }
         }
     }
-}
 
     // =========================================================================
     // BORDURES CUSTOM PAR CELLULE
@@ -542,50 +522,54 @@ public class HBasicTableUI extends BasicTableUI {
      * principale qui porte les bordures de toute la zone fusionnée.
      */
     private void paintCustomBorders(Graphics2D g2, HSuperTable t, int row, int col) {
-    HSuperDefaultTableModel model = t.getHModel();
+        HSuperDefaultTableModel model = t.getHModel();
 
-    // Les absorbées n'ont pas de bordures propres
-    if (model.isAbsorbed(row, col)) return;
+        // Les absorbées n'ont pas de bordures propres
+        if (model.isAbsorbed(row, col)) {
+            return;
+        }
 
-    HSuperTableCellModel cModel = model.getCellModel(row, col);
-    if (!cModel.hasAnyBorder()) return;
+        HSuperTableCellModel cModel = model.getCellModel(row, col);
+        if (!cModel.hasAnyBorder()) {
+            return;
+        }
 
-    // ── POINT CLÉ : on utilise le rectangle FUSIONNÉ, pas le rectangle de base ──
-    HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
-    Rectangle rect = (cell.spanRow > 1 || cell.spanCol > 1)
-                     ? computeMergedRect(t, row, col, cell.spanRow, cell.spanCol)
-                     : t.getCellRect(row, col, false);
+        // ── POINT CLÉ : on utilise le rectangle FUSIONNÉ, pas le rectangle de base ──
+        HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
+        Rectangle rect = (cell.spanRow > 1 || cell.spanCol > 1)
+                ? computeMergedRect(t, row, col, cell.spanRow, cell.spanCol)
+                : t.getCellRect(row, col, false);
 
-    // Dessiner uniquement sur le périmètre du rectangle fusionné
-    if (cModel.hasBorderTop()) {
-        g2.setColor(cModel.getBorderTopColor());
-        g2.setStroke(createStroke(cModel.getBorderTopThickness(),
-                                  cModel.getBorderTopStyle()));
-        g2.drawLine(rect.x, rect.y, rect.x + rect.width, rect.y);
-    }
-    if (cModel.hasBorderBottom()) {
-        g2.setColor(cModel.getBorderBottomColor());
-        g2.setStroke(createStroke(cModel.getBorderBottomThickness(),
-                                  cModel.getBorderBottomStyle()));
-        g2.drawLine(rect.x, rect.y + rect.height,
+        // Dessiner uniquement sur le périmètre du rectangle fusionné
+        if (cModel.hasBorderTop()) {
+            g2.setColor(cModel.getBorderTopColor());
+            g2.setStroke(createStroke(cModel.getBorderTopThickness(),
+                    cModel.getBorderTopStyle()));
+            g2.drawLine(rect.x, rect.y, rect.x + rect.width, rect.y);
+        }
+        if (cModel.hasBorderBottom()) {
+            g2.setColor(cModel.getBorderBottomColor());
+            g2.setStroke(createStroke(cModel.getBorderBottomThickness(),
+                    cModel.getBorderBottomStyle()));
+            g2.drawLine(rect.x, rect.y + rect.height,
                     rect.x + rect.width, rect.y + rect.height);
-    }
-    if (cModel.hasBorderLeft()) {
-        g2.setColor(cModel.getBorderLeftColor());
-        g2.setStroke(createStroke(cModel.getBorderLeftThickness(),
-                                  cModel.getBorderLeftStyle()));
-        g2.drawLine(rect.x, rect.y, rect.x, rect.y + rect.height);
-    }
-    if (cModel.hasBorderRight()) {
-        g2.setColor(cModel.getBorderRightColor());
-        g2.setStroke(createStroke(cModel.getBorderRightThickness(),
-                                  cModel.getBorderRightStyle()));
-        g2.drawLine(rect.x + rect.width, rect.y,
+        }
+        if (cModel.hasBorderLeft()) {
+            g2.setColor(cModel.getBorderLeftColor());
+            g2.setStroke(createStroke(cModel.getBorderLeftThickness(),
+                    cModel.getBorderLeftStyle()));
+            g2.drawLine(rect.x, rect.y, rect.x, rect.y + rect.height);
+        }
+        if (cModel.hasBorderRight()) {
+            g2.setColor(cModel.getBorderRightColor());
+            g2.setStroke(createStroke(cModel.getBorderRightThickness(),
+                    cModel.getBorderRightStyle()));
+            g2.drawLine(rect.x + rect.width, rect.y,
                     rect.x + rect.width, rect.y + rect.height);
-    }
+        }
 
-    g2.setStroke(new BasicStroke(1f));
-}
+        g2.setStroke(new BasicStroke(1f));
+    }
 
     /**
      * Crée un BasicStroke selon l'épaisseur et le style. Les styles
@@ -617,7 +601,6 @@ public class HBasicTableUI extends BasicTableUI {
     // =========================================================================
     /**
      * Dessine une superposition semi-transparente sur les lignes sélectionnées.
-     * L'effet est léger pour rester lisible.
      */
     private void paintSelectionOverlays(Graphics2D g2, HSuperTable t) {
         for (Integer selectedRow : t.getRowsSelected()) {
@@ -668,9 +651,7 @@ public class HBasicTableUI extends BasicTableUI {
     // RÉSOLUTION DE LA COULEUR DE FOND
     // =========================================================================
     /**
-     * Détermine la couleur de fond d'une cellule selon les priorités suivantes
-     * :
-     *
+     * Détermine la couleur de fond d'une cellule selon les priorités suivantes:
      * 1. Couleur custom de la cellule individuelle (HTableCellModel) 2. Couleur
      * custom de la ligne (setRowBackground) 3. Ligne en surbrillance
      * (highlightedRow) 4. Ligne survolée (hoveredRow) 5. Ligne sélectionnée 6.
@@ -681,16 +662,17 @@ public class HBasicTableUI extends BasicTableUI {
      * Cette méthode centralise toute la logique de couleur pour éviter qu'elle
      * soit éparpillée entre le renderer et le paint().
      */
-    private Color resolveCellBackground(HSuperTable t, HSuperTableStyle style, int row, int col) {
+    private Color resolveCellBackground(HSuperTable t, HSuperTableStyle style,
+            int row, int col) {
         HSuperDefaultTableModel model = t.getHModel();
         HSuperTableCellModel cModel = model.getCellModel(row, col);
 
-        // 1. Couleur custom individuelle sur la cellule
+        // 1. Couleur custom individuelle — priorité absolue
         if (cModel.hasBackground()) {
             return cModel.getBackground();
         }
 
-        // 2. Couleur custom de toute la ligne (ancienne API, conservée)
+        // 2. Couleur custom de ligne (ancienne API)
         Color rowBg = t.getRowBackground(row);
         if (rowBg != null) {
             return rowBg;
@@ -708,7 +690,19 @@ public class HBasicTableUI extends BasicTableUI {
                     : new Color(13, 110, 253, 20);
         }
 
-        // 5. Ligne sélectionnée
+        // 5. Cellule dans la sélection de zone (CellRange) — NOUVEAU
+        //    Légèrement plus marqué que le hover pour bien délimiter la zone
+        if (t.hasSelection() && t.getSelection().contains(row, col)) {
+            return style != null
+                    ? new Color(
+                            style.getSelectionBackground().getRed(),
+                            style.getSelectionBackground().getGreen(),
+                            style.getSelectionBackground().getBlue(),
+                            70) // alpha plus marqué que le hover
+                    : new Color(13, 110, 253, 70);
+        }
+
+        // 6. Ligne sélectionnée (ancienne sélection par lignes)
         if (t.getRowsSelected().contains(row)) {
             return style != null ? style.getSelectionBackground()
                     : new Color(13, 110, 253, 30);
@@ -718,12 +712,12 @@ public class HBasicTableUI extends BasicTableUI {
             return Color.WHITE;
         }
 
-        // 6. Ligne totale (dernière ligne si option activée)
+        // 7. Ligne totale
         if (t.isTotalRowEnabled() && row == t.getRowCount() - 1) {
             return style.getTotalRowBackground();
         }
 
-        // 7. Première ou dernière colonne mise en valeur
+        // 8. Première / dernière colonne
         if (t.isFirstColumnHighlighted() && col == 0) {
             return style.getFirstColumnBackground();
         }
@@ -731,13 +725,13 @@ public class HBasicTableUI extends BasicTableUI {
             return style.getLastColumnBackground();
         }
 
-        // 8. Bandes de colonnes (priorité sur bandes de lignes si les deux sont actives)
+        // 9. Bandes de colonnes
         if (t.isBandedColumns()) {
             return (col % 2 == 0) ? style.getCellBackground()
                     : style.getCellAlternateBackground();
         }
 
-        // 9. Alternance de lignes (zebra)
+        // 10. Alternance de lignes
         if (t.isBandedRows()) {
             return (row % 2 == 0) ? style.getCellBackground()
                     : style.getCellAlternateBackground();
