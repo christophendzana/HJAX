@@ -130,15 +130,13 @@ public class HSuperTableController {
         table.addMouseMotionListener(motionListener);
         table.addKeyListener(keyListener);
         table.addFocusListener(focusListener);
-        
+
     }
 
     // =========================================================================
     // GESTION SOURIS — CLIC
     // =========================================================================
     private void handleMouseClick(MouseEvent e) {
-         System.out.println("mouseClicked count=" + e.getClickCount() 
-        + " button=" + e.getButton());
         // ── Mode gomme ───────────────────────────────────────────────────────
         if (table.getInteractionMode() == HSuperTable.MODE_ERASE
                 && SwingUtilities.isLeftMouseButton(e)) {
@@ -149,39 +147,14 @@ public class HSuperTableController {
             }
             return;
         }
-
-        Point point = e.getPoint();
-        int row = table.rowAtPoint(point);
-        int col = table.columnAtPoint(point);
-
-        if (row == -1 || col == -1) {
-            table.clearAllVisualStates();
-            table.setSelection(null);
-            return;
-        }
-
-        // Résolution des cellules absorbées — UNE SEULE FOIS
-        int[] resolved = resolveAbsorbed(row, col);
-        row = resolved[0];
-        col = resolved[1];
-
-        // Hit-testing interne (sous-cellules)
-        HBasicTableUI ui = (HBasicTableUI) table.getUI();
-        InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
-        table.setFocusedInternalCell(hit);
-        table.setSelectedInternalCell(hit);
-
-        if (SwingUtilities.isLeftMouseButton(e)) {
-            if (e.getClickCount() == 2) {
-                System.out.println(e.getClickCount() == 2);
-                // Double clic — édition
-                handleDoubleClick(e, row, col);
-            } else {
-                // Clic simple — sélection
-                handleSingleClick(row, col, e);
+        
+        if (SwingUtilities.isRightMouseButton(e)) {
+            int row = table.rowAtPoint(e.getPoint());
+            int col = table.columnAtPoint(e.getPoint());
+            if (row >= 0 && col >= 0) {
+                int[] resolved = resolveAbsorbed(row, col);
+                handleRightClick(resolved[0], resolved[1]);
             }
-        } else if (SwingUtilities.isRightMouseButton(e)) {
-            handleRightClick(row, col);
         }
     }
 
@@ -279,10 +252,9 @@ public class HSuperTableController {
             drawEndX = e.getX();
             drawEndY = e.getY();
             isDrawing = true;
-            return; // on ne fait PAS de sélection
+            return;
         }
 
-        // ── Mode normal ──────────────────────────────────────────────────────
         Point point = e.getPoint();
         int row = table.rowAtPoint(point);
         int col = table.columnAtPoint(point);
@@ -290,21 +262,41 @@ public class HSuperTableController {
             return;
         }
 
-        // Résolution des cellules absorbées
         int[] resolved = resolveAbsorbed(row, col);
         row = resolved[0];
         col = resolved[1];
 
+        // ── Double-press : on vérifie si on est sur une sous-cellule ─────────
+        if (e.getClickCount() == 2) {
+            HBasicTableUI ui = (HBasicTableUI) table.getUI();
+            InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+
+            if (hit != null && hit.parent != null) {
+                // Sous-cellule détectée — on bloque JTable et on lance notre éditeur
+                e.consume();                
+                table.startInternalEdit(hit);
+                return;
+            }
+            // Pas de sous-cellule — on laisse JTable gérer son éditeur natif
+            return;
+        }
+
+        // ── Clic simple : sélection normale ──────────────────────────────────
+        HBasicTableUI ui = (HBasicTableUI) table.getUI();
+        InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+        table.setFocusedInternalCell(hit);
+        table.setSelectedInternalCell(hit);
+
         if (!e.isShiftDown()) {
-            // Nouvelle sélection — on pose l'ancre ici
             anchorRow = row;
             anchorCol = col;
         }
-        // Si Shift est enfoncé, l'ancre reste celle du dernier clic simple
 
         dragRow = row;
         dragCol = col;
-        isDragging = false; // pas encore un vrai glisser
+        isDragging = false;
+
+        handleSingleClick(row, col, e);
     }
 
     private void handleMouseDrag(MouseEvent e) {
@@ -543,33 +535,76 @@ public class HSuperTableController {
      * donnée (dr, dc). Si extend=true (Shift enfoncé), la sélection s'élargit.
      */
     private void navigateOrExtend(int dr, int dc, boolean extend) {
-        int focusRow = table.getFocusedRow();
-        int focusCol = table.getFocusedColumn();
-        if (focusRow < 0 || focusCol < 0) {
-            return;
-        }
+    // ── Navigation dans les sous-cellules ─────────────────────────────────
+    InternalCellHit focused = table.getFocusedInternalCell();
+    if (focused != null && focused.parent != null && !extend) {
+        // On est dans une sous-cellule — naviguer vers l'autre sous-cellule
+        // si la direction pointe vers elle, sinon sortir vers la cellule voisine
+        InternalGrid grid = focused.parent.internalGrid;
+        if (grid != null) {
+            boolean goToSecond =
+                (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL  && dc > 0) ||
+                (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr > 0);
+            boolean goToFirst =
+                (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL  && dc < 0) ||
+                (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr < 0);
 
-        int newRow = Math.max(0, Math.min(table.getRowCount() - 1, focusRow + dr));
-        int newCol = Math.max(0, Math.min(table.getColumnCount() - 1, focusCol + dc));
+            HSuperDefaultTableModel.Cell target = null;
+            Rectangle targetRect = null;
 
-        if (extend) {
-            // Shift+flèche : on étend depuis l'ancre
-            dragRow = newRow;
-            dragCol = newCol;
-            applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
-            table.setFocusedCell(newRow, newCol);
-        } else {
-            // Flèche simple : on déplace le focus et on repose l'ancre
-            anchorRow = newRow;
-            anchorCol = newCol;
-            dragRow = newRow;
-            dragCol = newCol;
-            table.clearSelection();
-            table.addSelectedRow(newRow);
-            table.setSelection(new CellRange(newRow, newCol, newRow, newCol));
-            table.setFocusedCell(newRow, newCol);
+            // Calculer les rectangles actuels
+            int row = table.getFocusedRow();
+            int col = table.getFocusedColumn();
+            Rectangle cellRect = table.getCellRect(row, col, false);
+            Rectangle[] parts = ((HBasicTableUI) table.getUI())
+                    .computeInternalRects(cellRect, grid);
+
+            if (goToSecond && focused.cell == grid.getFirstCell()) {
+                target     = grid.getSecondCell();
+                targetRect = parts[1];
+            } else if (goToFirst && focused.cell == grid.getSecondCell()) {
+                target     = grid.getFirstCell();
+                targetRect = parts[0];
+            }
+
+            if (target != null) {
+                // Rester dans la même cellule parente, changer de sous-cellule
+                InternalCellHit newHit = new InternalCellHit(
+                        target, targetRect, focused.parent);
+                table.setFocusedInternalCell(newHit);
+                table.setSelectedInternalCell(newHit);
+                return;
+            }
         }
+        // Direction vers l'extérieur — on sort de la sous-cellule
+        table.setFocusedInternalCell(null);
+        table.setSelectedInternalCell(null);
     }
+
+    // ── Navigation normale entre cellules ─────────────────────────────────
+    int focusRow = table.getFocusedRow();
+    int focusCol = table.getFocusedColumn();
+    if (focusRow < 0 || focusCol < 0) return;
+
+    int newRow = Math.max(0, Math.min(table.getRowCount()    - 1, focusRow + dr));
+    int newCol = Math.max(0, Math.min(table.getColumnCount() - 1, focusCol + dc));
+
+    if (extend) {
+        dragRow = newRow;
+        dragCol = newCol;
+        applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
+        table.setFocusedCell(newRow, newCol);
+    } else {
+        anchorRow = newRow;
+        anchorCol = newCol;
+        dragRow   = newRow;
+        dragCol   = newCol;
+        table.clearSelection();
+        table.addSelectedRow(newRow);
+        table.setSelection(new HSuperTable.CellRange(newRow, newCol, newRow, newCol));
+        table.setFocusedCell(newRow, newCol);
+    }
+}
 
     // =========================================================================
     // SÉLECTION DE LIGNES (comportement existant conservé)

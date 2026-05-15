@@ -1017,7 +1017,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
      * Une InternalGrid permet de partitionner localement l'espace d'une cellule
      * en deux sous-cellules sans modifier la structure globale du tableau.
      */
-    public final class InternalGrid  {
+    public final class InternalGrid {
 
         /**
          * Division verticale :
@@ -1126,8 +1126,9 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
          */
         public void setDividerRatio(float dividerRatio) {
 
-            if (dividerRatio <= 0f || dividerRatio >= 1f) 
-                throw new IllegalArgumentException("Le dividerRatio doit être compris entre 0 et 1.");            
+            if (dividerRatio <= 0f || dividerRatio >= 1f) {
+                throw new IllegalArgumentException("Le dividerRatio doit être compris entre 0 et 1.");
+            }
 
             this.dividerRatio = dividerRatio;
         }
@@ -1232,9 +1233,15 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         Cell first = new Cell();
         Cell second = new Cell();
 
-        // Conservation du contenu principal
-        first.value = cell.value;
+        // Conservation du contenu principal — on lit depuis DefaultTableModel
+        // en priorité car c'est là que l'éditeur natif écrit la valeur
+        Object currentValue = getValueAt(row, col);
+        first.value = (currentValue != null) ? currentValue : cell.value;
         second.value = null;
+
+        // On vide la valeur DefaultTableModel pour éviter la double lecture
+        // Le rendu utilisera désormais first.value et second.value
+        setValueAt(null, row, col);
 
         // Copie du style de la cellule mère
         if (cell.style != null) {
@@ -1285,10 +1292,29 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
         InternalGrid grid = cell.internalGrid;
 
-        // Conservation du contenu principal
-        if (grid.getFirstCell() != null) {
-            cell.value = grid.getFirstCell().value;
+        // Reconstruction du contenu — on concatène first et second
+        StringBuilder reunited = new StringBuilder();
+
+        if (grid.getFirstCell() != null && grid.getFirstCell().value != null) {
+            String v = grid.getFirstCell().value.toString().trim();
+            if (!v.isEmpty()) {
+                reunited.append(v);
+            }
         }
+        if (grid.getSecondCell() != null && grid.getSecondCell().value != null) {
+            String v = grid.getSecondCell().value.toString().trim();
+            if (!v.isEmpty()) {
+                if (reunited.length() > 0) {
+                    reunited.append(" ");
+                }
+                reunited.append(v);
+            }
+        }
+
+        // On remet la valeur dans les deux endroits pour cohérence
+        String finalValue = reunited.length() > 0 ? reunited.toString() : null;
+        cell.value = finalValue;
+        setValueAt(finalValue, row, col);
 
         // Suppression de la subdivision
         cell.internalGrid = null;
