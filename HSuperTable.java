@@ -1,9 +1,12 @@
 package hsupertable;
 
+import hsupertable.HBasicTableUI.InternalCellHit;
 import javax.swing.*;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.util.*;
 import java.util.List;
 
@@ -46,6 +49,13 @@ public class HSuperTable extends JTable {
     public static final int AUTOFIT_CONTENT = 0;  // ajuste au contenu des cellules
     public static final int AUTOFIT_WINDOW = 1;  // ajuste à la largeur du parent
 
+    // -- Modes d'interaction --
+    public static final int MODE_NORMAL = 0;
+    public static final int MODE_DRAW = 1;
+    public static final int MODE_ERASE = 2;
+
+    private int interactionMode = MODE_NORMAL;
+
     // =========================================================================
     // COMPOSANTS INTERNES
     // =========================================================================
@@ -58,7 +68,7 @@ public class HSuperTable extends JTable {
     /**
      * Contrôleur des événements souris/clavier.
      */
-    private final hsupertable.HSuperTableController controller;
+    private final HSuperTableController controller;
 
     // =========================================================================
     // ÉTATS VISUELS 
@@ -73,16 +83,17 @@ public class HSuperTable extends JTable {
     /**
      * Lignes sélectionnées (sélection multiple custom).
      */
-    private Set<Integer> selectedRows = new HashSet<>();
+    private ArrayList<Integer> selectedRows = new ArrayList<>();
 
     /**
-     * Couleurs de fond custom par ligne
+     * Couleurs de fond et de texte custom par ligne
      */
     private final Map<Integer, Color> rowBackgroundColors = new HashMap<>();
     private final Map<Integer, Color> rowForegroundColors = new HashMap<>();
 
     /**
-     * États visuels génériques (pour extensions futures).
+     * États visuels génériques: focus, survol... (possibles extensions
+     * futures). Pas utilisé pour l'instant.
      */
     private final Map<String, Object> visualStates = new HashMap<>();
 
@@ -91,8 +102,10 @@ public class HSuperTable extends JTable {
      */
     private CellRange currentSelection = null;
 
+    private final JTextField internalEditor = new JTextField();
+    
     // =========================================================================
-    // OPTIONS DE STYLE (onglet Création de Word)
+    // OPTIONS DE STYLE 
     // =========================================================================
     private boolean headerRowEnabled = true;
     private boolean totalRowEnabled = false;
@@ -110,6 +123,10 @@ public class HSuperTable extends JTable {
     // STYLE VISUEL
     private HSuperTableStyle tableStyle = HSuperTableStyle.PRIMARY;
 
+    //on stock la cellule qui subit l'opération
+    private InternalCellHit focusedInternalCell, hoveredInternalCell,
+            selectedInternalCell, editingInternalCell;  
+
     // CONSTRUCTEURS
     public HSuperTable() {
         this(new HSuperDefaultTableModel());
@@ -119,6 +136,16 @@ public class HSuperTable extends JTable {
         super(model);
         this.hModel = model;
         this.controller = new hsupertable.HSuperTableController(this);
+        setLayout(null);
+        internalEditor.setVisible(false);
+        add(internalEditor);
+        internalEditor.addActionListener(e -> stopInternalEdit());
+        internalEditor.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                stopInternalEdit();
+            }
+        });
         setUI(new HBasicTableUI());
         initDefaults();
     }
@@ -137,7 +164,8 @@ public class HSuperTable extends JTable {
 
     /**
      * Constructeur de compatibilité : accepte n'importe quel TableModel.Si ce
- n'est pas un HDefaultTableModel, les données sont converties.
+     * n'est pas un HDefaultTableModel, les données sont converties.
+     *
      * @param model
      */
     public HSuperTable(TableModel model) {
@@ -212,7 +240,7 @@ public class HSuperTable extends JTable {
     }
 
     /**
-     * Active ou désactive l'alternance de couleurs sur les lignes (zebra).
+     * Active ou désactive l'alternance de couleurs sur les lignes
      *
      * @param enabled
      */
@@ -757,6 +785,111 @@ public class HSuperTable extends JTable {
         return gridVisible;
     }
 
+    public void setInteractionMode(int mode) {
+        this.interactionMode = mode;
+        // Changer le curseur selon le mode
+        switch (mode) {
+            case MODE_DRAW ->
+                setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            case MODE_ERASE ->
+                setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            default ->
+                setCursor(Cursor.getDefaultCursor());
+        }
+        refreshUI();
+    }
+
+    public int getInteractionMode() {
+        return interactionMode;
+    }
+
+    public void splitCellLocally(int row,
+            int col,
+            int splitType,
+            float dividerRatio) {
+
+        hModel.splitCellLocally(row, col, splitType, dividerRatio);
+        refreshUI();
+    }
+
+    public void removeInternalGrid(int row, int col) {
+        hModel.removeInternalGrid(row, col);
+        refreshUI();
+    }
+
+    public void setFocusedInternalCell(InternalCellHit hit) {
+        this.focusedInternalCell = hit;
+        repaint();
+    }
+
+    public InternalCellHit getFocusedInternalCell() {
+        return focusedInternalCell;
+    }
+
+    public HBasicTableUI.InternalCellHit getHoveredInternalCell() {
+        return hoveredInternalCell;
+    }
+
+    public void setHoveredInternalCell(InternalCellHit hoveredInternalCell)            
+    {
+        this.hoveredInternalCell = hoveredInternalCell;
+        repaint();
+    }
+
+    public InternalCellHit getSelectedInternalCell() {
+        return selectedInternalCell;
+    }
+
+    public void setSelectedInternalCell(
+            InternalCellHit selectedInternalCell
+    ) {
+
+        this.selectedInternalCell = selectedInternalCell;
+        repaint();
+    }
+
+    public InternalCellHit getEditingInternalCell() {
+        return editingInternalCell;
+    }
+
+    public void startInternalEdit(InternalCellHit hit) {
+        if (hit == null || hit.cell == null) return;        
+
+        editingInternalCell = hit;
+        
+        Rectangle r = hit.bounds;
+
+        internalEditor.setBounds(r.x + 1, r.y + 1, r.width - 2, r.height - 2);
+
+        Object value = hit.cell.value;
+
+        internalEditor.setText(value != null ? value.toString() : "");
+
+        internalEditor.setVisible(true);
+
+        internalEditor.requestFocus();
+
+        internalEditor.selectAll();
+    }
+
+    //on passe la valeur du textFiled à la cellule 
+    public void stopInternalEdit() {
+
+        if (editingInternalCell != null) {
+
+            editingInternalCell.cell.value
+                    = internalEditor.getText();
+            System.out.println("Texte "+internalEditor.getText());
+        }
+
+        internalEditor.setVisible(false);
+
+        editingInternalCell = null;
+
+        repaint();
+        
+    }
+
     // ── Lignes et colonnes ───────────────────────────────────────────────────
     /**
      * Insère une ligne vide au-dessus de la ligne donnée.
@@ -780,10 +913,21 @@ public class HSuperTable extends JTable {
      * Insère une colonne vide à gauche de la colonne donnée.
      */
     public void insertColumnLeft(int col) {
+        insertColumnLeft(col, null);
+    }
+
+    public void insertColumnLeft(int col, String nameColumn) {
         if (col < 0 || col > getColumnCount()) {
             return;
         }
-        hModel.insertColumn(col, "Colonne " + (col + 1));
+
+        if (nameColumn == null) {
+            hModel.insertColumn(col, "Colonne " + (col + 1));
+            refreshUI();
+            return;
+        }
+
+        hModel.insertColumn(col, nameColumn + " " + (col + 1));
         refreshUI();
     }
 
@@ -1476,7 +1620,7 @@ public class HSuperTable extends JTable {
     @Override
     public void clearSelection() {
         if (selectedRows == null) {
-            selectedRows = new HashSet<>();
+            selectedRows = new ArrayList<>();
         }
         selectedRows.clear();
         super.clearSelection();

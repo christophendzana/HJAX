@@ -3,6 +3,7 @@ package hsupertable;
 import java.awt.Color;
 import java.awt.Insets;
 import java.awt.Point;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
@@ -20,9 +21,9 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     private static final long serialVersionUID = 1L; // Obligatoire quand on implémente serializable
 
     /**
-    * Unité de base de la grille. 
-    * Toujours synchronisée avec les données de DefaultTableModel.
-    */
+     * Unité de base de la grille. Toujours synchronisée avec les données de
+     * DefaultTableModel.
+     */
     private Cell[][] grid;
 
     // =========================================================================
@@ -67,7 +68,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     // INITIALISATION ET REDIMENSIONNEMENT
     // =========================================================================
     /**
-     * Crée une grille neuve — toutes les cellules sont normales par défaut.
+     * Crée une grille neuve, toutes les cellules sont normales par défaut.
      */
     private void initGrid(int rows, int cols) {
         grid = new Cell[rows][cols];
@@ -89,8 +90,9 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         Cell[][] newGrid = new Cell[newRows][newCols];
         for (int r = 0; r < newRows; r++) {
             for (int c = 0; c < newCols; c++) {
+                //Condition: Si cette cellule existait et qu'elle n'était pas null  alors on la conserve 
                 if (r < oldRows && c < oldCols && grid[r][c] != null) {
-                    newGrid[r][c] = grid[r][c]; // on garde la cellule existante
+                    newGrid[r][c] = grid[r][c];
                 } else {
                     newGrid[r][c] = new Cell();
                 }
@@ -163,9 +165,9 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
                 grid[r][c] = grid[r - 1][c];
                 // Mettre à jour les mergeOrigin décalés
                 if (grid[r][c].mergeOrigin != null
-                        && grid[r][c].mergeOrigin.x >= insertedRow) {
+                        && grid[r][c].mergeOrigin.x >= insertedRow) { // la ligne de la cellule principale est à partir de la ligne où l’insertion a eu lieu (donc elle est concernée par le décalage).
                     grid[r][c].mergeOrigin = new Point(
-                            grid[r][c].mergeOrigin.x + 1,
+                            grid[r][c].mergeOrigin.x + 1, // Alors on crée un nouveau Point avec x + 1 (même colonne y), et on l’assigne à grid[r][c].mergeOrigin.
                             grid[r][c].mergeOrigin.y
                     );
                 }
@@ -310,9 +312,6 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     /**
      * Supprime la colonne à l'index colIndex.
      *
-     * CORRECTION v3 : même approche qu'insertColumn — on manipule le Vector
-     * interne directement au lieu de setDataVector().
-     *
      * @param colIndex index de la colonne à supprimer
      */
     public void removeColumn(int colIndex) {
@@ -323,12 +322,13 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             throw new IndexOutOfBoundsException("Index de colonne invalide : " + colIndex);
         }
 
+        //Défusionner toute les fusion qui implique cette colonne avant de supprimer
         defuseColumn(colIndex);
 
-        // ── 1. Sauvegarder les données ────────────────────────────────────────
+        // 1. Sauvegarder les données 
         Object[][] oldData = getAllData();
 
-        // ── 2. Nouveaux noms sans la colonne supprimée ────────────────────────
+        // 2. Nouveaux noms sans la colonne supprimée 
         Vector<String> newColNames = new Vector<>(oldCols - 1);
         for (int c = 0; c < oldCols; c++) {
             if (c != colIndex) {
@@ -336,7 +336,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             }
         }
 
-        // ── 3. Nouvelles données sans la colonne supprimée ────────────────────
+        //  3. Nouvelles données sans la colonne supprimée 
         Vector<Vector<Object>> newData = new Vector<>(rows);
         for (int r = 0; r < rows; r++) {
             Vector<Object> newRow = new Vector<>(oldCols - 1);
@@ -348,10 +348,10 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             newData.add(newRow);
         }
 
-        // ── 4. Appliquer ──────────────────────────────────────────────────────
+        // 4. Appliquer 
         setDataVector(newData, newColNames);
 
-        // ── 5. Mettre à jour la grille ────────────────────────────────────────
+        // ── 5. Mettre à jour la grille 
         shiftGridLeft(colIndex);
         resizeGrid(rows, getColumnCount());
     }
@@ -382,7 +382,11 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     // ACCÈS À LA GRILLE
     // =========================================================================
     /**
-     * Retourne la Cell à la position (row, col). Ne retourne jamais null.
+     * Retourne la Cell à la position (row, col).Ne retourne jamais null.
+     *
+     * @param row
+     * @param col
+     * @return
      */
     public Cell getCell(int row, int col) {
         if (!isValidCell(row, col)) {
@@ -488,6 +492,10 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     // =========================================================================
     /**
      * Retourne [spanRow, spanCol] de la cellule (row, col).
+     *
+     * @param row
+     * @param col
+     * @return
      */
     public int[] getSpan(int row, int col) {
         if (!isValidCell(row, col)) {
@@ -499,6 +507,10 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
     /**
      * Vrai si absorbée — le renderer doit sauter cette cellule.
+     *
+     * @param row
+     * @param col
+     * @return
      */
     public boolean isAbsorbed(int row, int col) {
         return isValidCell(row, col) && grid[row][col].isAbsorbed();
@@ -506,15 +518,21 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
     /**
      * Vrai si principale d'une fusion.
+     *
+     * @param row
+     * @param col
+     * @return
      */
     public boolean isMergedCell(int row, int col) {
         return isValidCell(row, col) && grid[row][col].isMerged();
     }
 
     /**
-     * Retourne l'origine de la fusion en O(1). Lecture directe de
+     * Retourne l'origine de la fusion en O(1).Lecture directe de
      * Cell.mergeOrigin — plus de scan O(n×m).
      *
+     * @param row
+     * @param col
      * @return Point(row, col) de la principale, ou null si non absorbée.
      */
     public Point findMergeOrigin(int row, int col) {
@@ -559,7 +577,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         principal.spanCol = colEnd - colStart + 1;
         principal.mergeOrigin = null;
 
-// collecter le contenu de toutes les cellules de la zone
+        // collecter le contenu de toutes les cellules de la zone
         StringBuilder merged = new StringBuilder();
         for (int r = rowStart; r <= rowEnd; r++) {
             for (int c = colStart; c <= colEnd; c++) {
@@ -573,9 +591,8 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             }
         }
 
-// Placer le contenu fusionné dans la cellule principale
-        setValueAt(merged.length() > 0 ? merged.toString() : null,
-                rowStart, colStart);
+        // Placer le contenu fusionné dans la cellule principale
+        setValueAt(merged.length() > 0 ? merged.toString() : null, rowStart, colStart);
 
         // Absorber les autres cellules
         for (int r = rowStart; r <= rowEnd; r++) {
@@ -622,11 +639,14 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     }
 
     /**
-     * Défusionne la cellule à (row, col).
+     * Défusionne la cellule à (row, col).Si absorbée → O(1) via mergeOrigin
+     * pour trouver la principale.Si principale → libère toutes les absorbées
+     * qu'elle couvre.
      *
-     * Si absorbée → O(1) via mergeOrigin pour trouver la principale. Si
-     * principale → libère toutes les absorbées qu'elle couvre. Si normale → ne
-     * fait rien.
+     * Si normale → ne fait rien.
+     *
+     * @param row
+     * @param col
      */
     public void unmergeCell(int row, int col) {
         if (!isValidCell(row, col)) {
@@ -635,7 +655,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         Cell cell = grid[row][col];
 
         if (cell.isAbsorbed()) {
-            // Remonte à la principale en O(1) et défusionne celle-là
+            // Remonte à la principale et défusionne celle-là
             if (cell.mergeOrigin != null) {
                 unmergeCell(cell.mergeOrigin.x, cell.mergeOrigin.y);
             } else {
@@ -647,7 +667,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         if (cell.isNormal()) {
             return; // rien à faire
         }
-        // C'est la principale : libère toutes les absorbées
+        // C'est la principale : libère toutes les cellules absorbées
         int rSpan = cell.spanRow;
         int cSpan = cell.spanCol;
         for (int dr = 0; dr < rSpan; dr++) {
@@ -660,11 +680,15 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     }
 
     /**
-     * Fractionne une cellule fusionnée en targetRows × targetCols sous-blocs.
+     * Fractionne une cellule fusionnée en targetRows × targetCols
+     * sous-blocs.Refuse si le span n'est pas divisible exactement.Retourne
+     * false dans ce cas (comme Word qui grise le bouton).
      *
-     * CORRECTION v3 : refuse si le span n'est pas divisible exactement.
-     * Retourne false dans ce cas (comme Word qui grise le bouton).
      *
+     * @param row
+     * @param col
+     * @param targetRows
+     * @param targetCols
      * @return true si le fractionnement a réussi, false si impossible
      */
     public boolean splitCell(int row, int col, int targetRows, int targetCols) {
@@ -738,6 +762,9 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
     /**
      * Déplace une ligne — données ET cellules bougent ensemble.
+     *
+     * @param fromIndex
+     * @param toIndex
      */
     public void moveRow(int fromIndex, int toIndex) {
         if (fromIndex == toIndex) {
@@ -772,6 +799,9 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
     /**
      * Échange deux lignes — données ET cellules.
+     *
+     * @param row1
+     * @param row2
      */
     public void swapRows(int row1, int row2) {
         if (row1 == row2) {
@@ -830,8 +860,8 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         if (value == null) {
             return true;
         }
-        if (value instanceof String) {
-            return ((String) value).trim().isEmpty();
+        if (value instanceof String string) {
+            return string.trim().isEmpty();
         }
         return false;
     }
@@ -869,6 +899,8 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
      */
     public static class Cell {
 
+        public Object value;
+
         /**
          * Métadonnées visuelles : couleurs, bordures, alignement, marges,
          * direction, formule.
@@ -886,12 +918,19 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
          */
         public int spanCol;
 
+//        HSuperTableStyle style = t.getTableStyle();
+//        HSuperTableCellModel cModel = model.getCellModel(row, col);
         /**
          * Adresse de la cellule principale de la fusion. null -> cette cellule
-         * est normale ou est elle-même la principale Point(r,c) -> la principale
-         * est en (r,c).         
+         * est normale ou est elle-même la principale Point(r,c) -> la
+         * principale est en (r,c).
          */
         public Point mergeOrigin;
+
+        /**
+         * Subdivision interne de la cellule
+         */
+        public InternalGrid internalGrid;
 
         /**
          * Crée une cellule normale avec toutes les valeurs par défaut.
@@ -904,14 +943,22 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         }
 
         /**
-         * Vrai si absorbée par une fusion — le renderer doit la sauter.
+         * Vrai si absorbée par une fusion -> le renderer doit la sauter.
+         *
+         * @return
          */
         public boolean isAbsorbed() {
             return spanRow == 0 && spanCol == 0;
         }
 
+        public boolean hasInternalGrid() {
+            return internalGrid != null;
+        }
+
         /**
          * Vrai si principale d'une fusion de taille > 1×1.
+         *
+         * @return
          */
         public boolean isMerged() {
             return spanRow > 1 || spanCol > 1;
@@ -919,6 +966,8 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
         /**
          * Vrai si dans l'état normal (ni fusionnée, ni absorbée).
+         *
+         * @return
          */
         public boolean isNormal() {
             return spanRow == 1 && spanCol == 1 && mergeOrigin == null;
@@ -934,8 +983,10 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         }
 
         /**
-         * Copie profonde. Utilisée lors du déplacement de lignes/colonnes pour
+         * Copie profonde.Utilisée lors du déplacement de lignes/colonnes pour
          * éviter que deux cases de la grille partagent le même objet.
+         *
+         * @return
          */
         public Cell copy() {
             Cell copy = new Cell();
@@ -958,6 +1009,291 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             }
             return "Cell[normal]";
         }
+    }
+
+    /**
+     * Représente une subdivision interne d'une cellule.
+     *
+     * Une InternalGrid permet de partitionner localement l'espace d'une cellule
+     * en deux sous-cellules sans modifier la structure globale du tableau.
+     */
+    public final class InternalGrid  {
+
+        /**
+         * Division verticale :
+         */
+        public static final int SPLIT_VERTICAL = 0;
+
+        /**
+         * Division horizontale :
+         */
+        public static final int SPLIT_HORIZONTAL = 1;
+
+        /**
+         * Type de subdivision.
+         */
+        private int splitType;
+
+        /**
+         * Ratio de séparation entre les deux sous-cellules.
+         *
+         * Exemple : 0.5f = 50% / 50%
+         */
+        private float dividerRatio;
+
+        /**
+         * Première sous-cellule.
+         */
+        private Cell firstCell;
+
+        /**
+         * Deuxième sous-cellule.
+         */
+        private Cell secondCell;
+
+        /**
+         * Crée une subdivision avec un ratio personnalisé.
+         *
+         * @param splitType type de subdivision
+         * @param dividerRatio ratio du séparateur
+         * @param firstCell première sous-cellule
+         * @param secondCell deuxième sous-cellule
+         */
+        public InternalGrid(int splitType,
+                float dividerRatio,
+                Cell firstCell,
+                Cell secondCell) {
+
+            setSplitType(splitType);
+            setDividerRatio(dividerRatio);
+
+            this.firstCell = firstCell;
+            this.secondCell = secondCell;
+        }
+
+        /**
+         * Crée une subdivision 50 / 50.
+         *
+         * @param splitType type de subdivision
+         * @param firstCell première sous-cellule
+         * @param secondCell deuxième sous-cellule
+         */
+        public InternalGrid(int splitType,
+                Cell firstCell,
+                Cell secondCell) {
+
+            this(splitType, 0.5f, firstCell, secondCell);
+        }
+
+        /**
+         * Retourne le type de subdivision.
+         *
+         * @return SPLIT_VERTICAL ou SPLIT_HORIZONTAL
+         */
+        public int getSplitType() {
+            return splitType;
+        }
+
+        /**
+         * Définit le type de subdivision.
+         *
+         * @param splitType type de subdivision
+         */
+        public void setSplitType(int splitType) {
+
+            if (splitType != SPLIT_VERTICAL
+                    && splitType != SPLIT_HORIZONTAL) {
+
+                throw new IllegalArgumentException("Type de subdivision invalide : " + splitType);
+            }
+
+            this.splitType = splitType;
+        }
+
+        /**
+         * Retourne le ratio du séparateur.
+         *
+         * @return ratio entre 0f et 1f
+         */
+        public float getDividerRatio() {
+            return dividerRatio;
+        }
+
+        /**
+         * Définit le ratio du séparateur.
+         *
+         * @param dividerRatio ratio entre 0f et 1f
+         */
+        public void setDividerRatio(float dividerRatio) {
+
+            if (dividerRatio <= 0f || dividerRatio >= 1f) 
+                throw new IllegalArgumentException("Le dividerRatio doit être compris entre 0 et 1.");            
+
+            this.dividerRatio = dividerRatio;
+        }
+
+        /**
+         * Retourne la première sous-cellule.
+         *
+         * @return première sous-cellule
+         */
+        public Cell getFirstCell() {
+            return firstCell;
+        }
+
+        /**
+         * Définit la première sous-cellule.
+         *
+         * @param firstCell première sous-cellule
+         */
+        public void setFirstCell(Cell firstCell) {
+            this.firstCell = firstCell;
+        }
+
+        /**
+         * Retourne la deuxième sous-cellule.
+         *
+         * @return deuxième sous-cellule
+         */
+        public Cell getSecondCell() {
+            return secondCell;
+        }
+
+        /**
+         * Définit la deuxième sous-cellule.
+         *
+         * @param secondCell deuxième sous-cellule
+         */
+        public void setSecondCell(Cell secondCell) {
+            this.secondCell = secondCell;
+        }
+
+        /**
+         * Vrai si la subdivision est verticale.
+         *
+         * @return true si verticale
+         */
+        public boolean isVerticalSplit() {
+            return splitType == SPLIT_VERTICAL;
+        }
+
+        /**
+         * Vrai si la subdivision est horizontale.
+         *
+         * @return true si horizontale
+         */
+        public boolean isHorizontalSplit() {
+            return splitType == SPLIT_HORIZONTAL;
+        }
+    }
+
+    /**
+     * Subdivise localement une cellule en deux sous-cellules.
+     *
+     * @param row ligne cible
+     * @param col colonne cible
+     * @param splitType type de subdivision
+     * @param dividerRatio position du séparateur (0f → 1f)
+     */
+    public void splitCellLocally(int row,
+            int col,
+            int splitType,
+            float dividerRatio) {
+
+        // Vérification des bornes
+        if (row < 0 || row >= getRowCount()
+                || col < 0 || col >= getColumnCount()) {
+
+            throw new IndexOutOfBoundsException(
+                    "Coordonnées invalides : (" + row + ", " + col + ")"
+            );
+        }
+
+        Cell cell = getCell(row, col);
+
+        // Une cellule absorbée ne peut pas être subdivisée
+        if (cell.isAbsorbed()) {
+            return;
+        }
+
+        // ---------------------------------------------------------------------
+        // Pour l'instant : empêcher les subdivisions multiples
+        // ---------------------------------------------------------------------
+        if (cell.hasInternalGrid()) {
+            return;
+        }
+
+        // Sécurisation du ratio
+        // Empêche les subdivisions trop petites
+        dividerRatio = Math.max(0.15f, dividerRatio);
+        dividerRatio = Math.min(0.85f, dividerRatio);
+
+        // Création des deux sous-cellules
+        Cell first = new Cell();
+        Cell second = new Cell();
+
+        // Conservation du contenu principal
+        first.value = cell.value;
+        second.value = null;
+
+        // Copie du style de la cellule mère
+        if (cell.style != null) {
+
+            first.style = cell.style.copy();
+            second.style = cell.style.copy();
+        }
+
+        // Création de la subdivision locale
+        cell.internalGrid = new InternalGrid(
+                splitType,
+                dividerRatio,
+                first,
+                second
+        );
+
+        // ---------------------------------------------------------------------
+        // Rafraîchissement
+        // ---------------------------------------------------------------------
+        fireTableDataChanged();
+    }
+
+    /**
+     * Supprime la subdivision interne d'une cellule.
+     *
+     * La cellule redevient une cellule normale.
+     *
+     * @param row ligne de la cellule
+     * @param col colonne de la cellule
+     */
+    public void removeInternalGrid(int row, int col) {
+
+        // Vérification des bornes
+        if (row < 0 || row >= getRowCount()
+                || col < 0 || col >= getColumnCount()) {
+
+            throw new IndexOutOfBoundsException(
+                    "Coordonnées de cellule invalides : (" + row + ", " + col + ")"
+            );
+        }
+
+        Cell cell = getCell(row, col);
+
+        // Rien à supprimer
+        if (!cell.hasInternalGrid()) {
+            return;
+        }
+
+        InternalGrid grid = cell.internalGrid;
+
+        // Conservation du contenu principal
+        if (grid.getFirstCell() != null) {
+            cell.value = grid.getFirstCell().value;
+        }
+
+        // Suppression de la subdivision
+        cell.internalGrid = null;
+
+        fireTableDataChanged();
     }
 
 }

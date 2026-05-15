@@ -1,5 +1,7 @@
 package hsupertable;
 
+import hsupertable.HSuperDefaultTableModel.Cell;
+import hsupertable.HSuperDefaultTableModel.InternalGrid;
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicTableUI;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -245,57 +247,248 @@ public class HBasicTableUI extends BasicTableUI {
         // Superpositions de sélection
         paintSelectionOverlays(g2, t);
 
-        // Indicateur de focus sur la cellule active
-        paintFocusIndicator(g2, t);
+        // Indicateur de focus sur la ou la sous cellule active        
+        if (t.getFocusedInternalCell() == null) {
+            paintFocusIndicator(g2, t);
+        } else {
+            paintInternalHover(g2, t);
+            paintInternalSelection(g2, t);
+            paintInternalFocus(g2, t);
+        }
 
+        // Prévisualisation du trait crayon (mode dessiner)
+        paintDrawPreview(g2, t);
         g2.dispose();
     }
 
     // =========================================================================
-    // PEINTURE D'UNE CELLULE
-    // =========================================================================
+// RENDU PRINCIPAL D'UNE CELLULE
+// =========================================================================
     /**
-     * Peint une cellule individuelle.
-     *
-     * Si la cellule est absorbée (spanRows==0), on ne fait rien. Si la cellule
-     * est fusionnée (spanRows>1 ou spanCols>1), on calcule le rectangle élargi
-     * qui couvre toute la zone fusionnée.
-     *
-     * @param g2 contexte graphique
-     * @param t le tableau
-     * @param row ligne
-     * @param col colonne
+     * Point d'entrée du rendu d'une cellule. Délègue au moteur de rendu
+     * structurel (gestion des subdivisions internes).
      */
     private void paintCell(Graphics2D g2, HSuperTable t, int row, int col) {
-        HSuperDefaultTableModel model = t.getHModel();
 
+        HSuperDefaultTableModel model = t.getHModel();
         HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
+
         if (cell.isAbsorbed()) {
             return;
         }
+
         int rSpan = cell.spanRow;
         int cSpan = cell.spanCol;
 
-        // Rectangle de base de la cellule
         Rectangle cellRect = t.getCellRect(row, col, false);
 
         if (rSpan > 1 || cSpan > 1) {
             cellRect = computeMergedRect(t, row, col, rSpan, cSpan);
         }
 
-        // ── Fond ────────────────────────────────────────────────────────────
-        HSuperTableStyle style = t.getTableStyle();
-        HSuperTableCellModel cModel = model.getCellModel(row, col);
+        paintCellStructure(g2, t, cell, cellRect, row, col);
+    }
 
-        Color bg = resolveCellBackground(t, style, row, col);
-        g2.setColor(bg);
-        g2.fillRect(cellRect.x, cellRect.y, cellRect.width, cellRect.height);
+// =========================================================================
+// MOTEUR DE RENDU STRUCTUREL (NORMAL + SUBDIVISIONS)
+// =========================================================================
+    /**
+     * Rend une cellule en tenant compte de ses éventuelles subdivisions
+     * internes.
+     */
+    private void paintCellStructure(
+            Graphics2D g2,
+            HSuperTable t,
+            HSuperDefaultTableModel.Cell cell,
+            Rectangle rect,
+            int row,
+            int col
+    ) {
 
-        // ── Contenu (texte) ──────────────────────────────────────────────────
-        Object value = t.getValueAt(row, col);
-        if (value != null) {
-            paintCellText(g2, t, cModel, style, cellRect, value.toString(), row, col);
+        // ---------------------------------------------------------------------
+        // CAS 1 : cellule normale (pas de subdivision)
+        // ---------------------------------------------------------------------
+        if (cell.internalGrid == null) {
+
+            HSuperTableStyle style = t.getTableStyle();
+            HSuperTableCellModel cModel = t.getHModel().getCellModel(row, col);
+
+            Color bg = resolveCellBackground(t, style, row, col);
+
+            g2.setColor(bg);
+            g2.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+            Object value = cell.value != null ? cell.value : t.getValueAt(row, col);
+
+            if (value != null) {
+                paintCellText(
+                        g2,
+                        t,
+                        cModel,
+                        style,
+                        rect,
+                        value.toString(),
+                        row,
+                        col
+                );
+            }
+
+            return;
         }
+
+        // ---------------------------------------------------------------------
+        // CAS 2 : cellule subdivisée (InternalGrid)
+        // ---------------------------------------------------------------------
+        InternalGrid grid = cell.internalGrid;
+
+        Rectangle[] parts = computeInternalRects(rect, grid);
+
+        HSuperDefaultTableModel.Cell first = grid.getFirstCell();
+        HSuperDefaultTableModel.Cell second = grid.getSecondCell();
+
+        // Dessin de la première sous-cellule
+        paintInternalCell(g2, t, first, parts[0], row, col);
+
+        // Dessin de la deuxième sous-cellule
+        paintInternalCell(g2, t, second, parts[1], row, col);
+
+        // Ligne de séparation visuelle (style Word)
+        g2.setColor(new Color(180, 180, 180));
+
+        if (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL) {
+            int x = parts[0].x + parts[0].width;
+            g2.drawLine(x, rect.y, x, rect.y + rect.height);
+        } else {
+            int y = parts[0].y + parts[0].height;
+            g2.drawLine(rect.x, y, rect.x + rect.width, y);
+        }
+    }
+
+// =========================================================================
+// RENDU D'UNE SOUS-CELLULE INTERNE
+// =========================================================================
+    /**
+     * Rend une sous-cellule issue d'une subdivision interne.
+     */
+    private void paintInternalCell(
+            Graphics2D g2,
+            HSuperTable t,
+            HSuperDefaultTableModel.Cell subCell,
+            Rectangle rect,
+            int row,
+            int col
+    ) {
+
+        if (subCell == null) {
+            return;
+        }
+
+        HSuperTableStyle style = t.getTableStyle();
+
+        Color bg = subCell.style != null
+                ? subCell.style.getBackground()
+                : resolveCellBackground(t, style, row, col);
+
+        g2.setColor(bg);
+        g2.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+        Object value = subCell.value;
+
+        if (value != null) {
+            paintCellText(
+                    g2,
+                    t,
+                    subCell.style,
+                    style,
+                    rect,
+                    value.toString(),
+                    row,
+                    col
+            );
+        }
+    }
+
+    private void paintInternalHover(Graphics2D g2, HSuperTable t) {
+
+        InternalCellHit hit = t.getHoveredInternalCell();
+
+        if (hit == null) {
+            return;
+        }
+
+        Rectangle r = hit.bounds;
+
+        g2.setColor(new Color(37, 99, 235, 40));
+
+        g2.fillRect(r.x, r.y, r.width, r.height);
+    }
+
+    private void paintInternalSelection(Graphics2D g2, HSuperTable t) {
+
+        InternalCellHit hit = t.getSelectedInternalCell();
+
+        if (hit == null) {
+            return;
+        }
+
+        Rectangle r = hit.bounds;
+
+        g2.setColor(new Color(37, 99, 235, 70));
+
+        g2.fillRect(r.x, r.y, r.width, r.height);
+    }
+
+    private void paintInternalFocus(Graphics2D g2, HSuperTable t) {
+
+        InternalCellHit hit = t.getFocusedInternalCell();
+
+        if (hit == null) {
+            return;
+        }
+
+        Rectangle r = hit.bounds;
+
+        g2.setColor(new Color(37, 99, 235));
+
+        g2.setStroke(new BasicStroke(1.5f));
+
+        g2.drawRect(r.x, r.y, r.width - 1, r.height - 1);
+
+        g2.setStroke(new BasicStroke(1f));
+    }
+
+// =========================================================================
+// CALCUL DES RECTANGLES INTERNES
+// =========================================================================
+    /**
+     * Découpe un rectangle parent en deux selon InternalGrid.
+     */
+    private Rectangle[] computeInternalRects(Rectangle rect, InternalGrid grid) {
+
+        Rectangle first = new Rectangle(rect);
+        Rectangle second = new Rectangle(rect);
+
+        float ratio = grid.getDividerRatio();
+
+        if (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL) {
+
+            int splitX = (int) (rect.width * ratio);
+
+            first.width = splitX;
+
+            second.x = rect.x + splitX;
+            second.width = rect.width - splitX;
+        } else {
+
+            int splitY = (int) (rect.height * ratio);
+
+            first.height = splitY;
+
+            second.y = rect.y + splitY;
+            second.height = rect.height - splitY;
+        }
+
+        return new Rectangle[]{first, second};
     }
 
     /**
@@ -642,7 +835,7 @@ public class HBasicTableUI extends BasicTableUI {
                 : new Color(13, 110, 253);
 
         g2.setColor(focusColor);
-        g2.setStroke(new BasicStroke(2f));
+        g2.setStroke(new BasicStroke(1.5f));
         g2.drawRect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
         g2.setStroke(new BasicStroke(1f));
     }
@@ -749,9 +942,9 @@ public class HBasicTableUI extends BasicTableUI {
      * impliquées dans la fusion.
      */
     private Rectangle computeMergedRect(HSuperTable t, int row, int col, int rSpan, int cSpan) {
-        Rectangle base = t.getCellRect(row, col, false);
-        int totalW = base.width;
-        int totalH = base.height;
+        Rectangle cellBaseRect = t.getCellRect(row, col, false);
+        int totalW = cellBaseRect.width;
+        int totalH = cellBaseRect.height;
 
         for (int dc = 1; dc < cSpan; dc++) {
             int nextCol = col + dc;
@@ -766,7 +959,236 @@ public class HBasicTableUI extends BasicTableUI {
             }
         }
 
-        return new Rectangle(base.x, base.y, totalW, totalH);
+        return new Rectangle(cellBaseRect.x, cellBaseRect.y, totalW, totalH);
+    }
+
+    /**
+     * Dessine le trait de prévisualisation pendant le glisser en mode crayon.
+     */
+    private void paintDrawPreview(Graphics2D g2, HSuperTable t) {
+        HSuperTableController ctrl = t.getController();
+        if (!ctrl.isDrawing()) {
+            return;
+        }
+
+        int x1 = ctrl.getDrawStartX();
+        int y1 = ctrl.getDrawStartY();
+        int x2 = ctrl.getDrawEndX();
+        int y2 = ctrl.getDrawEndY();
+
+        if (x1 < 0 || y1 < 0) {
+            return;
+        }
+
+        // Déterminer la direction du glisser
+        int dx = Math.abs(x2 - x1);
+        int dy = Math.abs(y2 - y1);
+
+        // Identifier la cellule sous le point de départ
+        int row = t.rowAtPoint(new Point(x1, y1));
+        int col = t.columnAtPoint(new Point(x1, y1));
+        if (row < 0 || col < 0) {
+            return;
+        }
+
+        Rectangle cellRect = t.getCellRect(row, col, false);
+
+        g2.setColor(new Color(37, 99, 235, 180)); // bleu semi-transparent
+        g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT,
+                BasicStroke.JOIN_MITER, 10f, new float[]{6f, 3f}, 0f));
+
+        if (dx >= dy) {
+            // Trait vertical — coupe la cellule en deux colonnes
+            int splitX = x2;
+            splitX = Math.max(cellRect.x + 10, splitX);
+            splitX = Math.min(cellRect.x + cellRect.width - 10, splitX);
+            g2.drawLine(splitX, cellRect.y, splitX, cellRect.y + cellRect.height);
+        } else {
+            // Trait horizontal — coupe la cellule en deux lignes
+            int splitY = y2;
+            splitY = Math.max(cellRect.y + 10, splitY);
+            splitY = Math.min(cellRect.y + cellRect.height - 10, splitY);
+            g2.drawLine(cellRect.x, splitY, cellRect.x + cellRect.width, splitY);
+        }
+
+        g2.setStroke(new BasicStroke(1f));
+    }
+
+    /**
+     * Résultat d'une détection de sous-cellule interne.
+     *
+     * Contient : - la cellule réellement ciblée, - son rectangle réel, - sa
+     * cellule parente.
+     */
+    public static class InternalCellHit {
+
+        /**
+         * Cellule réellement ciblée.
+         */
+        public Cell cell;
+        
+        /**
+         * Cellule parente.
+         */
+        public Cell parent;
+
+        /**
+         * Rectangle réel occupé par cette cellule.
+         */
+        public Rectangle bounds;
+
+        /**
+         * Crée un résultat de hit-testing.
+         *
+         * @param cell
+         * @param bounds
+         * @param parent
+         */
+        public InternalCellHit(
+                HSuperDefaultTableModel.Cell cell,
+                Rectangle bounds,
+                HSuperDefaultTableModel.Cell parent
+        ) {
+
+            this.cell = cell;
+            this.bounds = bounds;
+            this.parent = parent;
+        }
+    }
+
+    // RECHERCHE D'UNE CELLULE INTERNE DEPUIS LA TABLE
+    /**
+     * Retourne la sous-cellule située sous un point souris.
+     *
+     * @param t tableau
+     * @param point point souris
+     * @return résultat du hit-testing
+     */
+    public InternalCellHit getInternalCellAt(HSuperTable t, Point point) 
+    {
+
+        int row = t.rowAtPoint(point);
+        int col = t.columnAtPoint(point);
+
+        if (row < 0 || col < 0) {
+            return null;
+        }
+
+        HSuperDefaultTableModel model = t.getHModel();
+
+        Cell cell = model.getCell(row, col);
+
+        if (cell.isAbsorbed()) {
+
+            Point origin = cell.mergeOrigin;
+
+            row = origin.x;
+            col = origin.y;
+
+            cell = model.getCell(row, col);
+        }
+
+        Rectangle rect = t.getCellRect(row, col, false);
+
+        if (cell.isMerged()) {
+
+            rect = computeMergedRect(
+                    t,
+                    row,
+                    col,
+                    cell.spanRow,
+                    cell.spanCol
+            );
+        }
+
+        return findInternalCellAt(
+                cell,
+                rect,
+                point
+        );
+    }
+
+    /**
+     * Recherche récursivement la sous-cellule interne située sous un point.
+     *
+     * @param cell cellule de départ
+     * @param rect rectangle occupé par cette cellule
+     * @param point point souris
+     * @return résultat du hit-testing
+     */
+    private InternalCellHit findInternalCellAt(
+            Cell cell,
+            Rectangle rect,
+            Point point
+    ) {
+
+        // Sécurité
+        if (cell == null || rect == null || point == null) {
+            return null;
+        }
+
+        // Le point n'est pas dans cette cellule
+        if (!rect.contains(point)) {
+            return null;
+        }
+
+        // Cellule simple : cible trouvée
+        if (cell.internalGrid == null) {
+
+            return new InternalCellHit(
+                    cell,
+                    rect,
+                    null
+            );
+        }
+
+        // Cellule subdivisée
+        InternalGrid grid = cell.internalGrid;
+
+        Rectangle[] parts = computeInternalRects(rect, grid);
+
+        Rectangle firstRect = parts[0];
+        Rectangle secondRect = parts[1];
+
+        Cell firstCell = grid.getFirstCell();
+        Cell secondCell = grid.getSecondCell();
+
+        // Recherche dans la première sous-cellule
+        if (firstRect.contains(point)) {
+
+            InternalCellHit hit = findInternalCellAt(
+                    firstCell,
+                    firstRect,
+                    point
+            );
+
+            if (hit != null) {
+                if (hit.parent == null) hit.parent = cell;                
+                return hit;
+            }
+        }
+
+        // Recherche dans la deuxième sous-cellule
+        if (secondRect.contains(point)) {
+
+            InternalCellHit hit = findInternalCellAt(
+                    secondCell,
+                    secondRect,
+                    point
+            );
+
+            if (hit != null) {
+                if (hit.parent == null) hit.parent = cell;                
+                return hit;
+            }
+        }
+
+        // Fallback
+        return new InternalCellHit(
+                cell,
+                rect,
+                null
+        );
     }
 
     /**
