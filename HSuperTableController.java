@@ -140,14 +140,22 @@ public class HSuperTableController {
         // ── Mode gomme ───────────────────────────────────────────────────────
         if (table.getInteractionMode() == HSuperTable.MODE_ERASE
                 && SwingUtilities.isLeftMouseButton(e)) {
-            int row = table.rowAtPoint(e.getPoint());
-            int col = table.columnAtPoint(e.getPoint());
+
+            // Mettre à jour le focus sur la cellule cliquée d'abord
+            Point point = e.getPoint();
+            int row = table.rowAtPoint(point);
+            int col = table.columnAtPoint(point);
             if (row >= 0 && col >= 0) {
-                table.removeInternalGrid(row, col);
+                HBasicTableUI ui = (HBasicTableUI) table.getUI();
+                InternalCellHit hit = ui.getInternalCellAt(table, point);
+                table.setFocusedInternalCell(hit);
+                table.setFocusedCell(row, col);
+                // Gomme sur la cible courante
+                table.removeInternalGridFromFocused();
             }
             return;
         }
-        
+
         if (SwingUtilities.isRightMouseButton(e)) {
             int row = table.rowAtPoint(e.getPoint());
             int col = table.columnAtPoint(e.getPoint());
@@ -252,6 +260,18 @@ public class HSuperTableController {
             drawEndX = e.getX();
             drawEndY = e.getY();
             isDrawing = true;
+
+            // Mettre à jour le focus instantanément sur la cellule sous le curseur
+            Point point = e.getPoint();
+            int row = table.rowAtPoint(point);
+            int col = table.columnAtPoint(point);
+            if (row >= 0 && col >= 0) {
+                table.setFocusedCell(row, col);
+                HBasicTableUI ui = (HBasicTableUI) table.getUI();
+                InternalCellHit hit = ui.getInternalCellAt(table, point);
+                table.setFocusedInternalCell(hit);
+                table.setSelectedInternalCell(hit);
+            }
             return;
         }
 
@@ -273,7 +293,7 @@ public class HSuperTableController {
 
             if (hit != null && hit.parent != null) {
                 // Sous-cellule détectée — on bloque JTable et on lance notre éditeur
-                e.consume();                
+                e.consume();
                 table.startInternalEdit(hit);
                 return;
             }
@@ -349,53 +369,41 @@ public class HSuperTableController {
         if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
             isDrawing = false;
 
-            // Identifier la cellule sous le point de départ
             int row = table.rowAtPoint(new Point(drawStartX, drawStartY));
             int col = table.columnAtPoint(new Point(drawStartX, drawStartY));
-
-            if (row >= 0 && col >= 0) {
-                int dx = Math.abs(drawEndX - drawStartX);
-                int dy = Math.abs(drawEndY - drawStartY);
-
-                // Direction : plus de déplacement horizontal → coupe verticale
-                // (on trace une ligne verticale = on divise en 2 colonnes)
-                // Plus de déplacement vertical → coupe horizontale
-                Rectangle cellRect = table.getCellRect(row, col, false);
-
-                int splitType;
-                float ratio;
-
-// ---------------------------------------------------------
-// Division verticale
-// ---------------------------------------------------------
-                if (dx >= dy) {
-
-                    splitType = InternalGrid.SPLIT_VERTICAL;
-
-                    int relativeX = drawEndX - cellRect.x;
-
-                    ratio = (float) relativeX / cellRect.width;
-                } // ---------------------------------------------------------
-                // Division horizontale
-                // ---------------------------------------------------------
-                else {
-
-                    splitType = InternalGrid.SPLIT_HORIZONTAL;
-
-                    int relativeY = drawEndY - cellRect.y;
-
-                    ratio = (float) relativeY / cellRect.height;
-                }
-
-// Sécurisation
-                ratio = Math.max(0.15f, ratio);
-                ratio = Math.min(0.85f, ratio);
-
-// Application
-                table.splitCellLocally(row, col, splitType, ratio);
+            if (row < 0 || col < 0) {
+                drawStartX = drawEndX = drawStartY = drawEndY = -1;
+                return;
             }
 
-            // Effacer les coordonnées de prévisualisation
+            int dx = Math.abs(drawEndX - drawStartX);
+            int dy = Math.abs(drawEndY - drawStartY);
+
+            // Référence : bounds de la sous-cellule focusée si présente,
+            // sinon rectangle de la cellule globale
+            Rectangle refRect;
+            if (table.hasInternalFocus()) {
+                refRect = table.getFocusedInternalCell().bounds;
+            } else {
+                refRect = table.getCellRect(row, col, false);
+            }
+
+            int splitType;
+            float ratio;
+
+            if (dx >= dy) {
+                splitType = InternalGrid.SPLIT_VERTICAL;
+                int relativeX = drawEndX - refRect.x;
+                ratio = (float) relativeX / refRect.width;
+            } else {
+                splitType = InternalGrid.SPLIT_HORIZONTAL;
+                int relativeY = drawEndY - refRect.y;
+                ratio = (float) relativeY / refRect.height;
+            }
+
+            ratio = Math.max(0.15f, Math.min(0.85f, ratio));
+            table.splitCellLocally(row, col, splitType, ratio);
+
             drawStartX = drawEndX = -1;
             drawStartY = drawEndY = -1;
             table.repaint();
@@ -535,76 +543,78 @@ public class HSuperTableController {
      * donnée (dr, dc). Si extend=true (Shift enfoncé), la sélection s'élargit.
      */
     private void navigateOrExtend(int dr, int dc, boolean extend) {
-    // ── Navigation dans les sous-cellules ─────────────────────────────────
-    InternalCellHit focused = table.getFocusedInternalCell();
-    if (focused != null && focused.parent != null && !extend) {
-        // On est dans une sous-cellule — naviguer vers l'autre sous-cellule
-        // si la direction pointe vers elle, sinon sortir vers la cellule voisine
-        InternalGrid grid = focused.parent.internalGrid;
-        if (grid != null) {
-            boolean goToSecond =
-                (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL  && dc > 0) ||
-                (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr > 0);
-            boolean goToFirst =
-                (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL  && dc < 0) ||
-                (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr < 0);
+        // ── Navigation dans les sous-cellules ─────────────────────────────────
+        InternalCellHit focused = table.getFocusedInternalCell();
+        if (focused != null && focused.parent != null && !extend) {
+            // On est dans une sous-cellule — naviguer vers l'autre sous-cellule
+            // si la direction pointe vers elle, sinon sortir vers la cellule voisine
+            InternalGrid grid = focused.parent.internalGrid;
+            if (grid != null) {
+                boolean goToSecond
+                        = (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL && dc > 0)
+                        || (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr > 0);
+                boolean goToFirst
+                        = (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL && dc < 0)
+                        || (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr < 0);
 
-            HSuperDefaultTableModel.Cell target = null;
-            Rectangle targetRect = null;
+                HSuperDefaultTableModel.Cell target = null;
+                Rectangle targetRect = null;
 
-            // Calculer les rectangles actuels
-            int row = table.getFocusedRow();
-            int col = table.getFocusedColumn();
-            Rectangle cellRect = table.getCellRect(row, col, false);
-            Rectangle[] parts = ((HBasicTableUI) table.getUI())
-                    .computeInternalRects(cellRect, grid);
+                // Calculer les rectangles actuels
+                int row = table.getFocusedRow();
+                int col = table.getFocusedColumn();
+                Rectangle cellRect = table.getCellRect(row, col, false);
+                Rectangle[] parts = ((HBasicTableUI) table.getUI())
+                        .computeInternalRects(cellRect, grid);
 
-            if (goToSecond && focused.cell == grid.getFirstCell()) {
-                target     = grid.getSecondCell();
-                targetRect = parts[1];
-            } else if (goToFirst && focused.cell == grid.getSecondCell()) {
-                target     = grid.getFirstCell();
-                targetRect = parts[0];
+                if (goToSecond && focused.cell == grid.getFirstCell()) {
+                    target = grid.getSecondCell();
+                    targetRect = parts[1];
+                } else if (goToFirst && focused.cell == grid.getSecondCell()) {
+                    target = grid.getFirstCell();
+                    targetRect = parts[0];
+                }
+
+                if (target != null) {
+                    // Rester dans la même cellule parente, changer de sous-cellule
+                    InternalCellHit newHit = new InternalCellHit(
+                            target, targetRect, focused.parent);
+                    table.setFocusedInternalCell(newHit);
+                    table.setSelectedInternalCell(newHit);
+                    return;
+                }
             }
-
-            if (target != null) {
-                // Rester dans la même cellule parente, changer de sous-cellule
-                InternalCellHit newHit = new InternalCellHit(
-                        target, targetRect, focused.parent);
-                table.setFocusedInternalCell(newHit);
-                table.setSelectedInternalCell(newHit);
-                return;
-            }
+            // Direction vers l'extérieur — on sort de la sous-cellule
+            table.setFocusedInternalCell(null);
+            table.setSelectedInternalCell(null);
         }
-        // Direction vers l'extérieur — on sort de la sous-cellule
-        table.setFocusedInternalCell(null);
-        table.setSelectedInternalCell(null);
+
+        // ── Navigation normale entre cellules ─────────────────────────────────
+        int focusRow = table.getFocusedRow();
+        int focusCol = table.getFocusedColumn();
+        if (focusRow < 0 || focusCol < 0) {
+            return;
+        }
+
+        int newRow = Math.max(0, Math.min(table.getRowCount() - 1, focusRow + dr));
+        int newCol = Math.max(0, Math.min(table.getColumnCount() - 1, focusCol + dc));
+
+        if (extend) {
+            dragRow = newRow;
+            dragCol = newCol;
+            applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
+            table.setFocusedCell(newRow, newCol);
+        } else {
+            anchorRow = newRow;
+            anchorCol = newCol;
+            dragRow = newRow;
+            dragCol = newCol;
+            table.clearSelection();
+            table.addSelectedRow(newRow);
+            table.setSelection(new HSuperTable.CellRange(newRow, newCol, newRow, newCol));
+            table.setFocusedCell(newRow, newCol);
+        }
     }
-
-    // ── Navigation normale entre cellules ─────────────────────────────────
-    int focusRow = table.getFocusedRow();
-    int focusCol = table.getFocusedColumn();
-    if (focusRow < 0 || focusCol < 0) return;
-
-    int newRow = Math.max(0, Math.min(table.getRowCount()    - 1, focusRow + dr));
-    int newCol = Math.max(0, Math.min(table.getColumnCount() - 1, focusCol + dc));
-
-    if (extend) {
-        dragRow = newRow;
-        dragCol = newCol;
-        applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
-        table.setFocusedCell(newRow, newCol);
-    } else {
-        anchorRow = newRow;
-        anchorCol = newCol;
-        dragRow   = newRow;
-        dragCol   = newCol;
-        table.clearSelection();
-        table.addSelectedRow(newRow);
-        table.setSelection(new HSuperTable.CellRange(newRow, newCol, newRow, newCol));
-        table.setFocusedCell(newRow, newCol);
-    }
-}
 
     // =========================================================================
     // SÉLECTION DE LIGNES (comportement existant conservé)

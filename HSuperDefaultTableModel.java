@@ -1239,6 +1239,8 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         first.value = (currentValue != null) ? currentValue : cell.value;
         second.value = null;
 
+        cell.value = null;
+        
         // On vide la valeur DefaultTableModel pour éviter la double lecture
         // Le rendu utilisera désormais first.value et second.value
         setValueAt(null, row, col);
@@ -1292,32 +1294,96 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
 
         InternalGrid grid = cell.internalGrid;
 
-        // Reconstruction du contenu — on concatène first et second
-        StringBuilder reunited = new StringBuilder();
-
-        if (grid.getFirstCell() != null && grid.getFirstCell().value != null) {
-            String v = grid.getFirstCell().value.toString().trim();
-            if (!v.isEmpty()) {
-                reunited.append(v);
-            }
-        }
-        if (grid.getSecondCell() != null && grid.getSecondCell().value != null) {
-            String v = grid.getSecondCell().value.toString().trim();
-            if (!v.isEmpty()) {
-                if (reunited.length() > 0) {
-                    reunited.append(" ");
-                }
-                reunited.append(v);
-            }
-        }
-
-        // On remet la valeur dans les deux endroits pour cohérence
-        String finalValue = reunited.length() > 0 ? reunited.toString() : null;
+        // reconstitution récursive via collectValue :
+        String finalValue = collectValue(cell);
         cell.value = finalValue;
         setValueAt(finalValue, row, col);
 
-        // Suppression de la subdivision
-        cell.internalGrid = null;
+        fireTableDataChanged();
+    }
+
+    /**
+     * Reconstitue récursivement le contenu textuel d'une Cell, en parcourant
+     * toute sa hiérarchie interne.
+     */
+    public String collectValue(Cell cell) {
+        if (cell == null) {
+            return null;
+        }
+
+        if (!cell.hasInternalGrid()) {
+            return cell.value != null ? cell.value.toString().trim() : null;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        String v1 = collectValue(cell.internalGrid.getFirstCell());
+        String v2 = collectValue(cell.internalGrid.getSecondCell());
+
+        if (v1 != null && !v1.isEmpty()) {
+            sb.append(v1);
+        }
+        if (v2 != null && !v2.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append(" ");
+            }
+            sb.append(v2);
+        }
+        return sb.length() > 0 ? sb.toString() : null;
+    }
+
+    /**
+     * Subdivise une Cell spécifique — peut être une sous-cellule interne.
+     * Contrairement à splitCellLocally qui travaille par coordonnées, cette
+     * méthode prend directement l'objet Cell cible.
+     *
+     * @param targetCell la cellule à subdiviser
+     * @param splitType InternalGrid.SPLIT_VERTICAL ou SPLIT_HORIZONTAL
+     * @param dividerRatio position du séparateur entre 0.15f et 0.85f
+     */
+    public void splitCellDirectly(Cell targetCell, int splitType, float dividerRatio) {
+        if (targetCell == null || targetCell.isAbsorbed()) {
+            return;
+        }
+
+        // Toute cellule peut être subdivisée — on supprime la restriction
+        // Si elle est déjà subdivisée, sa subdivision existante est conservée
+        // dans first, et second est nouveau
+        dividerRatio = Math.max(0.15f, Math.min(0.85f, dividerRatio));
+
+        Cell first = new Cell();
+        Cell second = new Cell();
+
+        // Reporter le contenu existant dans first uniquement
+        first.value = targetCell.value;
+        second.value = null;
+
+        // Copier le style
+        if (targetCell.style != null) {
+            first.style = targetCell.style.copy();
+            second.style = new HSuperTableCellModel(); // style vierge pour second
+        }
+
+        // Si la cellule avait déjà une subdivision, elle passe dans first
+        first.internalGrid = targetCell.internalGrid;
+
+        targetCell.internalGrid = new InternalGrid(splitType, dividerRatio, first, second);
+        targetCell.value = null;
+
+        fireTableDataChanged();
+    }
+
+    /**
+     * Supprime la subdivision interne d'une Cell directement. Utilisé par la
+     * gomme sur les sous-cellules.
+     */
+    public void removeInternalGridFromCell(Cell targetCell) {
+        if (targetCell == null || !targetCell.hasInternalGrid()) {
+            return;
+        }
+
+        String finalValue = collectValue(targetCell);
+        targetCell.value = finalValue;
+        targetCell.internalGrid = null;
 
         fireTableDataChanged();
     }

@@ -262,99 +262,88 @@ public class HBasicTableUI extends BasicTableUI {
     }
 
     // =========================================================================
-// RENDU PRINCIPAL D'UNE CELLULE
-// =========================================================================
+    // RENDU PRINCIPAL D'UNE CELLULE
+    // =========================================================================
     /**
      * Point d'entrée du rendu d'une cellule. Délègue au moteur de rendu
      * structurel (gestion des subdivisions internes).
      */
     private void paintCell(Graphics2D g2, HSuperTable t, int row, int col) {
-
         HSuperDefaultTableModel model = t.getHModel();
         HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
-
         if (cell.isAbsorbed()) {
             return;
         }
 
-        int rSpan = cell.spanRow;
-        int cSpan = cell.spanCol;
-
         Rectangle cellRect = t.getCellRect(row, col, false);
-
-        if (rSpan > 1 || cSpan > 1) {
-            cellRect = computeMergedRect(t, row, col, rSpan, cSpan);
+        if (cell.spanRow > 1 || cell.spanCol > 1) {
+            cellRect = computeMergedRect(t, row, col, cell.spanRow, cell.spanCol);
         }
 
-        paintCellStructure(g2, t, cell, cellRect, row, col);
+        // false = cellule racine, pas une sous-cellule
+        paintCellStructure(g2, t, cell, cellRect, row, col, false);
     }
 
-// =========================================================================
-// MOTEUR DE RENDU STRUCTUREL (NORMAL + SUBDIVISIONS)
-// =========================================================================
+    // =========================================================================
+    // MOTEUR DE RENDU STRUCTUREL (NORMAL + SUBDIVISIONS)
+    // =========================================================================
     /**
      * Rend une cellule en tenant compte de ses éventuelles subdivisions
      * internes.
      */
     private void paintCellStructure(
-            Graphics2D g2,
-            HSuperTable t,
+            Graphics2D g2, HSuperTable t,
             HSuperDefaultTableModel.Cell cell,
-            Rectangle rect,
-            int row,
-            int col
+            Rectangle rect, int row, int col,
+            boolean isSubCell // ← nouveau paramètre
     ) {
-
-        // ---------------------------------------------------------------------
-        // CAS 1 : cellule normale (pas de subdivision)
-        // ---------------------------------------------------------------------
+        // CAS 1
         if (cell.internalGrid == null) {
-
             HSuperTableStyle style = t.getTableStyle();
             HSuperTableCellModel cModel = t.getHModel().getCellModel(row, col);
 
-            Color bg = resolveCellBackground(t, style, row, col);
-
+            // Fond
+            Color bg;
+            if (cell.style != null && cell.style.hasBackground()) {
+                bg = cell.style.getBackground();
+            } else {
+                bg = resolveCellBackground(t, style, row, col);
+            }
+            if (bg == null) {
+                bg = style != null ? style.getCellBackground() : Color.WHITE;
+            }
             g2.setColor(bg);
             g2.fillRect(rect.x, rect.y, rect.width, rect.height);
 
-            Object value = cell.value != null ? cell.value : t.getValueAt(row, col);
-
-            if (value != null) {
-                paintCellText(
-                        g2,
-                        t,
-                        cModel,
-                        style,
-                        rect,
-                        value.toString(),
-                        row,
-                        col
-                );
+            // Valeur — sous-cellule : cell.value uniquement
+            //          cellule racine : cell.value puis DefaultTableModel
+            Object value = cell.value;
+            if (!isSubCell && value == null) {
+                value = t.getValueAt(row, col);
             }
 
+            if (value != null) {
+                HSuperTableCellModel effectiveModel
+                        = (cell.style != null) ? cell.style : cModel;
+                paintCellText(g2, t, effectiveModel, style,
+                        rect, value.toString(), row, col);
+            }
             return;
         }
 
-        // ---------------------------------------------------------------------
-        // CAS 2 : cellule subdivisée (InternalGrid)
-        // ---------------------------------------------------------------------
+        // CAS 2
         InternalGrid grid = cell.internalGrid;
-
         Rectangle[] parts = computeInternalRects(rect, grid);
-
         HSuperDefaultTableModel.Cell first = grid.getFirstCell();
         HSuperDefaultTableModel.Cell second = grid.getSecondCell();
 
-        // Dessin de la première sous-cellule
-        paintInternalCell(g2, t, first, parts[0], row, col);
+        // Récursif — les sous-cellules sont toujours isSubCell=true
+        paintCellStructure(g2, t, first, parts[0], row, col, true);
+        paintCellStructure(g2, t, second, parts[1], row, col, true);
 
-        // Dessin de la deuxième sous-cellule
-        paintInternalCell(g2, t, second, parts[1], row, col);
-
-        // Ligne de séparation visuelle (style Word)
+        // Ligne de séparation
         g2.setColor(new Color(180, 180, 180));
-
+        g2.setStroke(new BasicStroke(1f));
         if (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL) {
             int x = parts[0].x + parts[0].width;
             g2.drawLine(x, rect.y, x, rect.y + rect.height);
@@ -362,9 +351,8 @@ public class HBasicTableUI extends BasicTableUI {
             int y = parts[0].y + parts[0].height;
             g2.drawLine(rect.x, y, rect.x + rect.width, y);
         }
-        
-        // Bordures custom des sous-cellules — par-dessus tout
-paintInternalBorders(g2, first, parts[0], second, parts[1]);
+
+        paintInternalBorders(g2, first, parts[0], second, parts[1]);
     }
 
 // =========================================================================
@@ -374,79 +362,85 @@ paintInternalBorders(g2, first, parts[0], second, parts[1]);
      * Rend une sous-cellule issue d'une subdivision interne.
      */
     private void paintInternalCell(
-        Graphics2D g2,
-        HSuperTable t,
-        HSuperDefaultTableModel.Cell subCell,
-        Rectangle rect,
-        int row,
-        int col
-) {
-    if (subCell == null) return;
+            Graphics2D g2,
+            HSuperTable t,
+            HSuperDefaultTableModel.Cell subCell,
+            Rectangle rect,
+            int row,
+            int col
+    ) {
+        if (subCell == null) {
+            return;
+        }
 
-    HSuperTableStyle style = t.getTableStyle();
-    HSuperTableCellModel cModel = subCell.style;
+        HSuperTableStyle style = t.getTableStyle();
+        HSuperTableCellModel cModel = subCell.style;
 
-    // ── Fond ─────────────────────────────────────────────────────────────
-    Color bg;
-    if (cModel != null && cModel.hasBackground()) {
-        bg = cModel.getBackground();
-    } else {
-        bg = resolveCellBackground(t, style, row, col);
+        // ── Fond ─────────────────────────────────────────────────────────────
+        Color bg;
+        if (cModel != null && cModel.hasBackground()) {
+            bg = cModel.getBackground();
+        } else {
+            bg = resolveCellBackground(t, style, row, col);
+        }
+        if (bg == null) {
+            bg = style != null ? style.getCellBackground() : Color.WHITE;
+        }
+
+        g2.setColor(bg);
+        g2.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+        // ── Texte — avec alignement, marges, direction depuis subCell.style ──
+        Object value = subCell.value;
+        if (value != null && !value.toString().isEmpty()) {
+            // On passe cModel directement : il contient alignement, marges, direction
+            paintCellText(g2, t, cModel, style, rect, value.toString(), row, col);
+        }
     }
-    if (bg == null) bg = style != null ? style.getCellBackground() : Color.WHITE;
-
-    g2.setColor(bg);
-    g2.fillRect(rect.x, rect.y, rect.width, rect.height);
-
-    // ── Texte — avec alignement, marges, direction depuis subCell.style ──
-    Object value = subCell.value;
-    if (value != null && !value.toString().isEmpty()) {
-        // On passe cModel directement : il contient alignement, marges, direction
-        paintCellText(g2, t, cModel, style, rect, value.toString(), row, col);
-    }
-}
 
     /**
- * Dessine les bordures custom des deux sous-cellules d'une InternalGrid.
- * Appelé après le dessin du fond et du texte, par-dessus tout.
- */
-private void paintInternalBorders(Graphics2D g2, HSuperDefaultTableModel.Cell first,
-        Rectangle firstRect, HSuperDefaultTableModel.Cell second,
-        Rectangle secondRect) {
+     * Dessine les bordures custom des deux sous-cellules d'une InternalGrid.
+     * Appelé après le dessin du fond et du texte, par-dessus tout.
+     */
+    private void paintInternalBorders(Graphics2D g2, HSuperDefaultTableModel.Cell first,
+            Rectangle firstRect, HSuperDefaultTableModel.Cell second,
+            Rectangle secondRect) {
 
-    paintSubCellBorders(g2, first, firstRect);
-    paintSubCellBorders(g2, second, secondRect);
-}
+        paintSubCellBorders(g2, first, firstRect);
+        paintSubCellBorders(g2, second, secondRect);
+    }
 
-private void paintSubCellBorders(Graphics2D g2,
-        HSuperDefaultTableModel.Cell subCell, Rectangle r) {
+    private void paintSubCellBorders(Graphics2D g2,
+            HSuperDefaultTableModel.Cell subCell, Rectangle r) {
 
-    if (subCell == null || subCell.style == null) return;
-    HSuperTableCellModel m = subCell.style;
+        if (subCell == null || subCell.style == null) {
+            return;
+        }
+        HSuperTableCellModel m = subCell.style;
 
-    if (m.hasBorderTop()) {
-        g2.setColor(m.getBorderTopColor());
-        g2.setStroke(createStroke(m.getBorderTopThickness(), m.getBorderTopStyle()));
-        g2.drawLine(r.x, r.y, r.x + r.width, r.y);
+        if (m.hasBorderTop()) {
+            g2.setColor(m.getBorderTopColor());
+            g2.setStroke(createStroke(m.getBorderTopThickness(), m.getBorderTopStyle()));
+            g2.drawLine(r.x, r.y, r.x + r.width, r.y);
+        }
+        if (m.hasBorderBottom()) {
+            g2.setColor(m.getBorderBottomColor());
+            g2.setStroke(createStroke(m.getBorderBottomThickness(), m.getBorderBottomStyle()));
+            g2.drawLine(r.x, r.y + r.height, r.x + r.width, r.y + r.height);
+        }
+        if (m.hasBorderLeft()) {
+            g2.setColor(m.getBorderLeftColor());
+            g2.setStroke(createStroke(m.getBorderLeftThickness(), m.getBorderLeftStyle()));
+            g2.drawLine(r.x, r.y, r.x, r.y + r.height);
+        }
+        if (m.hasBorderRight()) {
+            g2.setColor(m.getBorderRightColor());
+            g2.setStroke(createStroke(m.getBorderRightThickness(), m.getBorderRightStyle()));
+            g2.drawLine(r.x + r.width, r.y, r.x + r.width, r.y + r.height);
+        }
+        g2.setStroke(new BasicStroke(1f));
     }
-    if (m.hasBorderBottom()) {
-        g2.setColor(m.getBorderBottomColor());
-        g2.setStroke(createStroke(m.getBorderBottomThickness(), m.getBorderBottomStyle()));
-        g2.drawLine(r.x, r.y + r.height, r.x + r.width, r.y + r.height);
-    }
-    if (m.hasBorderLeft()) {
-        g2.setColor(m.getBorderLeftColor());
-        g2.setStroke(createStroke(m.getBorderLeftThickness(), m.getBorderLeftStyle()));
-        g2.drawLine(r.x, r.y, r.x, r.y + r.height);
-    }
-    if (m.hasBorderRight()) {
-        g2.setColor(m.getBorderRightColor());
-        g2.setStroke(createStroke(m.getBorderRightThickness(), m.getBorderRightStyle()));
-        g2.drawLine(r.x + r.width, r.y, r.x + r.width, r.y + r.height);
-    }
-    g2.setStroke(new BasicStroke(1f));
-}
-    
+
     private void paintInternalHover(Graphics2D g2, HSuperTable t) {
 
         InternalCellHit hit = t.getHoveredInternalCell();
@@ -1065,7 +1059,7 @@ private void paintSubCellBorders(Graphics2D g2,
          * Cellule réellement ciblée.
          */
         public Cell cell;
-        
+
         /**
          * Cellule parente.
          */
@@ -1103,8 +1097,7 @@ private void paintSubCellBorders(Graphics2D g2,
      * @param point point souris
      * @return résultat du hit-testing
      */
-    public InternalCellHit getInternalCellAt(HSuperTable t, Point point) 
-    {
+    public InternalCellHit getInternalCellAt(HSuperTable t, Point point) {
 
         int row = t.rowAtPoint(point);
         int col = t.columnAtPoint(point);
@@ -1202,7 +1195,9 @@ private void paintSubCellBorders(Graphics2D g2,
             );
 
             if (hit != null) {
-                if (hit.parent == null) hit.parent = cell;                
+                if (hit.parent == null) {
+                    hit.parent = cell;
+                }
                 return hit;
             }
         }
@@ -1217,7 +1212,9 @@ private void paintSubCellBorders(Graphics2D g2,
             );
 
             if (hit != null) {
-                if (hit.parent == null) hit.parent = cell;                
+                if (hit.parent == null) {
+                    hit.parent = cell;
+                }
                 return hit;
             }
         }

@@ -103,7 +103,7 @@ public class HSuperTable extends JTable {
     private CellRange currentSelection = null;
 
     private final JTextField internalEditor = new JTextField();
-    
+
     // =========================================================================
     // OPTIONS DE STYLE 
     // =========================================================================
@@ -125,7 +125,7 @@ public class HSuperTable extends JTable {
 
     //on stock la cellule qui subit l'opération
     private InternalCellHit focusedInternalCell, hoveredInternalCell,
-            selectedInternalCell, editingInternalCell;  
+            selectedInternalCell, editingInternalCell;
 
     // CONSTRUCTEURS
     public HSuperTable() {
@@ -556,7 +556,8 @@ public class HSuperTable extends JTable {
 
     /**
      * Retourne la sélection courante, ou null si aucune.
-     * @return 
+     *
+     * @return
      */
     public CellRange getSelection() {
         return currentSelection;
@@ -564,49 +565,55 @@ public class HSuperTable extends JTable {
 
     /**
      * Vrai si une sélection de zone est active.
-     * @return 
+     *
+     * @return
      */
     public boolean hasSelection() {
         return currentSelection != null;
     }
 
     /**
-     * Applique une couleur de fond à toute la zone sélectionnée.Ne fait rien
- si aucune sélection n'est active.
+     * Applique une couleur de fond à toute la zone sélectionnée.Ne fait rien si
+     * aucune sélection n'est active.
+     *
      * @param color
      */
     public void applyBackgroundToSelection(Color color) {
-    if (hasInternalFocus()) {
-        focusedInternalCell.cell.style.setBackground(color);
-        repaint();
-        return;
-    }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.setCellBackground(r, c, color);
+        if (hasInternalFocus()) {
+            focusedInternalCell.cell.style.setBackground(color);
+            repaint();
+            return;
         }
+        if (!hasSelection()) {
+            return;
+        }
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.setCellBackground(r, c, color);
+            }
+        }
+        refreshUI();
     }
-    refreshUI();
-}
 
     /**
      * Applique une couleur de texte à la sélection.
      */
     public void applyForegroundToSelection(Color color) {
-    if (hasInternalFocus()) {
-        focusedInternalCell.cell.style.setForeground(color);
-        repaint();
-        return;
-    }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.setCellForeground(r, c, color);
+        if (hasInternalFocus()) {
+            focusedInternalCell.cell.style.setForeground(color);
+            repaint();
+            return;
         }
+        if (!hasSelection()) {
+            return;
+        }
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.setCellForeground(r, c, color);
+            }
+        }
+        refreshUI();
     }
-    refreshUI();
-}
 
     /**
      * Applique des bordures à la sélection.
@@ -617,112 +624,122 @@ public class HSuperTable extends JTable {
      * @param style BORDER_SOLID, BORDER_DASHED, BORDER_DOTTED ou BORDER_DOUBLE
      */
     public void applyBorderToSelection(int sides, Color color,
-        float thickness, int style) {
-    if (hasInternalFocus()) {
-        HSuperTableCellModel m = focusedInternalCell.cell.style;
-        if ((sides & SIDE_TOP)    != 0) {
-            m.setBorderTopColor(color);
-            m.setBorderTopThickness(thickness);
-            m.setBorderTopStyle(style);
+            float thickness, int style) {
+        if (hasInternalFocus()) {
+            HSuperTableCellModel m = focusedInternalCell.cell.style;
+            if ((sides & SIDE_TOP) != 0) {
+                m.setBorderTopColor(color);
+                m.setBorderTopThickness(thickness);
+                m.setBorderTopStyle(style);
+            }
+            if ((sides & SIDE_BOTTOM) != 0) {
+                m.setBorderBottomColor(color);
+                m.setBorderBottomThickness(thickness);
+                m.setBorderBottomStyle(style);
+            }
+            if ((sides & SIDE_LEFT) != 0) {
+                m.setBorderLeftColor(color);
+                m.setBorderLeftThickness(thickness);
+                m.setBorderLeftStyle(style);
+            }
+            if ((sides & SIDE_RIGHT) != 0) {
+                m.setBorderRightColor(color);
+                m.setBorderRightThickness(thickness);
+                m.setBorderRightStyle(style);
+            }
+            repaint();
+            return;
         }
-        if ((sides & SIDE_BOTTOM) != 0) {
-            m.setBorderBottomColor(color);
-            m.setBorderBottomThickness(thickness);
-            m.setBorderBottomStyle(style);
+        if (!hasSelection()) {
+            return;
         }
-        if ((sides & SIDE_LEFT)   != 0) {
-            m.setBorderLeftColor(color);
-            m.setBorderLeftThickness(thickness);
-            m.setBorderLeftStyle(style);
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.setCellBorderSide(r, c, sides, color, thickness, style);
+            }
         }
-        if ((sides & SIDE_RIGHT)  != 0) {
-            m.setBorderRightColor(color);
-            m.setBorderRightThickness(thickness);
-            m.setBorderRightStyle(style);
-        }
-        repaint();
-        return;
+        refreshUI();
     }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.setCellBorderSide(r, c, sides, color, thickness, style);
-        }
-    }
-    refreshUI();
-}
 
     /**
      * Applique un alignement à la sélection.
      */
     public void applyAlignmentToSelection(int hAlign, int vAlign) {
-    if (hasInternalFocus()) {
-        focusedInternalCell.cell.style.setAlignment(hAlign, vAlign);
-        repaint();
-        return;
-    }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.setCellAlignment(r, c, hAlign, vAlign);
+        if (hasInternalFocus()) {
+            focusedInternalCell.cell.style.setAlignment(hAlign, vAlign);
+            repaint();
+            return;
         }
+        if (!hasSelection()) {
+            return;
+        }
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.setCellAlignment(r, c, hAlign, vAlign);
+            }
+        }
+        refreshUI();
     }
-    refreshUI();
-}
 
     /**
      * Applique une direction de texte à la sélection.
      */
     public void applyTextDirectionToSelection(int direction) {
-    if (hasInternalFocus()) {
-        focusedInternalCell.cell.style.setTextDirection(direction);
-        repaint();
-        return;
-    }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.setCellTextDirection(r, c, direction);
+        if (hasInternalFocus()) {
+            focusedInternalCell.cell.style.setTextDirection(direction);
+            repaint();
+            return;
         }
+        if (!hasSelection()) {
+            return;
+        }
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.setCellTextDirection(r, c, direction);
+            }
+        }
+        refreshUI();
     }
-    refreshUI();
-}
 
     /**
      * Applique des marges internes à la sélection.
      */
     public void applyMarginsToSelection(Insets margins) {
-    if (hasInternalFocus()) {
-        focusedInternalCell.cell.style.setMargins(margins);
-        repaint();
-        return;
-    }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.setCellMargins(r, c, margins);
+        if (hasInternalFocus()) {
+            focusedInternalCell.cell.style.setMargins(margins);
+            repaint();
+            return;
         }
+        if (!hasSelection()) {
+            return;
+        }
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.setCellMargins(r, c, margins);
+            }
+        }
+        refreshUI();
     }
-    refreshUI();
-}
 
     /**
      * Remet le formatage par défaut sur toute la sélection.
      */
     public void resetFormattingOnSelection() {
-    if (hasInternalFocus()) {
-        focusedInternalCell.cell.style.reset();
-        repaint();
-        return;
-    }
-    if (!hasSelection()) return;
-    for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
-        for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
-            hModel.resetCellFormatting(r, c);
+        if (hasInternalFocus()) {
+            focusedInternalCell.cell.style.reset();
+            repaint();
+            return;
         }
+        if (!hasSelection()) {
+            return;
+        }
+        for (int r = currentSelection.rowStart; r <= currentSelection.rowEnd; r++) {
+            for (int c = currentSelection.colStart; c <= currentSelection.colEnd; c++) {
+                hModel.resetCellFormatting(r, c);
+            }
+        }
+        refreshUI();
     }
-    refreshUI();
-}
 
     /**
      * Fusionne la zone sélectionnée. Remplace mergeSelectedCells() qui
@@ -847,11 +864,12 @@ public class HSuperTable extends JTable {
         return interactionMode;
     }
 
-    public void splitCellLocally(int row,
-            int col,
-            int splitType,
-            float dividerRatio) {
-
+    public void splitCellLocally(int row, int col, int splitType, float dividerRatio) {
+        if (hasInternalFocus()) {
+            hModel.splitCellDirectly(focusedInternalCell.cell, splitType, dividerRatio);
+            refreshUI();
+            return;
+        }
         hModel.splitCellLocally(row, col, splitType, dividerRatio);
         refreshUI();
     }
@@ -859,6 +877,23 @@ public class HSuperTable extends JTable {
     public void removeInternalGrid(int row, int col) {
         hModel.removeInternalGrid(row, col);
         refreshUI();
+    }
+
+    public void removeInternalGridFromFocused() {
+        if (hasInternalFocus()) {
+            hModel.removeInternalGridFromCell(focusedInternalCell.cell);
+            setFocusedInternalCell(null);
+            setSelectedInternalCell(null);
+            refreshUI();
+            return;
+        }
+        // Pas de sous-cellule focusée — gomme sur la cellule globale
+        int row = getFocusedRow();
+        int col = getFocusedColumn();
+        if (row >= 0 && col >= 0) {
+            hModel.removeInternalGrid(row, col);
+            refreshUI();
+        }
     }
 
     public void setFocusedInternalCell(InternalCellHit hit) {
@@ -874,8 +909,7 @@ public class HSuperTable extends JTable {
         return hoveredInternalCell;
     }
 
-    public void setHoveredInternalCell(InternalCellHit hoveredInternalCell)            
-    {
+    public void setHoveredInternalCell(InternalCellHit hoveredInternalCell) {
         this.hoveredInternalCell = hoveredInternalCell;
         repaint();
     }
@@ -898,10 +932,12 @@ public class HSuperTable extends JTable {
 
     public void startInternalEdit(InternalCellHit hit) {
         System.out.println("start internal");
-        if (hit == null || hit.cell == null) return;        
+        if (hit == null || hit.cell == null) {
+            return;
+        }
 
         editingInternalCell = hit;
-        
+
         Rectangle r = hit.bounds;
 
         internalEditor.setBounds(r.x + 1, r.y + 1, r.width - 2, r.height - 2);
@@ -924,7 +960,7 @@ public class HSuperTable extends JTable {
 
             editingInternalCell.cell.value
                     = internalEditor.getText();
-            System.out.println("Texte "+internalEditor.getText());
+            System.out.println("Texte " + internalEditor.getText());
         }
 
         internalEditor.setVisible(false);
@@ -932,7 +968,7 @@ public class HSuperTable extends JTable {
         editingInternalCell = null;
 
         repaint();
-        
+
     }
 
     // ── Lignes et colonnes ───────────────────────────────────────────────────
@@ -1775,14 +1811,14 @@ public class HSuperTable extends JTable {
                     + rowEnd + "," + colEnd + ")]";
         }
     }
-    
+
     /**
- * Vrai si une sous-cellule interne est actuellement focusée.
- * Utilisé par toutes les méthodes de formatage pour router
- * l'action vers la bonne cible.
- */
-private boolean hasInternalFocus() {
-    return focusedInternalCell != null && focusedInternalCell.cell != null;
-}
+     * Vrai si une sous-cellule interne est actuellement focusée. Utilisé par
+     * toutes les méthodes de formatage pour router l'action vers la bonne
+     * cible.
+     */
+    public boolean hasInternalFocus() {
+        return focusedInternalCell != null && focusedInternalCell.cell != null;
+    }
 
 }
