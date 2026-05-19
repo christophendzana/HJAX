@@ -258,6 +258,7 @@ public class HBasicTableUI extends BasicTableUI {
 
         // Prévisualisation du trait crayon (mode dessiner)
         paintDrawPreview(g2, t);
+        paintResizePreview(g2, t);
         g2.dispose();
     }
 
@@ -316,7 +317,7 @@ public class HBasicTableUI extends BasicTableUI {
             g2.fillRect(rect.x, rect.y, rect.width, rect.height);
 
             // Valeur — sous-cellule : cell.value uniquement
-            //          cellule racine : cell.value puis DefaultTableModel
+            // cellule racine : cell.value puis DefaultTableModel
             Object value = cell.value;
             if (!isSubCell && value == null) {
                 value = t.getValueAt(row, col);
@@ -1048,6 +1049,38 @@ public class HBasicTableUI extends BasicTableUI {
     }
 
     /**
+     * Dessine la ligne de prévisualisation pendant le redimensionnement manuel
+     * d'une ligne ou d'une colonne.     
+     */
+    private void paintResizePreview(Graphics2D g2, HSuperTable t) {
+
+        // Couleur et style communs
+        g2.setColor(new Color(37, 99, 235, 180));
+        g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT,
+                BasicStroke.JOIN_MITER, 10f, new float[]{6f, 3f}, 0f));
+
+        if (t.isResizingRow()) {
+            int y = t.getResizePreviewY();
+            if (y < 0) {
+                return;
+            }
+            // Ligne horizontale sur toute la largeur du tableau
+            g2.drawLine(0, y, t.getWidth(), y);
+        }
+
+        if (t.isResizingCol()) {
+            int x = t.getResizePreviewX();
+            if (x < 0) {
+                return;
+            }
+            // Ligne verticale sur toute la hauteur du tableau
+            g2.drawLine(x, 0, x, t.getHeight());
+        }
+
+        g2.setStroke(new BasicStroke(1f));
+    }
+
+    /**
      * Résultat d'une détection de sous-cellule interne.
      *
      * Contient : - la cellule réellement ciblée, - son rectangle réel, - sa
@@ -1078,9 +1111,9 @@ public class HBasicTableUI extends BasicTableUI {
          * @param parent
          */
         public InternalCellHit(
-                HSuperDefaultTableModel.Cell cell,
+                Cell cell,
                 Rectangle bounds,
-                HSuperDefaultTableModel.Cell parent
+                Cell parent
         ) {
 
             this.cell = cell;
@@ -1111,19 +1144,15 @@ public class HBasicTableUI extends BasicTableUI {
         Cell cell = model.getCell(row, col);
 
         if (cell.isAbsorbed()) {
-
             Point origin = cell.mergeOrigin;
-
-            row = origin.x;
-            col = origin.y;
-
+            row = origin.y;
+            col = origin.x;
             cell = model.getCell(row, col);
         }
 
         Rectangle rect = t.getCellRect(row, col, false);
 
         if (cell.isMerged()) {
-
             rect = computeMergedRect(
                     t,
                     row,

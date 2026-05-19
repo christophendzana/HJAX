@@ -127,6 +127,20 @@ public class HSuperTable extends JTable {
     private InternalCellHit focusedInternalCell, hoveredInternalCell,
             selectedInternalCell, editingInternalCell;
 
+    // ÉTATS DE REDIMENSIONNEMENT
+    private int resizeRowIndex = -1;   // index de la ligne en cours de resize (-1 = aucun)
+    private int resizeColIndex = -1;   // index de la colonne en cours de resize (-1 = aucun)
+    private int resizePreviewY = -1;   // position Y de la ligne de prévisualisation horizontale
+    private int resizePreviewX = -1;   // position X de la ligne de prévisualisation verticale
+    private boolean isResizingRow = false;
+    private boolean isResizingCol = false;
+
+    // Index de la colonne voisine droite lors du resize de colonne
+    private int resizeColNeighborIndex = -1;
+
+    // Largeur originale de la colonne voisine droite au moment du press
+    private int resizeNeighborOriginalSize = -1;
+
     // CONSTRUCTEURS
     public HSuperTable() {
         this(new HSuperDefaultTableModel());
@@ -204,6 +218,7 @@ public class HSuperTable extends JTable {
         setSelectionBackground(new Color(13, 110, 253, 30));
         setSelectionForeground(Color.BLACK);
         setFillsViewportHeight(false);
+        setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
     }
 
     // ── ONGLET CRÉATION ──────────────────────────────────────────────────────
@@ -881,12 +896,18 @@ public class HSuperTable extends JTable {
 
     public void removeInternalGridFromFocused() {
         if (hasInternalFocus()) {
-            hModel.removeInternalGridFromCell(focusedInternalCell.cell);
+
+            hModel.removeInternalGridFromCell(
+                    focusedInternalCell.cell,
+                    getFocusedRow(),
+                    getFocusedColumn()
+            );
             setFocusedInternalCell(null);
             setSelectedInternalCell(null);
             refreshUI();
             return;
         }
+
         // Pas de sous-cellule focusée — gomme sur la cellule globale
         int row = getFocusedRow();
         int col = getFocusedColumn();
@@ -1644,9 +1665,7 @@ public class HSuperTable extends JTable {
         refreshUI();
     }
 
-    // =========================================================================
-    // ÉTATS VISUELS — API interne utilisée par HTableController et HBasicTableUI
-    // =========================================================================
+    // ETATS VISUELS — API interne utilisée par HTableController et HBasicTableUI
     public void setHighlightedRow(int row) {
         this.highlightedRow = row;
         refreshUI();
@@ -1721,6 +1740,71 @@ public class HSuperTable extends JTable {
         return visualStates.get(key);
     }
 
+    // ── Resize ───────────────────────────────────────────────────────────────
+    public void setResizeRowIndex(int row) {
+        this.resizeRowIndex = row;
+    }
+
+    public int getResizeRowIndex() {
+        return resizeRowIndex;
+    }
+
+    public void setResizeColIndex(int col) {
+        this.resizeColIndex = col;
+    }
+
+    public int getResizeColIndex() {
+        return resizeColIndex;
+    }
+
+    public void setResizePreviewY(int y) {
+        this.resizePreviewY = y;
+    }
+
+    public int getResizePreviewY() {
+        return resizePreviewY;
+    }
+
+    public void setResizePreviewX(int x) {
+        this.resizePreviewX = x;
+    }
+
+    public int getResizePreviewX() {
+        return resizePreviewX;
+    }
+
+    public void setResizingRow(boolean b) {
+        this.isResizingRow = b;
+    }
+
+    public boolean isResizingRow() {
+        return isResizingRow;
+    }
+
+    public void setResizingCol(boolean b) {
+        this.isResizingCol = b;
+    }
+
+    public boolean isResizingCol() {
+        return isResizingCol;
+    }
+
+    public void setResizeColNeighborIndex(int col) {
+        this.resizeColNeighborIndex = col;
+    }
+
+    public int getResizeColNeighborIndex() {
+        return resizeColNeighborIndex;
+    }
+
+    public void setResizeNeighborOriginalSize(int size) {
+        this.resizeNeighborOriginalSize = size;
+    }
+
+    public int getResizeNeighborOriginalSize() {
+        return resizeNeighborOriginalSize;
+    }
+
     // =========================================================================
     // ACCESSEURS INTERNES
     // =========================================================================
@@ -1768,11 +1852,16 @@ public class HSuperTable extends JTable {
      * publiques qui modifient l'état visuel appellent cette méthode à la fin —
      * jamais repaint() directement.
      */
-    private void refreshUI() {
+    public void refreshUI() {        
         revalidate();
         repaint();
     }
 
+    @Override
+public void repaint() {
+    super.repaint(0, 0, getWidth(), getHeight());
+}
+    
     /**
      * CellRange — représente une zone rectangulaire sélectionnée. Toujours
      * normalisée : rowStart <= rowEnd, colStart <= colEnd.
@@ -1818,7 +1907,7 @@ public class HSuperTable extends JTable {
      * cible.
      */
     public boolean hasInternalFocus() {
-        return focusedInternalCell != null && focusedInternalCell.cell != null;
+        return focusedInternalCell != null && focusedInternalCell.parent != null;
     }
 
 }

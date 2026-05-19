@@ -3,6 +3,7 @@ package hsupertable;
 import hsupertable.HBasicTableUI.InternalCellHit;
 import hsupertable.HSuperDefaultTableModel.InternalGrid;
 import hsupertable.HSuperTable.CellRange;
+import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.FocusAdapter;
@@ -15,6 +16,7 @@ import java.awt.event.MouseMotionAdapter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 
 /**
@@ -45,6 +47,15 @@ public class HSuperTableController {
     private int drawEndY = -1;
     private boolean isDrawing = false;
 
+    // Position Y du curseur au début du resize de ligne
+    private int resizeDragStartY = -1;
+
+    // Position X du curseur au début du resize de colonne  
+    private int resizeDragStartX = -1;
+
+    // Hauteur / largeur originale au début du drag
+    private int resizeOriginalSize = -1;
+
     /**
      * Cellule courante pendant le glisser — mise à jour à chaque mouseDragged.
      * Avec anchorRow/Col, définit le rectangle de sélection.
@@ -66,6 +77,9 @@ public class HSuperTableController {
     private final FocusAdapter focusListener;
 
     private long lastClickTime = 0;
+
+    // Tolérance en pixels pour détecter une bordure de resize
+    private static final int RESIZE_TOLERANCE = 4;
 
     // ====================================================
     // CONSTRUCTEUR
@@ -137,25 +151,45 @@ public class HSuperTableController {
     // GESTION SOURIS — CLIC
     // =========================================================================
     private void handleMouseClick(MouseEvent e) {
-        // ── Mode gomme ───────────────────────────────────────────────────────
-        if (table.getInteractionMode() == HSuperTable.MODE_ERASE
-                && SwingUtilities.isLeftMouseButton(e)) {
-
-            // Mettre à jour le focus sur la cellule cliquée d'abord
+        // Mode gomme
+        if (table.getInteractionMode() == HSuperTable.MODE_ERASE && SwingUtilities.isLeftMouseButton(e)) {
             Point point = e.getPoint();
+            HBasicTableUI ui = (HBasicTableUI) table.getUI();
+            InternalCellHit hit = ui.getInternalCellAt(table, point);
+            if (hit == null || hit.cell == null) {
+                return;
+            }
+
             int row = table.rowAtPoint(point);
             int col = table.columnAtPoint(point);
-            if (row >= 0 && col >= 0) {
-                HBasicTableUI ui = (HBasicTableUI) table.getUI();
-                InternalCellHit hit = ui.getInternalCellAt(table, point);
-                table.setFocusedInternalCell(hit);
-                table.setFocusedCell(row, col);
-                // Gomme sur la cible courante
-                table.removeInternalGridFromFocused();
+            if (row < 0 || col < 0) {
+                return;
             }
+
+            // Déterminer quelle subdivision supprimer
+            if (hit.cell.hasInternalGrid()) {
+                if (hit.parent == null) {
+                    // Cellule racine subdivisée -> utiliser les coordonnées
+                    table.getHModel().removeInternalGrid(row, col);
+                } else {
+                    // Sous‑cellule subdivisée (second niveau ou plus)
+                    table.getHModel().removeInternalGridFromCell(hit.cell);
+                }
+            } else if (hit.parent != null && hit.parent.hasInternalGrid()) {
+                // Sous‑cellule simple -> supprimer la subdivision du parent
+                table.getHModel().removeInternalGridFromCell(hit.parent);
+            } else {
+                return; // Rien à effacer
+            }
+
+            // Nettoyer l'état des sélections internes
+            table.setFocusedInternalCell(null);
+            table.setSelectedInternalCell(null);
+            table.repaint();
             return;
         }
 
+        // --- Clic droit ---
         if (SwingUtilities.isRightMouseButton(e)) {
             int row = table.rowAtPoint(e.getPoint());
             int col = table.columnAtPoint(e.getPoint());
@@ -253,7 +287,39 @@ public class HSuperTableController {
             return;
         }
 
-        // ── Mode crayon ──────────────────────────────────────────────────────
+        //  Démarrage du resize 
+        // Si un index de resize est actif (détecté dans handleMouseMove),
+        // on démarre le resize et on bloque toute la logique de sélection normale.
+        if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
+
+            if (table.getResizeRowIndex() >= 0) {
+                // Démarrage resize de ligne
+                table.setResizingRow(true);
+                resizeDragStartY = e.getY();
+                resizeOriginalSize = table.getRowHeight(table.getResizeRowIndex());
+                table.setResizePreviewY(e.getY());
+                return; // on bloque la sélection
+            }
+
+            if (table.getResizeColIndex() >= 0) {
+                int col = table.getResizeColIndex();
+                int neighbor = (col + 1 < table.getColumnCount()) ? col + 1 : -1;
+                table.setResizeColNeighborIndex(neighbor);
+                table.setResizingCol(true);
+                resizeDragStartX = e.getX();
+                // Largeur originale colonne gauche
+                resizeOriginalSize = table.getColumnModel().getColumn(col).getWidth();
+                // Largeur originale colonne voisine droite
+                if (neighbor >= 0) {
+                    table.setResizeNeighborOriginalSize(
+                            table.getColumnModel().getColumn(neighbor).getWidth());
+                }
+                table.setResizePreviewX(e.getX());
+                return;
+            }
+        }
+
+        // Mode crayon 
         if (table.getInteractionMode() == HSuperTable.MODE_DRAW) {
             drawStartX = e.getX();
             drawStartY = e.getY();
@@ -261,7 +327,6 @@ public class HSuperTableController {
             drawEndY = e.getY();
             isDrawing = true;
 
-            // Mettre à jour le focus instantanément sur la cellule sous le curseur
             Point point = e.getPoint();
             int row = table.rowAtPoint(point);
             int col = table.columnAtPoint(point);
@@ -286,22 +351,20 @@ public class HSuperTableController {
         row = resolved[0];
         col = resolved[1];
 
-        // ── Double-press : on vérifie si on est sur une sous-cellule ─────────
+        //  Double-press 
         if (e.getClickCount() == 2) {
             HBasicTableUI ui = (HBasicTableUI) table.getUI();
             InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
 
             if (hit != null && hit.parent != null) {
-                // Sous-cellule détectée — on bloque JTable et on lance notre éditeur
                 e.consume();
                 table.startInternalEdit(hit);
                 return;
             }
-            // Pas de sous-cellule — on laisse JTable gérer son éditeur natif
             return;
         }
 
-        // ── Clic simple : sélection normale ──────────────────────────────────
+        // Clic simple : sélection normale 
         HBasicTableUI ui = (HBasicTableUI) table.getUI();
         InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
         table.setFocusedInternalCell(hit);
@@ -324,16 +387,46 @@ public class HSuperTableController {
             return;
         }
 
-        // Mode crayon : mise à jour du point final pour la prévisualisation 
-        if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
-            drawEndX = e.getX();
-            drawEndY = e.getY();
-            table.repaint(); // déclenche le dessin du trait de prévisualisation
+        //  Drag resize de ligne 
+        if (table.isResizingRow()) {
+            // On calcule la nouvelle hauteur en temps réel
+            // et on met à jour uniquement la position de la ligne de prévisualisation.
+            // La hauteur réelle est appliquée au release.
+            int row = table.getResizeRowIndex();
+            int delta = e.getY() - resizeDragStartY;
+            int newHeight = Math.max(20, resizeOriginalSize + delta);
+
+            // Position Y de la prévisualisation = haut de la ligne + nouvelle hauteur
+            Rectangle cellRect = table.getCellRect(row, 0, true);
+            table.setResizePreviewY(cellRect.y + newHeight);
+            table.repaint();
             return;
         }
 
-        // Clamp les coordonnées pour rester dans le tableau même si la souris
-        // sort des bords pendant le glisser
+        //  Drag resize de colonne 
+        if (table.isResizingCol()) {
+            int delta = e.getX() - resizeDragStartX;
+            int col = table.getResizeColIndex();
+
+            // Nouvelle largeur de la colonne gauche — minimum 30px
+            int newWidth = Math.max(30, resizeOriginalSize + delta);
+
+            // Position X de la prévisualisation = bord gauche de la colonne + nouvelle largeur
+            Rectangle cellRect = table.getCellRect(0, col, true);
+            table.setResizePreviewX(cellRect.x + newWidth);
+            table.repaint();
+            return;
+        }
+
+        //  Mode crayon 
+        if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
+            drawEndX = e.getX();
+            drawEndY = e.getY();
+            table.repaint();
+            return;
+        }
+
+        // ── Drag sélection normale ────────────────────────────────────────────
         int x = Math.max(0, Math.min(e.getX(), table.getWidth() - 1));
         int y = Math.max(0, Math.min(e.getY(), table.getHeight() - 1));
 
@@ -347,7 +440,6 @@ public class HSuperTableController {
         row = resolved[0];
         col = resolved[1];
 
-        // On ne met à jour que si la cellule a changé — évite des repaints inutiles
         if (row == dragRow && col == dragCol) {
             return;
         }
@@ -356,7 +448,6 @@ public class HSuperTableController {
         dragRow = row;
         dragCol = col;
 
-        // Mettre à jour la sélection visuellement pendant le glisser
         applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
     }
 
@@ -365,7 +456,75 @@ public class HSuperTableController {
             return;
         }
 
-        // ── Mode crayon : appliquer la subdivision ───────────────────────────
+        //  Fin resize de ligne 
+        // On applique la hauteur finale et on remet tous les états à zéro.
+        if (table.isResizingRow()) {            
+            int row = table.getResizeRowIndex();
+            int delta = e.getY() - resizeDragStartY;
+            int newHeight = Math.max(20, resizeOriginalSize + delta);
+            table.setRowHeight(row, newHeight);
+
+            // Remise à zéro de tous les états de resize
+            table.setResizingRow(false);
+            table.setResizeRowIndex(-1);
+            table.setResizePreviewY(-1);
+            resizeDragStartY = -1;
+            resizeOriginalSize = -1;
+
+            table.setCursor(Cursor.getDefaultCursor());
+            table.refreshUI();
+            // Forcer le redessin du focus après resize de colonne
+            int fr = table.getFocusedRow();
+            int fc = table.getFocusedColumn();
+            if (fr >= 0 && fc >= 0) {
+                table.setFocusedCell(fr, fc);
+            }
+            return;
+        }
+
+        // ── Fin resize de colonne ─────────────────────────────────────────────
+        if (table.isResizingCol()) {
+            int col = table.getResizeColIndex();
+            int delta = e.getX() - resizeDragStartX;
+
+            if (Math.abs(delta) > 2) {
+                // Colonne gauche
+                int newWidthLeft = Math.max(30, resizeOriginalSize + delta);
+                table.getColumnModel().getColumn(col).setWidth(newWidthLeft);
+                table.getColumnModel().getColumn(col).setPreferredWidth(newWidthLeft);
+
+                // Colonne voisine droite
+                int neighbor = table.getResizeColNeighborIndex();
+                if (neighbor >= 0) {
+                    int newWidthRight = Math.max(30,
+                            table.getResizeNeighborOriginalSize() - delta);
+                    table.getColumnModel().getColumn(neighbor).setWidth(newWidthRight);
+                    table.getColumnModel().getColumn(neighbor).setPreferredWidth(newWidthRight);
+                }
+            }
+
+            // Remise à zéro
+            table.setResizingCol(false);
+            table.setResizeColIndex(-1);
+            table.setResizeColNeighborIndex(-1);
+            table.setResizeNeighborOriginalSize(-1);
+            table.setResizePreviewX(-1);
+            resizeDragStartX = -1;
+            resizeOriginalSize = -1;
+
+            table.setCursor(Cursor.getDefaultCursor());
+            table.refreshUI();
+
+            // Forcer le redessin du focus après resize de ligne
+            int fr = table.getFocusedRow();
+            int fc = table.getFocusedColumn();
+            if (fr >= 0 && fc >= 0) {
+                table.setFocusedCell(fr, fc);
+            }
+            return;
+        }
+
+        // Fin mode crayon 
         if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
             isDrawing = false;
 
@@ -379,8 +538,6 @@ public class HSuperTableController {
             int dx = Math.abs(drawEndX - drawStartX);
             int dy = Math.abs(drawEndY - drawStartY);
 
-            // Référence : bounds de la sous-cellule focusée si présente,
-            // sinon rectangle de la cellule globale
             Rectangle refRect;
             if (table.hasInternalFocus()) {
                 refRect = table.getFocusedInternalCell().bounds;
@@ -410,28 +567,39 @@ public class HSuperTableController {
             return;
         }
 
+        // ── Fin drag sélection normale ────────────────────────────────────────
         if (isDragging && anchorRow >= 0 && dragRow >= 0) {
-            // Finaliser la sélection de zone
             applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
         }
         isDragging = false;
     }
 
     // =========================================================================
-    // GESTION SOURIS — MOUVEMENT (hover)
+    // GESTION SOURIS — MOUVEMENT hover et resize
     // =========================================================================
     private void handleMouseMove(MouseEvent e) {
-        int row = table.rowAtPoint(e.getPoint());
-        if (row != table.getHoveredRow()) {
-            table.setHoveredRow(row);
+
+        // Détection resize en priorité 
+        // On appelle detectResize à chaque mouvement pour mettre à jour
+        // le curseur et les index de resize en temps réel.
+        // Si on est en mode DRAW ou ERASE, le resize est désactivé.
+        if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
+            detectResize(e.getPoint());
         }
 
-        HBasicTableUI ui = (HBasicTableUI) table.getUI();
+        // Hover normal 
+        // On ne met à jour le hover que si on n'est pas sur une bordure de resize
+        // pour éviter de déclencher un repaint inutile avec le mauvais état.
+        if (table.getResizeRowIndex() < 0 && table.getResizeColIndex() < 0) {
+            int row = table.rowAtPoint(e.getPoint());
+            if (row != table.getHoveredRow()) {
+                table.setHoveredRow(row);
+            }
 
-        InternalCellHit hit
-                = ui.getInternalCellAt(table, e.getPoint());
-        table.setHoveredInternalCell(hit);
-
+            HBasicTableUI ui = (HBasicTableUI) table.getUI();
+            InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+            table.setHoveredInternalCell(hit);
+        }
     }
 
     public int getDrawStartX() {
@@ -692,4 +860,76 @@ public class HSuperTableController {
         table.removeKeyListener(keyListener);
         table.removeFocusListener(focusListener);
     }
+
+    /**
+     * Détecte si le point souris est proche d'une bordure redimensionnable.
+     *
+     * Pour les lignes : on vérifie la bordure basse ET haute de chaque ligne.
+     * La bordure haute de la ligne N = bordure basse de la ligne N-1. On
+     * redimensionne toujours la ligne DU DESSUS.
+     *
+     * Pour les colonnes : on vérifie la bordure droite ET gauche de chaque
+     * colonne. La bordure gauche de la colonne N = bordure droite de la colonne
+     * N-1. On redimensionne toujours la colonne DE GAUCHE.
+     *
+     * Priorité : le resize de ligne est testé en premier. Si aucune bordure
+     * n'est détectée, on remet les index à -1.
+     */
+    private void detectResize(Point point) {
+
+        // ── Détection resize de ligne ─────────────────────────────────────────
+        for (int row = 0; row < table.getRowCount(); row++) {
+
+            Rectangle cellRect = table.getCellRect(row, 0, true);
+
+            int bordureBasse = cellRect.y + cellRect.height;
+            int bordureHaute = cellRect.y;
+
+            // Proche de la bordure basse → on redimensionne cette ligne
+            if (Math.abs(point.y - bordureBasse) <= RESIZE_TOLERANCE) {
+                table.setResizeRowIndex(row);
+                table.setResizeColIndex(-1);
+                table.setCursor(Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR));
+                return;
+            }
+
+            // Proche de la bordure haute → on redimensionne la ligne du dessus
+            if (Math.abs(point.y - bordureHaute) <= RESIZE_TOLERANCE && row > 0) {
+                table.setResizeRowIndex(row - 1);
+                table.setResizeColIndex(-1);
+                table.setCursor(Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR));
+                return;
+            }
+        }
+
+        // ── Détection resize de colonne ───────────────────────────────────────
+        for (int col = 0; col < table.getColumnCount(); col++) {
+
+            Rectangle cellRect = table.getCellRect(0, col, true);
+            int bordureDroite = cellRect.x + cellRect.width;
+
+            // Uniquement la bordure droite — pas de bordure gauche
+            if (Math.abs(point.x - bordureDroite) <= RESIZE_TOLERANCE) {
+                table.setResizeColIndex(col);
+                table.setResizeRowIndex(-1);
+                table.setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
+                return;
+            }
+        }
+
+        // ── Aucune bordure détectée → on remet à zéro ─────────────────────────
+        table.setResizeRowIndex(-1);
+        table.setResizeColIndex(-1);
+
+        // Restaurer le curseur selon le mode actif
+        switch (table.getInteractionMode()) {
+            case HSuperTable.MODE_DRAW ->
+                table.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            case HSuperTable.MODE_ERASE ->
+                table.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            default ->
+                table.setCursor(Cursor.getDefaultCursor());
+        }
+    }
+
 }

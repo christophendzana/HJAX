@@ -993,6 +993,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             copy.style = this.style.copy();
             copy.spanRow = this.spanRow;
             copy.spanCol = this.spanCol;
+            copy.value = this.value;
             copy.mergeOrigin = (this.mergeOrigin != null)
                     ? new Point(this.mergeOrigin.x, this.mergeOrigin.y)
                     : null;
@@ -1189,7 +1190,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     }
 
     /**
-     * Subdivise localement une cellule en deux sous-cellules.
+     * Subdivise une cellule en deux sous-cellules.
      *
      * @param row ligne cible
      * @param col colonne cible
@@ -1200,6 +1201,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             int col,
             int splitType,
             float dividerRatio) {
+        System.out.println("SPL called");
 
         // Vérification des bornes
         if (row < 0 || row >= getRowCount()
@@ -1217,14 +1219,11 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             return;
         }
 
-        // ---------------------------------------------------------------------
         // Pour l'instant : empêcher les subdivisions multiples
-        // ---------------------------------------------------------------------
         if (cell.hasInternalGrid()) {
             return;
         }
 
-        // Sécurisation du ratio
         // Empêche les subdivisions trop petites
         dividerRatio = Math.max(0.15f, dividerRatio);
         dividerRatio = Math.min(0.85f, dividerRatio);
@@ -1233,73 +1232,65 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         Cell first = new Cell();
         Cell second = new Cell();
 
-        // Conservation du contenu principal — on lit depuis DefaultTableModel
-        // en priorité car c'est là que l'éditeur natif écrit la valeur
+        // Conservation du contenu principal — on lit depuis DefaultTableModel        
         Object currentValue = getValueAt(row, col);
-        first.value = (currentValue != null) ? currentValue : cell.value;
+        first.value = (currentValue != null) ? currentValue : "";
         second.value = null;
-
-        cell.value = null;
-        
-        // On vide la valeur DefaultTableModel pour éviter la double lecture
-        // Le rendu utilisera désormais first.value et second.value
-        setValueAt(null, row, col);
 
         // Copie du style de la cellule mère
         if (cell.style != null) {
-
             first.style = cell.style.copy();
             second.style = cell.style.copy();
         }
 
         // Création de la subdivision locale
-        cell.internalGrid = new InternalGrid(
-                splitType,
-                dividerRatio,
-                first,
-                second
-        );
+        first.internalGrid = cell.internalGrid;
+        cell.internalGrid = new InternalGrid(splitType, dividerRatio, first, second);
 
-        // ---------------------------------------------------------------------
         // Rafraîchissement
-        // ---------------------------------------------------------------------
-        fireTableDataChanged();
+        fireTableRowsUpdated(row, row);
     }
 
     /**
-     * Supprime la subdivision interne d'une cellule.
+     * Subdivise une Cell spécifique — peut être une sous-cellule interne.
+     * Contrairement à splitCellLocally qui travaille par coordonnées, cette
+     * méthode prend directement l'objet Cell cible.
      *
-     * La cellule redevient une cellule normale.
-     *
-     * @param row ligne de la cellule
-     * @param col colonne de la cellule
+     * @param targetCell la cellule à subdiviser
+     * @param splitType InternalGrid.SPLIT_VERTICAL ou SPLIT_HORIZONTAL
+     * @param dividerRatio position du séparateur entre 0.15f et 0.85f
      */
-    public void removeInternalGrid(int row, int col) {
-
-        // Vérification des bornes
-        if (row < 0 || row >= getRowCount()
-                || col < 0 || col >= getColumnCount()) {
-
-            throw new IndexOutOfBoundsException(
-                    "Coordonnées de cellule invalides : (" + row + ", " + col + ")"
-            );
-        }
-
-        Cell cell = getCell(row, col);
-
-        // Rien à supprimer
-        if (!cell.hasInternalGrid()) {
+    public void splitCellDirectly(Cell targetCell, int splitType, float dividerRatio) {
+        if (targetCell == null || targetCell.isAbsorbed()) {
             return;
         }
+        System.out.println("SPD called");
+        // Toute cellule peut être subdivisée — on supprime la restriction
+        // Si elle est déjà subdivisée, sa subdivision existante est conservée
+        // dans first, et second est nouveau
+        dividerRatio = Math.max(0.15f, Math.min(0.85f, dividerRatio));
 
-        InternalGrid grid = cell.internalGrid;
+        Cell first = new Cell();
+        Cell second = new Cell();
 
-        // reconstitution récursive via collectValue :
-        String finalValue = collectValue(cell);
-        cell.value = finalValue;
-        setValueAt(finalValue, row, col);
+        // Reporter le contenu existant dans first uniquement
+        first.value = targetCell.value;
+        second.value = null;
+
+        // Copier le style
+        if (targetCell.style != null) {
+            first.style = targetCell.style.copy();
+            second.style = new HSuperTableCellModel(); // style vierge pour second
+        }
+
+        // Si la cellule avait déjà une subdivision, elle passe dans first
+        first.internalGrid = targetCell.internalGrid;
+
+        targetCell.internalGrid = new InternalGrid(splitType, dividerRatio, first, second);
+        targetCell.value = null;
 
         fireTableDataChanged();
+
     }
 
     /**
@@ -1332,43 +1323,25 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
     }
 
     /**
-     * Subdivise une Cell spécifique — peut être une sous-cellule interne.
-     * Contrairement à splitCellLocally qui travaille par coordonnées, cette
-     * méthode prend directement l'objet Cell cible.
+     * Supprime la subdivision interne d'une cellule.
      *
-     * @param targetCell la cellule à subdiviser
-     * @param splitType InternalGrid.SPLIT_VERTICAL ou SPLIT_HORIZONTAL
-     * @param dividerRatio position du séparateur entre 0.15f et 0.85f
+     * La cellule redevient une cellule normale.
+     *
+     * @param row ligne de la cellule
+     * @param col colonne de la cellule
      */
-    public void splitCellDirectly(Cell targetCell, int splitType, float dividerRatio) {
-        if (targetCell == null || targetCell.isAbsorbed()) {
+    public void removeInternalGrid(int row, int col) {
+        if (row < 0 || row >= getRowCount() || col < 0 || col >= getColumnCount()) {
+            throw new IndexOutOfBoundsException("Coordonnées invalides");
+        }
+        Cell cell = getCell(row, col);
+        if (!cell.hasInternalGrid()) {
             return;
         }
-
-        // Toute cellule peut être subdivisée — on supprime la restriction
-        // Si elle est déjà subdivisée, sa subdivision existante est conservée
-        // dans first, et second est nouveau
-        dividerRatio = Math.max(0.15f, Math.min(0.85f, dividerRatio));
-
-        Cell first = new Cell();
-        Cell second = new Cell();
-
-        // Reporter le contenu existant dans first uniquement
-        first.value = targetCell.value;
-        second.value = null;
-
-        // Copier le style
-        if (targetCell.style != null) {
-            first.style = targetCell.style.copy();
-            second.style = new HSuperTableCellModel(); // style vierge pour second
-        }
-
-        // Si la cellule avait déjà une subdivision, elle passe dans first
-        first.internalGrid = targetCell.internalGrid;
-
-        targetCell.internalGrid = new InternalGrid(splitType, dividerRatio, first, second);
-        targetCell.value = null;
-
+        String finalValue = collectValue(cell);
+        cell.value = finalValue;
+        cell.internalGrid = null;
+        setValueAt(finalValue, row, col);
         fireTableDataChanged();
     }
 
@@ -1376,7 +1349,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
      * Supprime la subdivision interne d'une Cell directement. Utilisé par la
      * gomme sur les sous-cellules.
      */
-    public void removeInternalGridFromCell(Cell targetCell) {
+    public void removeInternalGridFromCell(Cell targetCell, int row, int col) {
         if (targetCell == null || !targetCell.hasInternalGrid()) {
             return;
         }
@@ -1385,7 +1358,24 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         targetCell.value = finalValue;
         targetCell.internalGrid = null;
 
+        // resynchroniser DefaultTableModel
+        if (isValidCell(row, col)) {
+            setValueAt(finalValue, row, col);
+        }
         fireTableDataChanged();
+    }
+
+    /**
+     * Supprime la subdivision d'une sous-cellule interne
+     */
+    public void removeInternalGridFromCell(Cell subCell) {
+        if (subCell == null || !subCell.hasInternalGrid()) {
+            return;
+        }
+        String finalValue = collectValue(subCell);
+        subCell.value = finalValue;
+        subCell.internalGrid = null;
+        fireTableDataChanged(); // rafraîchit l'affichage
     }
 
 }
