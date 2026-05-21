@@ -195,7 +195,7 @@ public class HSuperTableController {
             int col = table.columnAtPoint(e.getPoint());
             if (row >= 0 && col >= 0) {
                 int[] resolved = resolveAbsorbed(row, col);
-                handleRightClick(resolved[0], resolved[1]);
+                handleRightClick(resolved[0], resolved[1], e.getPoint());
             }
         }
     }
@@ -258,13 +258,13 @@ public class HSuperTableController {
         }
     }
 
-    private void handleRightClick(int row, int col) {
+    private void handleRightClick(int row, int col, Point mousePos) {
         if (!isValidCell(row, col)) {
             return;
         }
-        // Le clic droit sélectionne la cellule si elle n'est pas déjà dans
-        // la sélection courante — comportement identique à Word
-        CellRange sel = table.getSelection();
+
+        // ── Sélection de la cellule ciblée ────────────────────────────────────
+        HSuperTable.CellRange sel = table.getSelection();
         if (sel == null || !sel.contains(row, col)) {
             anchorRow = row;
             anchorCol = col;
@@ -272,11 +272,42 @@ public class HSuperTableController {
             dragCol = col;
             table.clearSelection();
             table.addSelectedRow(row);
-            table.setSelection(new CellRange(row, col, row, col));
+            table.setSelection(new HSuperTable.CellRange(row, col, row, col));
         }
+
         table.setHighlightedRow(row);
         table.setFocusedCell(row, col);
-        showContextMenu();
+
+        // ── Construction du TableContext ──────────────────────────────────────
+        HSuperDefaultTableModel model = table.getHModel();
+        HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
+
+        // Résolution de la cellule principale si absorbée
+        if (cell.isAbsorbed() && cell.mergeOrigin != null) {
+            cell = model.getCell(cell.mergeOrigin.x, cell.mergeOrigin.y);
+        }
+
+        // Détection de la sous-cellule interne sous le curseur
+        HBasicTableUI ui = (HBasicTableUI) table.getUI();
+        HBasicTableUI.InternalCellHit internalHit = ui.getInternalCellAt(table, mousePos);
+
+        // Mise à jour du focus interne si sous-cellule détectée
+        if (internalHit != null && internalHit.parent != null) {
+            table.setFocusedInternalCell(internalHit);
+            table.setSelectedInternalCell(internalHit);
+        }
+
+        // ── Création du contexte et affichage du menu ─────────────────────────
+        HSuperTable.TableContext ctx = new HSuperTable.TableContext(
+                table,
+                row,
+                col,
+                cell,
+                internalHit,
+                mousePos
+        );
+
+        table.showContextMenu(ctx, mousePos.x, mousePos.y);
     }
 
     // =========================================================================
@@ -458,7 +489,7 @@ public class HSuperTableController {
 
         //  Fin resize de ligne 
         // On applique la hauteur finale et on remet tous les états à zéro.
-        if (table.isResizingRow()) {            
+        if (table.isResizingRow()) {
             int row = table.getResizeRowIndex();
             int delta = e.getY() - resizeDragStartY;
             int newHeight = Math.max(20, resizeOriginalSize + delta);

@@ -1,6 +1,7 @@
 package hsupertable;
 
 import hsupertable.HBasicTableUI.InternalCellHit;
+import hsupertable.HSuperDefaultTableModel.Cell;
 import javax.swing.*;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
@@ -123,6 +124,13 @@ public class HSuperTable extends JTable {
     // STYLE VISUEL
     private HSuperTableStyle tableStyle = HSuperTableStyle.PRIMARY;
 
+    /**
+     * Liste des actions du menu contextuel. Contient les actions prédéfinies et
+     * les actions personnalisées du développeur. Construite dans
+     * initializeDefaultContextActions() appelé par le constructeur.
+     */
+    private final List<ContextAction> contextActions = new ArrayList<>();
+
     //on stock la cellule qui subit l'opération
     private InternalCellHit focusedInternalCell, hoveredInternalCell,
             selectedInternalCell, editingInternalCell;
@@ -162,6 +170,7 @@ public class HSuperTable extends JTable {
         });
         setUI(new HBasicTableUI());
         initDefaults();
+        initializeDefaultContextActions();
     }
 
     public HSuperTable(Object[][] data, Object[] columnNames) {
@@ -1847,24 +1856,440 @@ public class HSuperTable extends JTable {
     // =========================================================================
     // UTILITAIRE INTERNE
     // =========================================================================
+    // =========================================================================
+// MENU CONTEXTUEL — GESTION DES ACTIONS
+// =========================================================================
+    /**
+     * Ajoute une action personnalisée à la fin de la liste. Elle sera évaluée
+     * comme toutes les autres actions système via isVisible() et isEnabled() au
+     * moment du clic droit.
+     *
+     * @param action l'action à ajouter
+     */
+    public void addContextAction(ContextAction action) {
+        if (action != null) {
+            contextActions.add(action);
+        }
+    }
+
+    /**
+     * Supprime une action de la liste par référence.
+     *
+     * @param action l'action à supprimer
+     */
+    public void removeContextAction(ContextAction action) {
+        contextActions.remove(action);
+    }
+
+    /**
+     * Supprime toutes les actions personnalisées ET système. À utiliser si le
+     * développeur veut repartir d'un menu vide.
+     */
+    public void clearContextActions() {
+        contextActions.clear();
+    }
+
+    /**
+     * Permet juste de voir les actions enregistrées
+     *
+     * @return liste non modifiable des actions
+     */
+    public List<ContextAction> getContextActions() {
+        return Collections.unmodifiableList(contextActions);
+    }
+
+    // =========================================================================
+// MENU CONTEXTUEL — ACTIONS PAR DÉFAUT
+// =========================================================================
+    /**
+     * Initialise toutes les actions système du menu contextuel. Appelée une
+     * seule fois dans le constructeur principal. Le développeur peut ajouter
+     * ses propres actions via addContextAction().
+     */
+    private void initializeDefaultContextActions() {
+
+        // ── FUSIONNER ─────────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("Fusionner les cellules") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                // Visible uniquement si plusieurs cellules sont sélectionnées
+                // et qu'on n'est pas sur une sous-cellule
+                return ctx.hasMultipleSelection && !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.hasMultipleSelection;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.mergeSelection();
+            }
+        });
+
+        // ── DÉFUSIONNER ───────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("Défusionner la cellule") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                // Visible uniquement si la cellule est fusionnée ou absorbée
+                return (ctx.isMerged || ctx.isAbsorbed) && !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.isMerged || ctx.isAbsorbed;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.unmergeCell(ctx.row, ctx.column);
+            }
+        });
+
+        // ── SÉPARATEUR 1 ──────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("---") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                // Visible si au moins une action de fusion est visible
+                return ctx.hasMultipleSelection || ctx.isMerged || ctx.isAbsorbed;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return false; // un séparateur n'est jamais cliquable
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+            }
+        });
+
+        // ── SUBDIVISER VERTICALEMENT ──────────────────────────────────────────
+        contextActions.add(new ContextAction("Subdiviser verticalement") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isAbsorbed;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return !ctx.isAbsorbed;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.splitCellLocally(
+                        ctx.row, ctx.column,
+                        HSuperDefaultTableModel.InternalGrid.SPLIT_VERTICAL,
+                        0.5f
+                );
+            }
+        });
+
+        // ── SUBDIVISER HORIZONTALEMENT ────────────────────────────────────────
+        contextActions.add(new ContextAction("Subdiviser horizontalement") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isAbsorbed;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return !ctx.isAbsorbed;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.splitCellLocally(
+                        ctx.row, ctx.column,
+                        HSuperDefaultTableModel.InternalGrid.SPLIT_HORIZONTAL,
+                        0.5f
+                );
+            }
+        });
+
+        // ── SUPPRIMER SUBDIVISION ─────────────────────────────────────────────
+        contextActions.add(new ContextAction("Supprimer la subdivision") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                // Visible si la cellule a une subdivision OU si on est sur une sous-cellule
+                return ctx.hasInternalGrid || ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.hasInternalGrid || ctx.isInternalCell;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.removeInternalGridFromFocused();
+            }
+        });
+
+        // ── SÉPARATEUR 2 ──────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("---") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+            }
+        });
+
+        // ── INSÉRER LIGNE AU-DESSUS ───────────────────────────────────────────
+        contextActions.add(new ContextAction("Insérer une ligne au-dessus") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.row >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.insertRowAbove(ctx.row);
+            }
+        });
+
+        // ── INSÉRER LIGNE EN-DESSOUS ──────────────────────────────────────────
+        contextActions.add(new ContextAction("Insérer une ligne en-dessous") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.row >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.insertRowBelow(ctx.row);
+            }
+        });
+
+        // ── SUPPRIMER LIGNE ───────────────────────────────────────────────────
+        contextActions.add(new ContextAction("Supprimer la ligne") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.row >= 0 && ctx.table.getRowCount() > 1;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.deleteRow(ctx.row);
+            }
+        });
+
+        // ── SÉPARATEUR 3 ──────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("---") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+            }
+        });
+
+        // ── INSÉRER COLONNE À GAUCHE ──────────────────────────────────────────
+        contextActions.add(new ContextAction("Insérer une colonne à gauche") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.column >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.insertColumnLeft(ctx.column);
+            }
+        });
+
+        // ── INSÉRER COLONNE À DROITE ──────────────────────────────────────────
+        contextActions.add(new ContextAction("Insérer une colonne à droite") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.column >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.insertColumnRight(ctx.column);
+            }
+        });
+
+        // ── SUPPRIMER COLONNE ─────────────────────────────────────────────────
+        contextActions.add(new ContextAction("Supprimer la colonne") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.column >= 0 && ctx.table.getColumnCount() > 1;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.deleteColumn(ctx.column);
+            }
+        });
+
+        // ── SÉPARATEUR 4 ──────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("---") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+            }
+        });
+
+        // ── RÉINITIALISER LE FORMATAGE ────────────────────────────────────────
+        contextActions.add(new ContextAction("Réinitialiser le formatage") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.row >= 0 && ctx.column >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.resetCellFormatting(ctx.row, ctx.column);
+            }
+        });
+    }
+
+// =========================================================================
+// MENU CONTEXTUEL — CONSTRUCTION ET AFFICHAGE
+// =========================================================================
+    /**
+     * Construit et affiche le menu contextuel pour le contexte donné.
+     *
+     * Pipeline : 1. Créer le JPopupMenu 2. Parcourir toutes les actions
+     * enregistrées 3. Pour chaque action : vérifier isVisible() 4. Si visible :
+     * créer le JMenuItem, appliquer isEnabled() 5. Connecter perform() au clic
+     * 6. Afficher le popup à la position souris
+     *
+     * Les séparateurs ("---") sont traités à part — on évite d'afficher un
+     * séparateur en début ou en fin de menu, et deux séparateurs consécutifs.
+     *
+     * @param ctx contexte du clic droit
+     * @param x position X souris dans le tableau
+     * @param y position Y souris dans le tableau
+     */
+    public void showContextMenu(TableContext ctx, int x, int y) {
+        JPopupMenu popup = new JPopupMenu();
+
+        boolean lastWasSeparator = true; // évite un séparateur en début de menu
+        int visibleItemCount = 0;
+
+        for (ContextAction action : contextActions) {
+
+            // Vérification de la visibilité
+            if (!action.isVisible(ctx)) {
+                continue;
+            }
+
+            // Traitement des séparateurs
+            if ("---".equals(action.getName())) {
+                // On n'ajoute pas deux séparateurs consécutifs
+                // et on n'ajoute pas un séparateur si rien n'a encore été ajouté
+                if (!lastWasSeparator && visibleItemCount > 0) {
+                    popup.addSeparator();
+                    lastWasSeparator = true;
+                }
+                continue;
+            }
+
+            // Création du JMenuItem
+            JMenuItem item = new JMenuItem(action.getName());
+            item.setEnabled(action.isEnabled(ctx));
+
+            // Connexion de l'action au clic
+            item.addActionListener(e -> action.perform(ctx));
+
+            popup.add(item);
+            lastWasSeparator = false;
+            visibleItemCount++;
+        }
+
+        // Supprimer le dernier séparateur s'il est en fin de menu
+        int count = popup.getComponentCount();
+        if (count > 0 && popup.getComponent(count - 1) instanceof JSeparator) {
+            popup.remove(count - 1);
+        }
+
+        // N'afficher le popup que s'il contient au moins une action
+        if (visibleItemCount > 0) {
+            popup.show(this, x, y);
+        }
+    }
+
     /**
      * Déclenche un repaint + revalidate du tableau. Toutes les méthodes
      * publiques qui modifient l'état visuel appellent cette méthode à la fin —
      * jamais repaint() directement.
      */
-    public void refreshUI() {        
+    public void refreshUI() {
         revalidate();
         repaint();
     }
 
     @Override
-public void repaint() {
-    super.repaint(0, 0, getWidth(), getHeight());
-}
-    
+    public void repaint() {
+        super.repaint(0, 0, getWidth(), getHeight());
+    }
+
     /**
-     * CellRange — représente une zone rectangulaire sélectionnée. Toujours
-     * normalisée : rowStart <= rowEnd, colStart <= colEnd.
+     * Représente une zone rectangulaire sélectionnée. Toujours normalisée :
+     * rowStart <= rowEnd, colStart <= colEnd.
      */
     public static class CellRange {
 
@@ -1899,6 +2324,191 @@ public void repaint() {
             return "CellRange[(" + rowStart + "," + colStart + ")→("
                     + rowEnd + "," + colEnd + ")]";
         }
+    }
+
+    // MENU CONTEXTUEL — CONTEXTE
+    /**
+     * Centralise toutes les informations nécessaires pour décider quelles
+     * actions afficher et comment les exécuter.
+     */
+    public static class TableContext {
+
+        /**
+         * Ligne de la cellule ciblée (-1 si hors tableau).
+         */
+        public final int row;
+
+        /**
+         * Colonne de la cellule ciblée (-1 si hors tableau).
+         */
+        public final int column;
+
+        /**
+         * Cellule du modèle ciblée (jamais null).
+         */
+        public final Cell cell;
+
+        /**
+         * Sous-cellule interne ciblée (null si cellule normale).
+         */
+        public final Cell internalCell;
+
+        /**
+         * Résultat complet du hit-testing interne (null si on a une cellule
+         * normale).
+         */
+        public final InternalCellHit internalHit;
+
+        /**
+         * Position souris au moment du clic droit.
+         */
+        public final Point mousePosition;
+
+        /**
+         * Vrai si la cellule ciblée est fusionnée (principale).
+         */
+        public final boolean isMerged;
+
+        /**
+         * Vrai si la cellule ciblée est absorbée par une fusion.
+         */
+        public final boolean isAbsorbed;
+
+        /**
+         * Vrai si la cellule ciblée possède une subdivision interne.
+         */
+        public final boolean hasInternalGrid;
+
+        /**
+         * Vrai si le clic a atteint une sous-cellule interne.
+         */
+        public final boolean isInternalCell;
+
+        /**
+         * Vrai si plusieurs cellules sont sélectionnées.
+         */
+        public final boolean hasMultipleSelection;
+
+        /**
+         * Référence au tableau — permet aux actions d'appeler l'API.
+         */
+        public final HSuperTable table;
+
+        /**
+         * Construit un contexte complet.
+         *
+         * @param table le tableau source
+         * @param row ligne ciblée
+         * @param column colonne ciblée
+         * @param cell cellule du modèle
+         * @param internalHit résultat du hit-testing interne
+         * @param mousePosition position souris
+         */
+        public TableContext(
+                HSuperTable table,
+                int row,
+                int column,
+                HSuperDefaultTableModel.Cell cell,
+                HBasicTableUI.InternalCellHit internalHit,
+                Point mousePosition
+        ) {
+            this.table = table;
+            this.row = row;
+            this.column = column;
+            this.cell = cell;
+            this.internalHit = internalHit;
+            this.mousePosition = mousePosition;
+
+            // Résolution des états depuis la cellule
+            this.isMerged = (cell != null) && cell.isMerged();
+            this.isAbsorbed = (cell != null) && cell.isAbsorbed();
+            this.hasInternalGrid = (cell != null) && cell.hasInternalGrid();
+
+            // Sous-cellule : hit valide avec un parent
+            this.isInternalCell = (internalHit != null && internalHit.parent != null);
+            this.internalCell = isInternalCell ? internalHit.cell : null;
+
+            // Sélection multiple : plus d'une ligne sélectionnée
+            this.hasMultipleSelection = table.getRowsSelected().size() > 1;
+        }
+
+        @Override
+        public String toString() {
+            return "TableContext[row=" + row + ", col=" + column
+                    + ", merged=" + isMerged
+                    + ", internal=" + isInternalCell
+                    + ", multiSel=" + hasMultipleSelection + "]";
+        }
+    }
+
+    // MENU CONTEXTUEL — ACTION
+    /**
+     * Permet de créer ses actions personnalisées en héritant de cette classe et
+     * en implémentant les trois méthodes abstraites.
+     *
+     * en Exemple on peut faire :
+     * <pre>
+     *   table.addContextAction(new HSuperTable.ContextAction("Copier") {
+     *       public boolean isVisible(TableContext ctx) { return true; }
+     *
+     *       public boolean isEnabled(TableContext ctx) { return ctx.row >= 0; }
+     *
+     *       public void perform(TableContext ctx) {
+     *           // logique de copie
+     *       }
+     *   });
+     * </pre>
+     */
+    public abstract static class ContextAction {
+
+        /**
+         * Nom affiché dans le menu contextuel.
+         */
+        private final String name;
+
+        /**
+         * Crée une action avec le nom donné.
+         *
+         * @param name libellé affiché dans le menu
+         */
+        public ContextAction(String name) {
+            this.name = name;
+        }
+
+        /**
+         * Retourne le libellé de l'action.
+         *
+         * @return nom de l'action
+         */
+        public String getName() {
+            return name;
+        }
+
+        /**
+         * Détermine si cette action doit apparaître dans le menu pour ce
+         * contexte. Si false, l'entrée n'est pas créée du tout.
+         *
+         * @param ctx contexte du clic droit
+         * @return true si l'action doit être visible
+         */
+        public abstract boolean isVisible(TableContext ctx);
+
+        /**
+         * Détermine si cette action est cliquable dans le menu. Si false,
+         * l'entrée est grisée mais reste visible.
+         *
+         * @param ctx contexte du clic droit
+         * @return true si l'action est activée
+         */
+        public abstract boolean isEnabled(TableContext ctx);
+
+        /**
+         * Exécute la logique de l'action. Appelée uniquement si l'action est
+         * visible et activée.
+         *
+         * @param ctx contexte du clic droit
+         */
+        public abstract void perform(TableContext ctx);
     }
 
     /**
