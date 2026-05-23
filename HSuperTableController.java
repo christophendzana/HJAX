@@ -139,6 +139,34 @@ public class HSuperTableController {
             }
         };
 
+        // ── Listener double-clic et clic droit sur l'en-tête ─────────────────
+        table.getTableHeader().addMouseListener(new MouseAdapter() {
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+
+                int col = table.getTableHeader().columnAtPoint(e.getPoint());
+                if (col < 0) {
+                    return;
+                }
+
+                if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+                    // ── Double-clic gauche → renommer la colonne ──────────────
+                    table.startHeaderEdit(col);
+
+                } else if (SwingUtilities.isRightMouseButton(e)
+                        && e.getClickCount() == 1) {
+                    // ── Clic droit → menu contextuel des en-têtes ─────────────
+                    HSuperTable.HeaderContext ctx = new HSuperTable.HeaderContext(
+                            table,
+                            col,
+                            e.getPoint()
+                    );
+                    table.showHeaderMenu(ctx, e.getX(), e.getY());
+                }
+            }
+        });
+
         // Enregistrement des listeners
         table.addMouseListener(mouseListener);
         table.addMouseMotionListener(motionListener);

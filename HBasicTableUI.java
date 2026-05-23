@@ -32,7 +32,8 @@ public class HBasicTableUI extends BasicTableUI {
         public Component getTableCellRendererComponent(JTable jTable, Object value,
                 boolean isSelected, boolean hasFocus, int row, int column) {
 
-            super.getTableCellRendererComponent(jTable, value, isSelected, hasFocus, row, column);
+            super.getTableCellRendererComponent(jTable, value, isSelected,
+                    hasFocus, row, column);
 
             if (!(jTable instanceof HSuperTable)) {
                 return this;
@@ -41,21 +42,50 @@ public class HBasicTableUI extends BasicTableUI {
             HSuperTable t = (HSuperTable) jTable;
             HSuperTableStyle style = t.getTableStyle();
 
-            if (style != null) {
-                setBackground(style.getHeaderBackground());
-                setForeground(style.getHeaderForeground());
-                setFont(style.getHeaderFont());
-            }
+            // ── Récupération du HeaderStyle de cette colonne ──────────────────
+            // Si aucun style custom n'existe, on utilise les valeurs du style global
+            HSuperTable.HeaderStyle hs = t.headerStyles.get(column);
 
-            // Ligne de séparation en bas de l'en-tête
+            // ── Couleur de fond ───────────────────────────────────────────────
+            // Priorité : HeaderStyle custom > style global
+            Color bg = (hs != null && hs.hasBackground())
+                    ? hs.getBackground()
+                    : (style != null ? style.getHeaderBackground() : Color.DARK_GRAY);
+            setBackground(bg);
+
+            // ── Couleur du texte ──────────────────────────────────────────────
+            Color fg = (hs != null && hs.hasForeground())
+                    ? hs.getForeground()
+                    : (style != null ? style.getHeaderForeground() : Color.WHITE);
+            setForeground(fg);
+
+            // ── Police ────────────────────────────────────────────────────────
+            // Si HeaderStyle custom existe, on construit la police depuis lui
+            // Sinon on utilise la police globale du style
+            Font baseFont = (style != null)
+                    ? style.getHeaderFont()
+                    : new Font("Segoe UI", Font.BOLD, 13);
+            Font font = (hs != null)
+                    ? hs.buildFont(baseFont)
+                    : baseFont;
+            setFont(font);
+
+            // ── Alignement ────────────────────────────────────────────────────
+            // Priorité : HeaderStyle custom > columnHeaderAlignments > LEFT
+            int align = (hs != null)
+                    ? hs.getHorizontalAlignment()
+                    : t.getColumnHeaderAlignment(column);
+            setHorizontalAlignment(align);
+
+            // ── Bordure basse ─────────────────────────────────────────────────
+            Color borderColor = (style != null)
+                    ? style.getHeaderForeground().darker()
+                    : Color.DARK_GRAY;
             setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 2, 0,
-                            style != null ? style.getHeaderForeground().darker()
-                                    : Color.DARK_GRAY),
+                    BorderFactory.createMatteBorder(0, 0, 2, 0, borderColor),
                     BorderFactory.createEmptyBorder(10, CELL_PADDING_H, 10, CELL_PADDING_H)
             ));
 
-            setHorizontalAlignment(JLabel.LEFT);
             setOpaque(true);
             return this;
         }
@@ -335,8 +365,8 @@ public class HBasicTableUI extends BasicTableUI {
         // CAS 2
         InternalGrid grid = cell.internalGrid;
         Rectangle[] parts = computeInternalRects(rect, grid);
-        HSuperDefaultTableModel.Cell first = grid.getFirstCell();
-        HSuperDefaultTableModel.Cell second = grid.getSecondCell();
+        Cell first = grid.getFirstCell();
+        Cell second = grid.getSecondCell();
 
         // Récursif — les sous-cellules sont toujours isSubCell=true
         paintCellStructure(g2, t, first, parts[0], row, col, true);
@@ -1050,7 +1080,7 @@ public class HBasicTableUI extends BasicTableUI {
 
     /**
      * Dessine la ligne de prévisualisation pendant le redimensionnement manuel
-     * d'une ligne ou d'une colonne.     
+     * d'une ligne ou d'une colonne.
      */
     private void paintResizePreview(Graphics2D g2, HSuperTable t) {
 

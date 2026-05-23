@@ -1,5 +1,9 @@
 package hsupertable;
 
+import hcomponents.HMenu;
+import hcomponents.HMenuItem;
+import hcomponents.HPopupMenu;
+import hcomponents.HTextField;
 import hsupertable.HBasicTableUI.InternalCellHit;
 import hsupertable.HSuperDefaultTableModel.Cell;
 import javax.swing.*;
@@ -10,6 +14,7 @@ import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.util.*;
 import java.util.List;
+import javax.swing.table.JTableHeader;
 
 /**
  * HSuperTable — Tableau Swing avancé inspiré des outils tableau de Microsoft
@@ -82,6 +87,19 @@ public class HSuperTable extends JTable {
     private boolean gridVisible = true;
 
     /**
+     * Alignement horizontal de l'en-tête par colonne. Clé = index de colonne,
+     * valeur = SwingConstants.LEFT / CENTER / RIGHT. Si absent, LEFT est
+     * utilisé par défaut.
+     */
+    private final Map<Integer, Integer> columnHeaderAlignments = new HashMap<>();
+
+    /**
+     * Map des Styles visuels des en-têtes par colonne. Clé = index de colonne,
+     * valeur = HeaderStyle personnalisé.
+     */
+    public final Map<Integer, HeaderStyle> headerStyles = new HashMap<>();
+
+    /**
      * Lignes sélectionnées (sélection multiple custom).
      */
     private ArrayList<Integer> selectedRows = new ArrayList<>();
@@ -103,7 +121,14 @@ public class HSuperTable extends JTable {
      */
     private CellRange currentSelection = null;
 
-    private final JTextField internalEditor = new JTextField();
+    private final HTextField internalEditor = new HTextField();
+
+    /**
+     * Éditeur flottant pour le renommage des colonnes. Positionné sur la
+     * cellule d'en-tête au double-clic.
+     */
+    private final HTextField headerEditor = new HTextField();
+    private int editingColumnIndex = -1;
 
     // =========================================================================
     // OPTIONS DE STYLE 
@@ -126,10 +151,15 @@ public class HSuperTable extends JTable {
 
     /**
      * Liste des actions du menu contextuel. Contient les actions prédéfinies et
-     * les actions personnalisées du développeur. Construite dans
-     * initializeDefaultContextActions() appelé par le constructeur.
+     * les actions personnalisées du développeur
      */
     private final List<ContextAction> contextActions = new ArrayList<>();
+
+    /**
+     * Liste des actions du menu contextuel des en-têtes. Contient les actions
+     * conçue et les actions personnalisées du développeur
+     */
+    private final List<HeaderAction> headerActions = new ArrayList<>();
 
     //on stock la cellule qui subit l'opération
     private InternalCellHit focusedInternalCell, hoveredInternalCell,
@@ -161,6 +191,24 @@ public class HSuperTable extends JTable {
         setLayout(null);
         internalEditor.setVisible(false);
         add(internalEditor);
+        // Éditeur d'en-tête — invisible par défaut
+        headerEditor.setVisible(false);
+        headerEditor.setBorder(BorderFactory.createLineBorder(new Color(13, 110, 253), 2));
+        headerEditor.setFont(new Font("Segoe UI", Font.BOLD, 13));
+
+// Validation à Enter
+        headerEditor.addActionListener(e -> stopHeaderEdit());
+
+// Validation à la perte de focus
+        headerEditor.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                stopHeaderEdit();
+            }
+        });
+
+// L'éditeur est ajouté sur le JTableHeader, pas sur le tableau lui-même
+// On le fera dans installUI via le header — on l'ajoute après setUI()
         internalEditor.addActionListener(e -> stopInternalEdit());
         internalEditor.addFocusListener(new FocusAdapter() {
             @Override
@@ -171,6 +219,7 @@ public class HSuperTable extends JTable {
         setUI(new HBasicTableUI());
         initDefaults();
         initializeDefaultContextActions();
+        initializeDefaultHeaderActions();
     }
 
     public HSuperTable(Object[][] data, Object[] columnNames) {
@@ -1032,13 +1081,53 @@ public class HSuperTable extends JTable {
             return;
         }
 
-        if (nameColumn == null) {
-            hModel.insertColumn(col, "Colonne " + (col + 1));
-            refreshUI();
-            return;
+        // ── Sauvegarder les largeurs actuelles avant insertion ────────────────
+        int oldColCount = getColumnCount();
+        int[] savedWidths = new int[oldColCount];
+        for (int c = 0; c < oldColCount; c++) {
+            savedWidths[c] = getColumnModel().getColumn(c).getWidth();
         }
 
-        hModel.insertColumn(col, nameColumn + " " + (col + 1));
+        // ── Sauvegarder les hauteurs de lignes ────────────────────────────────
+        int rowCount = getRowCount();
+        int[] savedHeights = new int[rowCount];
+        for (int r = 0; r < rowCount; r++) {
+            savedHeights[r] = getRowHeight(r);
+        }
+
+        // ── Insertion ─────────────────────────────────────────────────────────
+        String name = (nameColumn == null)
+                ? "Colonne " + (col + 1)
+                : nameColumn + " " + (col + 1);
+        hModel.insertColumn(col, name);
+
+        // ── Restaurer les largeurs après insertion ────────────────────────────
+        // Les colonnes avant col conservent leur largeur.
+        // La nouvelle colonne reçoit la largeur moyenne des colonnes existantes.
+        // Les colonnes après col récupèrent leur largeur d'origine.
+        int newColCount = getColumnCount();
+        int defaultNewWidth = oldColCount > 0
+                ? savedWidths[(col < oldColCount) ? col : oldColCount - 1]
+                : 100;
+
+        for (int c = 0; c < newColCount; c++) {
+            int width;
+            if (c < col) {
+                width = savedWidths[c];
+            } else if (c == col) {
+                width = defaultNewWidth;
+            } else {
+                width = savedWidths[c - 1];
+            }
+            getColumnModel().getColumn(c).setPreferredWidth(width);
+            getColumnModel().getColumn(c).setWidth(width);
+        }
+
+        // ── Restaurer les hauteurs de lignes ──────────────────────────────────
+        for (int r = 0; r < Math.min(rowCount, getRowCount()); r++) {
+            super.setRowHeight(r, savedHeights[r]);
+        }
+
         refreshUI();
     }
 
@@ -1046,52 +1135,52 @@ public class HSuperTable extends JTable {
      * Insère une colonne vide à droite de la colonne donnée.
      */
     public void insertColumnRight(int col) {
-    if (col < 0 || col >= getColumnCount()) {
-        return;
-    }
-
-    // ── Sauvegarder les largeurs actuelles avant insertion ────────────────
-    int oldColCount = getColumnCount();
-    int[] savedWidths = new int[oldColCount];
-    for (int c = 0; c < oldColCount; c++) {
-        savedWidths[c] = getColumnModel().getColumn(c).getWidth();
-    }
-
-    // ── Sauvegarder les hauteurs de lignes ────────────────────────────────
-    int rowCount = getRowCount();
-    int[] savedHeights = new int[rowCount];
-    for (int r = 0; r < rowCount; r++) {
-        savedHeights[r] = getRowHeight(r);
-    }
-
-    // ── Insertion à droite = insertion à gauche de col + 1 ────────────────
-    int insertAt = col + 1;
-    hModel.insertColumn(insertAt, "Colonne " + (insertAt + 1));
-
-    // ── Restaurer les largeurs après insertion ────────────────────────────
-    // La nouvelle colonne reçoit la largeur de la colonne de gauche (col).
-    int newColCount = getColumnCount();
-    for (int c = 0; c < newColCount; c++) {
-        int width;
-        if (c < insertAt) {
-            width = savedWidths[c];
-        } else if (c == insertAt) {
-            // Largeur de la colonne source (celle de gauche)
-            width = savedWidths[col];
-        } else {
-            width = savedWidths[c - 1];
+        if (col < 0 || col >= getColumnCount()) {
+            return;
         }
-        getColumnModel().getColumn(c).setPreferredWidth(width);
-        getColumnModel().getColumn(c).setWidth(width);
-    }
 
-    // ── Restaurer les hauteurs de lignes ──────────────────────────────────
-    for (int r = 0; r < Math.min(rowCount, getRowCount()); r++) {
-        super.setRowHeight(r, savedHeights[r]);
-    }
+        // ── Sauvegarder les largeurs actuelles avant insertion ────────────────
+        int oldColCount = getColumnCount();
+        int[] savedWidths = new int[oldColCount];
+        for (int c = 0; c < oldColCount; c++) {
+            savedWidths[c] = getColumnModel().getColumn(c).getWidth();
+        }
 
-    refreshUI();
-}
+        // ── Sauvegarder les hauteurs de lignes ────────────────────────────────
+        int rowCount = getRowCount();
+        int[] savedHeights = new int[rowCount];
+        for (int r = 0; r < rowCount; r++) {
+            savedHeights[r] = getRowHeight(r);
+        }
+
+        // ── Insertion à droite = insertion à gauche de col + 1 ────────────────
+        int insertAt = col + 1;
+        hModel.insertColumn(insertAt, "Colonne " + (insertAt + 1));
+
+        // ── Restaurer les largeurs après insertion ────────────────────────────
+        // La nouvelle colonne reçoit la largeur de la colonne de gauche (col).
+        int newColCount = getColumnCount();
+        for (int c = 0; c < newColCount; c++) {
+            int width;
+            if (c < insertAt) {
+                width = savedWidths[c];
+            } else if (c == insertAt) {
+                // Largeur de la colonne source (celle de gauche)
+                width = savedWidths[col];
+            } else {
+                width = savedWidths[c - 1];
+            }
+            getColumnModel().getColumn(c).setPreferredWidth(width);
+            getColumnModel().getColumn(c).setWidth(width);
+        }
+
+        // ── Restaurer les hauteurs de lignes ──────────────────────────────────
+        for (int r = 0; r < Math.min(rowCount, getRowCount()); r++) {
+            super.setRowHeight(r, savedHeights[r]);
+        }
+
+        refreshUI();
+    }
 
     /**
      * Supprime la ligne à l'index donné.
@@ -1858,6 +1947,149 @@ public class HSuperTable extends JTable {
         return resizeNeighborOriginalSize;
     }
 
+    // ── Alignement des en-têtes de colonnes ───────────────────────────────
+    /**
+     * Définit l'alignement horizontal du texte d'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param align SwingConstants.LEFT / CENTER / RIGHT
+     */
+    public void setColumnHeaderAlignment(int col, int align) {
+        columnHeaderAlignments.put(col, align);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Retourne l'alignement horizontal de l'en-tête d'une colonne. LEFT par
+     * défaut si non défini.
+     *
+     * @param col index de la colonne
+     * @return SwingConstants.LEFT / CENTER / RIGHT
+     */
+    public int getColumnHeaderAlignment(int col) {
+        return columnHeaderAlignments.getOrDefault(col, SwingConstants.LEFT);
+    }
+
+    // =========================================================================
+// STYLES DES EN-TÊTES DE COLONNES
+// =========================================================================
+    /**
+     * Retourne le HeaderStyle de la colonne donnée. Crée un HeaderStyle vide si
+     * aucun n'existe encore pour cette colonne.
+     *
+     * @param col index de la colonne
+     * @return HeaderStyle de la colonne
+     */
+    public HeaderStyle getHeaderStyle(int col) {
+        return headerStyles.computeIfAbsent(col, k -> new HeaderStyle());
+    }
+
+    /**
+     * Définit la couleur de fond de l'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param color couleur souhaitée, null pour revenir au style global
+     */
+    public void setHeaderBackground(int col, Color color) {
+        getHeaderStyle(col).setBackground(color);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Définit la couleur du texte de l'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param color couleur souhaitée, null pour revenir au style global
+     */
+    public void setHeaderForeground(int col, Color color) {
+        getHeaderStyle(col).setForeground(color);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Définit l'alignement horizontal du texte d'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param align SwingConstants.LEFT / CENTER / RIGHT
+     */
+    public void setHeaderAlignment(int col, int align) {
+        getHeaderStyle(col).setHorizontalAlignment(align);
+        // Mise à jour de l'ancienne Map pour rétrocompatibilité
+        columnHeaderAlignments.put(col, align);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Active ou désactive le gras sur l'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param bold true = gras
+     */
+    public void setHeaderBold(int col, boolean bold) {
+        getHeaderStyle(col).setBold(bold);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Active ou désactive l'italique sur l'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param italic true = italique
+     */
+    public void setHeaderItalic(int col, boolean italic) {
+        getHeaderStyle(col).setItalic(italic);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Définit la taille du texte de l'en-tête d'une colonne.
+     *
+     * @param col index de la colonne
+     * @param fontSize taille en points, -1 pour revenir à la taille globale
+     */
+    public void setHeaderFontSize(int col, float fontSize) {
+        getHeaderStyle(col).setFontSize(fontSize);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Remet le style de l'en-tête d'une colonne aux valeurs par défaut.
+     *
+     * @param col index de la colonne
+     */
+    public void resetHeaderStyle(int col) {
+        headerStyles.remove(col);
+        columnHeaderAlignments.remove(col);
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
+    /**
+     * Remet tous les en-têtes aux valeurs par défaut du style global.
+     */
+    public void resetAllHeaderStyles() {
+        headerStyles.clear();
+        columnHeaderAlignments.clear();
+        if (getTableHeader() != null) {
+            getTableHeader().repaint();
+        }
+    }
+
     // =========================================================================
     // ACCESSEURS INTERNES
     // =========================================================================
@@ -1900,9 +2132,7 @@ public class HSuperTable extends JTable {
     // =========================================================================
     // UTILITAIRE INTERNE
     // =========================================================================
-    // =========================================================================
 // MENU CONTEXTUEL — GESTION DES ACTIONS
-// =========================================================================
     /**
      * Ajoute une action personnalisée à la fin de la liste. Elle sera évaluée
      * comme toutes les autres actions système via isVisible() et isEnabled() au
@@ -1940,6 +2170,43 @@ public class HSuperTable extends JTable {
      */
     public List<ContextAction> getContextActions() {
         return Collections.unmodifiableList(contextActions);
+    }
+
+    // MENU HEADER — GESTION DES ACTIONS
+    /**
+     * Ajoute une action personnalisée à la fin de la liste des actions header.
+     *
+     * @param action l'action à ajouter
+     */
+    public void addHeaderAction(HeaderAction action) {
+        if (action != null) {
+            headerActions.add(action);
+        }
+    }
+
+    /**
+     * Supprime une action header de la liste par référence.
+     *
+     * @param action l'action à supprimer
+     */
+    public void removeHeaderAction(HeaderAction action) {
+        headerActions.remove(action);
+    }
+
+    /**
+     * Supprime toutes les actions header personnalisées ET système. Prévue si
+     * le développeur veut repartir d'un menu vide.
+     */
+    public void clearHeaderActions() {
+        headerActions.clear();
+    }
+
+    /**
+     * Retourne une vue non modifiable de la liste des actions header. Utile
+     * pour inspecter les actions enregistrées.
+     */
+    public List<HeaderAction> getHeaderActions() {
+        return Collections.unmodifiableList(headerActions);
     }
 
     // =========================================================================
@@ -2214,6 +2481,77 @@ public class HSuperTable extends JTable {
             }
         });
 
+        // ── SÉPARATEUR 5 ──────────────────────────────────────────────────────
+        contextActions.add(new ContextAction("---") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+            }
+        });
+
+// ── ALIGNER EN-TÊTE À GAUCHE ──────────────────────────────────────────
+        contextActions.add(new ContextAction("En-tête : aligner à gauche") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.column >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.setColumnHeaderAlignment(ctx.column, SwingConstants.LEFT);
+            }
+        });
+
+// ── ALIGNER EN-TÊTE AU CENTRE ─────────────────────────────────────────
+        contextActions.add(new ContextAction("En-tête : centrer") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.column >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.setColumnHeaderAlignment(ctx.column, SwingConstants.CENTER);
+            }
+        });
+
+// ── ALIGNER EN-TÊTE À DROITE ──────────────────────────────────────────
+        contextActions.add(new ContextAction("En-tête : aligner à droite") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isInternalCell;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return ctx.column >= 0;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.setColumnHeaderAlignment(ctx.column, SwingConstants.RIGHT);
+            }
+        });
+
         // ── SÉPARATEUR 4 ──────────────────────────────────────────────────────
         contextActions.add(new ContextAction("---") {
             @Override
@@ -2250,6 +2588,293 @@ public class HSuperTable extends JTable {
         });
     }
 
+    // =========================================================================
+// MENU HEADER — ACTIONS PAR DÉFAUT
+// =========================================================================
+    /**
+     * Initialise toutes les actions système du menu contextuel des en-têtes.
+     * Appelée une seule fois dans le constructeur principal. Le développeur
+     * peut ajouter ses propres actions via addHeaderAction().
+     */
+    private void initializeDefaultHeaderActions() {
+
+        // ── RENOMMER ──────────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Renommer la colonne") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+                ctx.table.startHeaderEdit(ctx.columnIndex);
+            }
+        });
+
+        // ── SÉPARATEUR 1 ──────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("---") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+        });
+
+        // ── COULEUR DE FOND ───────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Couleur de fond") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+                Color chosen = JColorChooser.showDialog(
+                        ctx.table,
+                        "Couleur de fond de l'en-tête",
+                        ctx.headerStyle.hasBackground()
+                        ? ctx.headerStyle.getBackground()
+                        : ctx.table.getTableStyle().getHeaderBackground()
+                );
+                if (chosen != null) {
+                    ctx.table.setHeaderBackground(ctx.columnIndex, chosen);
+                }
+            }
+        });
+
+        // ── COULEUR DU TEXTE ──────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Couleur du texte") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+                Color chosen = JColorChooser.showDialog(
+                        ctx.table,
+                        "Couleur du texte de l'en-tête",
+                        ctx.headerStyle.hasForeground()
+                        ? ctx.headerStyle.getForeground()
+                        : ctx.table.getTableStyle().getHeaderForeground()
+                );
+                if (chosen != null) {
+                    ctx.table.setHeaderForeground(ctx.columnIndex, chosen);
+                }
+            }
+        });
+
+        // ── SÉPARATEUR 2 ──────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("---") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+        });
+
+        // ── ALIGNEMENT ────────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Alignement") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+
+            @Override
+            public JComponent buildMenuItem(HeaderContext ctx) {
+                HMenu menu = new HMenu(getName());
+                menu.setEnabled(isEnabled(ctx));
+
+                HMenuItem left = new HMenuItem("Gauche");
+                left.addActionListener(e
+                        -> ctx.table.setHeaderAlignment(ctx.columnIndex,
+                                SwingConstants.LEFT));
+                menu.add(left);
+
+                HMenuItem center = new HMenuItem("Centre");
+                center.addActionListener(e
+                        -> ctx.table.setHeaderAlignment(ctx.columnIndex,
+                                SwingConstants.CENTER));
+                menu.add(center);
+
+                HMenuItem right = new HMenuItem("Droite");
+                right.addActionListener(e
+                        -> ctx.table.setHeaderAlignment(ctx.columnIndex,
+                                SwingConstants.RIGHT));
+                menu.add(right);
+
+                return menu;
+            }
+        });
+
+        // ── SÉPARATEUR 3 ──────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("---") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+        });
+
+        // ── STYLE DE POLICE ───────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Style de police") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+
+            @Override
+            public JComponent buildMenuItem(HeaderContext ctx) {
+                HMenu menu = new HMenu(getName());
+                menu.setEnabled(isEnabled(ctx));
+
+                HMenuItem bold = new HMenuItem(
+                        ctx.headerStyle.isBold() ? "Supprimer le gras" : "Gras");
+                bold.addActionListener(e -> {
+                    ctx.table.setHeaderBold(ctx.columnIndex,
+                            !ctx.headerStyle.isBold());
+                });
+                menu.add(bold);
+
+                HMenuItem italic = new HMenuItem(
+                        ctx.headerStyle.isItalic() ? "Supprimer l'italique" : "Italique");
+                italic.addActionListener(e -> {
+                    ctx.table.setHeaderItalic(ctx.columnIndex,
+                            !ctx.headerStyle.isItalic());
+                });
+                menu.add(italic);
+
+                return menu;
+            }
+        });
+
+        // ── TAILLE DU TEXTE ───────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Taille du texte") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+
+            @Override
+            public JComponent buildMenuItem(HeaderContext ctx) {
+                HMenu menu = new HMenu(getName());
+                menu.setEnabled(isEnabled(ctx));
+
+                int[] sizes = {10, 11, 12, 13, 14, 16, 18, 20, 24};
+                for (int size : sizes) {
+                    HMenuItem item = new HMenuItem(size + " pt");
+                    final int s = size;
+                    item.addActionListener(e
+                            -> ctx.table.setHeaderFontSize(ctx.columnIndex, s));
+                    menu.add(item);
+                }
+
+                return menu;
+            }
+        });
+
+        // ── SÉPARATEUR 4 ──────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("---") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return false;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+            }
+        });
+
+        // ── RÉINITIALISER ─────────────────────────────────────────────────────
+        headerActions.add(new HeaderAction("Réinitialiser le style") {
+            @Override
+            public boolean isVisible(HeaderContext ctx) {
+                return true;
+            }
+
+            @Override
+            public boolean isEnabled(HeaderContext ctx) {
+                return ctx.columnIndex >= 0;
+            }
+
+            @Override
+            public void perform(HeaderContext ctx) {
+                ctx.table.resetHeaderStyle(ctx.columnIndex);
+            }
+        });
+    }
+
 // =========================================================================
 // MENU CONTEXTUEL — CONSTRUCTION ET AFFICHAGE
 // =========================================================================
@@ -2258,7 +2883,7 @@ public class HSuperTable extends JTable {
      *
      * Pipeline : 1. Créer le JPopupMenu 2. Parcourir toutes les actions
      * enregistrées 3. Pour chaque action : vérifier isVisible() 4. Si visible :
-     * créer le JMenuItem, appliquer isEnabled() 5. Connecter perform() au clic
+     * créer le HMenuItem, appliquer isEnabled() 5. Connecter perform() au clic
      * 6. Afficher le popup à la position souris
      *
      * Les séparateurs ("---") sont traités à part — on évite d'afficher un
@@ -2269,7 +2894,7 @@ public class HSuperTable extends JTable {
      * @param y position Y souris dans le tableau
      */
     public void showContextMenu(TableContext ctx, int x, int y) {
-        JPopupMenu popup = new JPopupMenu();
+        HPopupMenu popup = new HPopupMenu();
 
         boolean lastWasSeparator = true; // évite un séparateur en début de menu
         int visibleItemCount = 0;
@@ -2292,8 +2917,8 @@ public class HSuperTable extends JTable {
                 continue;
             }
 
-            // Création du JMenuItem
-            JMenuItem item = new JMenuItem(action.getName());
+            // Création du HMenuItem
+            HMenuItem item = new HMenuItem(action.getName());
             item.setEnabled(action.isEnabled(ctx));
 
             // Connexion de l'action au clic
@@ -2313,6 +2938,142 @@ public class HSuperTable extends JTable {
         // N'afficher le popup que s'il contient au moins une action
         if (visibleItemCount > 0) {
             popup.show(this, x, y);
+        }
+    }
+
+    // =========================================================================
+// MENU HEADER — CONSTRUCTION ET AFFICHAGE
+// =========================================================================
+    /**
+     * Construit et affiche le menu contextuel des en-têtes pour le contexte
+     * donné.
+     *
+     * Notes: 1. Créer le JPopupMenu 2. Parcourir toutes les actions header
+     * enregistrées 3. Pour chaque action : vérifier isVisible() 4. Si visible :
+     * créer le JMenuItem via buildMenuItem(), appliquer isEnabled() 5.
+     * Connecter perform() au clic 6. Afficher le popup à la position souris
+     *
+     * @param ctx contexte du clic droit sur l'en-tête
+     * @param x position X souris dans l'en-tête
+     * @param y position Y souris dans l'en-tête
+     */
+    public void showHeaderMenu(HeaderContext ctx, int x, int y) {
+        JPopupMenu popup = new JPopupMenu();
+
+        boolean lastWasSeparator = true;
+        int visibleItemCount = 0;
+
+        for (HeaderAction action : headerActions) {
+
+            // Vérification de la visibilité
+            if (!action.isVisible(ctx)) {
+                continue;
+            }
+
+            // Traitement des séparateurs
+            if ("---".equals(action.getName())) {
+                if (!lastWasSeparator && visibleItemCount > 0) {
+                    popup.addSeparator();
+                    lastWasSeparator = true;
+                }
+                continue;
+            }
+
+            // Déléguer la construction du composant à l'action
+            JComponent menuItem = action.buildMenuItem(ctx);
+            popup.add(menuItem);
+            lastWasSeparator = false;
+            visibleItemCount++;
+        }
+
+        // Supprimer le dernier séparateur s'il est en fin de menu
+        int count = popup.getComponentCount();
+        if (count > 0 && popup.getComponent(count - 1) instanceof JSeparator) {
+            popup.remove(count - 1);
+        }
+
+        // N'afficher le popup que s'il contient au moins une action
+        if (visibleItemCount > 0) {
+            // Le popup s'affiche sur le JTableHeader, pas sur le tableau
+            JTableHeader header = getTableHeader();
+            if (header != null) {
+                popup.show(header, x, y);
+            }
+        }
+    }
+
+    // =========================================================================
+// ÉDITION DU NOM DE COLONNE
+// =========================================================================
+    /**
+     * Démarre l'édition du nom de la colonne à l'index donné. Positionne le
+     * JTextField sur la cellule d'en-tête et lui donne le focus.
+     *
+     * @param colIndex index de la colonne à renommer
+     */
+    public void startHeaderEdit(int colIndex) {
+        if (colIndex < 0 || colIndex >= getColumnCount()) {
+            return;
+        }
+
+        JTableHeader header = getTableHeader();
+        if (header == null) {
+            return;
+        }
+
+        // S'assurer que l'éditeur est bien sur le header
+        if (headerEditor.getParent() != header) {
+            header.setLayout(null);
+            header.add(headerEditor);
+        }
+
+        editingColumnIndex = colIndex;
+
+        // Rectangle de la cellule d'en-tête ciblée
+        Rectangle rect = header.getHeaderRect(colIndex);
+
+        // Positionner le JTextField exactement sur la cellule
+        headerEditor.setBounds(
+                rect.x + 2,
+                rect.y + 2,
+                rect.width - 4,
+                rect.height - 4
+        );
+
+        // Pré-remplir avec le nom actuel
+        headerEditor.setText(getColumnName(colIndex));
+        headerEditor.setVisible(true);
+        headerEditor.requestFocus();
+        headerEditor.selectAll();
+
+        header.repaint();
+    }
+
+    /**
+     * Valide et applique le nouveau nom de colonne. Cache l'éditeur et met à
+     * jour le TableColumnModel.
+     */
+    public void stopHeaderEdit() {
+        if (editingColumnIndex < 0) {
+            return;
+        }
+
+        String newName = headerEditor.getText().trim();
+
+        // Appliquer le nouveau nom si non vide
+        if (!newName.isEmpty() && editingColumnIndex < getColumnCount()) {
+            getColumnModel()
+                    .getColumn(editingColumnIndex)
+                    .setHeaderValue(newName);
+        }
+
+        headerEditor.setVisible(false);
+        editingColumnIndex = -1;
+
+        // Rafraîchir l'en-tête
+        JTableHeader header = getTableHeader();
+        if (header != null) {
+            header.repaint();
         }
     }
 
@@ -2482,6 +3243,324 @@ public class HSuperTable extends JTable {
                     + ", merged=" + isMerged
                     + ", internal=" + isInternalCell
                     + ", multiSel=" + hasMultipleSelection + "]";
+        }
+    }
+
+    // =========================================================================
+    // MENU HEADER — STYLE
+    // =========================================================================
+    /**
+     * HeaderStyle — Métadonnées visuelles d'un en-tête de colonne.
+     *
+     * Stocke toutes les personnalisations applicables à un en-tête : couleur de
+     * fond, couleur du texte, alignement, style de police, taille du texte.
+     *
+     * null sur une propriété = utiliser la valeur par défaut du
+     * HSuperTableStyle.
+     */
+    public static class HeaderStyle {
+
+        /**
+         * Couleur de fond. null = valeur du style global.
+         */
+        private Color background;
+
+        /**
+         * Couleur du texte. null = valeur du style global.
+         */
+        private Color foreground;
+
+        /**
+         * Alignement horizontal. SwingConstants.LEFT / CENTER / RIGHT.
+         */
+        private int horizontalAlignment = SwingConstants.LEFT;
+
+        /**
+         * Texte en gras.
+         */
+        private boolean bold = true;
+
+        /**
+         * Texte en italique.
+         */
+        private boolean italic = false;
+
+        /**
+         * Taille du texte. -1 = taille du style global.
+         */
+        private float fontSize = -1f;
+
+        // ── Couleur de fond ───────────────────────────────────────────────
+        public Color getBackground() {
+            return background;
+        }
+
+        public void setBackground(Color c) {
+            this.background = c;
+        }
+
+        public boolean hasBackground() {
+            return background != null;
+        }
+
+        // ── Couleur du texte ──────────────────────────────────────────────
+        public Color getForeground() {
+            return foreground;
+        }
+
+        public void setForeground(Color c) {
+            this.foreground = c;
+        }
+
+        public boolean hasForeground() {
+            return foreground != null;
+        }
+
+        // ── Alignement ────────────────────────────────────────────────────
+        public int getHorizontalAlignment() {
+            return horizontalAlignment;
+        }
+
+        public void setHorizontalAlignment(int a) {
+            this.horizontalAlignment = a;
+        }
+
+        // ── Gras ──────────────────────────────────────────────────────────
+        public boolean isBold() {
+            return bold;
+        }
+
+        public void setBold(boolean b) {
+            this.bold = b;
+        }
+
+        // ── Italique ──────────────────────────────────────────────────────
+        public boolean isItalic() {
+            return italic;
+        }
+
+        public void setItalic(boolean i) {
+            this.italic = i;
+        }
+
+        // ── Taille du texte ───────────────────────────────────────────────
+        public float getFontSize() {
+            return fontSize;
+        }
+
+        public void setFontSize(float s) {
+            this.fontSize = s;
+        }
+
+        public boolean hasCustomFontSize() {
+            return fontSize > 0f;
+        }
+
+        /**
+         * Remet toutes les propriétés à leurs valeurs par défaut.
+         */
+        public void reset() {
+            background = null;
+            foreground = null;
+            horizontalAlignment = SwingConstants.LEFT;
+            bold = true;
+            italic = false;
+            fontSize = -1f;
+        }
+
+        /**
+         * Construit la police finale en combinant gras, italique et taille. Si
+         * fontSize <= 0, on utilise la taille de la police de référence.
+         *
+         * @param baseFont police de référence (depuis HSuperTableStyle)
+         * @return police calculée
+         */
+        public Font buildFont(Font baseFont) {
+            if (baseFont == null) {
+                baseFont = new Font("Segoe UI", Font.BOLD, 13);
+            }
+            int style = Font.PLAIN;
+            if (bold) {
+                style |= Font.BOLD;
+            }
+            if (italic) {
+                style |= Font.ITALIC;
+            }
+            float size = hasCustomFontSize() ? fontSize : baseFont.getSize2D();
+            return baseFont.deriveFont(style, size);
+        }
+
+        @Override
+        public String toString() {
+            return "HeaderStyle{bg=" + background
+                    + ", fg=" + foreground
+                    + ", align=" + horizontalAlignment
+                    + ", bold=" + bold
+                    + ", italic=" + italic
+                    + ", fontSize=" + fontSize + "}";
+        }
+    }
+
+    // =========================================================================
+// MENU HEADER — CONTEXTE
+// =========================================================================
+    /**
+     * HeaderContext Construit par le contrôleur. Centralise toutes les
+     * informations nécessaires pour décider quelles actions afficher et comment
+     * les exécuter.
+     */
+    public static class HeaderContext {
+
+        /**
+         * Index de la colonne ciblée.
+         */
+        public final int columnIndex;
+
+        /**
+         * Nom actuel de la colonne.
+         */
+        public final String columnName;
+
+        /**
+         * Style actuel de l'en-tête — jamais null.
+         */
+        public final HeaderStyle headerStyle;
+
+        /**
+         * Position souris au moment du clic droit.
+         */
+        public final Point mousePosition;
+
+        /**
+         * Référence au tableau — permet aux actions d'appeler l'API.
+         */
+        public final HSuperTable table;
+
+        /**
+         * Construit un contexte complet.
+         *
+         * @param table le tableau source
+         * @param columnIndex index de la colonne ciblée
+         * @param mousePosition position souris
+         */
+        public HeaderContext(
+                HSuperTable table,
+                int columnIndex,
+                Point mousePosition
+        ) {
+            this.table = table;
+            this.columnIndex = columnIndex;
+            this.mousePosition = mousePosition;
+            this.columnName = (columnIndex >= 0 && columnIndex < table.getColumnCount())
+                    ? table.getColumnName(columnIndex)
+                    : "";
+
+            // Récupérer ou créer le style de cet en-tête
+            this.headerStyle = table.getHeaderStyle(columnIndex);
+        }
+
+        @Override
+        public String toString() {
+            return "HeaderContext[col=" + columnIndex
+                    + ", name=" + columnName + "]";
+        }
+    }
+
+    // =========================================================================
+// MENU HEADER — ACTION
+// =========================================================================
+    /**
+     * HeaderAction — Commande indépendante du menu contextuel des en-têtes.
+     *
+     * Identique à ContextAction mais dédiée aux en-têtes de colonnes. Chaque
+     * entrée du menu header est une action autonome qui : - décide elle-même si
+     * elle est visible selon le contexte, - décide elle-même si elle est
+     * activée selon le contexte, - exécute sa propre logique métier.
+     *
+     * Le développeur crée ses actions personnalisées en héritant de cette
+     * classe et en implémentant les trois méthodes abstraites.
+     *
+     * Exemple d'utilisation :
+     * <pre>
+     *   table.addHeaderAction(new HSuperTable.HeaderAction("Trier") {
+     *       {@literal @}Override
+     *       public boolean isVisible(HeaderContext ctx) { return true; }
+     *
+     *       {@literal @}Override
+     *       public boolean isEnabled(HeaderContext ctx) { return true; }
+     *
+     *       {@literal @}Override
+     *       public void perform(HeaderContext ctx) {
+     *           ctx.table.sortByColumn(ctx.columnIndex, SortOrder.ASCENDING);
+     *       }
+     *   });
+     * </pre>
+     */
+    public abstract static class HeaderAction {
+
+        /**
+         * Nom affiché dans le menu contextuel.
+         */
+        private final String name;
+
+        /**
+         * Crée une action avec le nom donné.
+         *
+         * @param name libellé affiché dans le menu
+         */
+        public HeaderAction(String name) {
+            this.name = name;
+        }
+
+        /**
+         * Retourne le libellé de l'action.
+         *
+         * @return nom de l'action
+         */
+        public String getName() {
+            return name;
+        }
+
+        /**
+         * Détermine si cette action doit apparaître dans le menu pour ce
+         * contexte. Si false, l'entrée n'est pas créée du tout.
+         *
+         * @param ctx contexte du clic droit sur l'en-tête
+         * @return true si l'action doit être visible
+         */
+        public abstract boolean isVisible(HeaderContext ctx);
+
+        /**
+         * Détermine si cette action est cliquable dans le menu. Si false,
+         * l'entrée est grisée mais reste visible.
+         *
+         * @param ctx contexte du clic droit sur l'en-tête
+         * @return true si l'action est activée
+         */
+        public abstract boolean isEnabled(HeaderContext ctx);
+
+        /**
+         * Exécute la logique de l'action. Appelée uniquement si l'action est
+         * visible et activée.
+         *
+         * @param ctx contexte du clic droit sur l'en-tête
+         */
+        public abstract void perform(HeaderContext ctx);
+
+        /**
+         * Construit le HMenuItem correspondant à cette action. Les actions
+         * simples retournent un HMenuItem standard. Les actions avec sous-menu
+         * peuvent surcharger cette méthode pour retourner un HMenu contenant
+         * des HMenuItem enfants.
+         *
+         * @param ctx contexte du clic droit sur l'en-tête
+         * @return le composant menu à ajouter au popup
+         */
+        public JComponent buildMenuItem(HeaderContext ctx) {
+            HMenuItem item = new HMenuItem(getName());
+            item.setEnabled(isEnabled(ctx));
+            item.addActionListener(e -> perform(ctx));
+            return item;
         }
     }
 
