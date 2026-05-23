@@ -1046,8 +1046,52 @@ public class HSuperTable extends JTable {
      * Insère une colonne vide à droite de la colonne donnée.
      */
     public void insertColumnRight(int col) {
-        insertColumnLeft(col + 1);
+    if (col < 0 || col >= getColumnCount()) {
+        return;
     }
+
+    // ── Sauvegarder les largeurs actuelles avant insertion ────────────────
+    int oldColCount = getColumnCount();
+    int[] savedWidths = new int[oldColCount];
+    for (int c = 0; c < oldColCount; c++) {
+        savedWidths[c] = getColumnModel().getColumn(c).getWidth();
+    }
+
+    // ── Sauvegarder les hauteurs de lignes ────────────────────────────────
+    int rowCount = getRowCount();
+    int[] savedHeights = new int[rowCount];
+    for (int r = 0; r < rowCount; r++) {
+        savedHeights[r] = getRowHeight(r);
+    }
+
+    // ── Insertion à droite = insertion à gauche de col + 1 ────────────────
+    int insertAt = col + 1;
+    hModel.insertColumn(insertAt, "Colonne " + (insertAt + 1));
+
+    // ── Restaurer les largeurs après insertion ────────────────────────────
+    // La nouvelle colonne reçoit la largeur de la colonne de gauche (col).
+    int newColCount = getColumnCount();
+    for (int c = 0; c < newColCount; c++) {
+        int width;
+        if (c < insertAt) {
+            width = savedWidths[c];
+        } else if (c == insertAt) {
+            // Largeur de la colonne source (celle de gauche)
+            width = savedWidths[col];
+        } else {
+            width = savedWidths[c - 1];
+        }
+        getColumnModel().getColumn(c).setPreferredWidth(width);
+        getColumnModel().getColumn(c).setWidth(width);
+    }
+
+    // ── Restaurer les hauteurs de lignes ──────────────────────────────────
+    for (int r = 0; r < Math.min(rowCount, getRowCount()); r++) {
+        super.setRowHeight(r, savedHeights[r]);
+    }
+
+    refreshUI();
+}
 
     /**
      * Supprime la ligne à l'index donné.

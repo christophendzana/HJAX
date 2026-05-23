@@ -1289,7 +1289,24 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         targetCell.internalGrid = new InternalGrid(splitType, dividerRatio, first, second);
         targetCell.value = null;
 
-        fireTableDataChanged();
+        // Remplacer fireTableDataChanged() par un fire ciblé
+// On recherche la ligne de la cellule cible pour éviter
+// de réinitialiser toute la structure
+        int targetRow = -1;
+        outer:
+        for (int r = 0; r < getRowCount(); r++) {
+            for (int c = 0; c < getColumnCount(); c++) {
+                if (grid[r][c] == targetCell) {
+                    targetRow = r;
+                    break outer;
+                }
+            }
+        }
+        if (targetRow >= 0) {
+            fireTableRowsUpdated(targetRow, targetRow);
+        } else {
+            fireTableRowsUpdated(0, getRowCount() - 1);
+        }
 
     }
 
@@ -1375,7 +1392,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         String finalValue = collectValue(subCell);
         subCell.value = finalValue;
         subCell.internalGrid = null;
-        fireTableDataChanged(); // rafraîchit l'affichage
+        fireTableRowsUpdated(0, Math.max(0, getRowCount() - 1));
     }
 
 }
