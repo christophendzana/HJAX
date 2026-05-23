@@ -2958,7 +2958,7 @@ public class HSuperTable extends JTable {
      * @param y position Y souris dans l'en-tête
      */
     public void showHeaderMenu(HeaderContext ctx, int x, int y) {
-        JPopupMenu popup = new JPopupMenu();
+        HPopupMenu popup = new HPopupMenu();
 
         boolean lastWasSeparator = true;
         int visibleItemCount = 0;
@@ -3086,11 +3086,7 @@ public class HSuperTable extends JTable {
         revalidate();
         repaint();
     }
-
-    @Override
-    public void repaint() {
-        super.repaint(0, 0, getWidth(), getHeight());
-    }
+    
 
     /**
      * Représente une zone rectangulaire sélectionnée. Toujours normalisée :

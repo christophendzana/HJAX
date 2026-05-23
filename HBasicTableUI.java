@@ -893,7 +893,7 @@ public class HBasicTableUI extends BasicTableUI {
         Rectangle rect = (cell.spanRow > 1 || cell.spanCol > 1)
                 ? computeMergedRect(t, fr, fc, cell.spanRow, cell.spanCol)
                 : t.getCellRect(fr, fc, false);
-
+        
         HSuperTableStyle style = t.getTableStyle();
         Color focusColor = (style != null) ? style.getFocusBorderColor()
                 : new Color(13, 110, 253);
@@ -1312,4 +1312,6 @@ public class HBasicTableUI extends BasicTableUI {
         g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
         g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
     }
+    
+    
 }

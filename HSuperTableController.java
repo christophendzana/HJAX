@@ -426,8 +426,15 @@ public class HSuperTableController {
         // Clic simple : sélection normale 
         HBasicTableUI ui = (HBasicTableUI) table.getUI();
         InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
-        table.setFocusedInternalCell(hit);
-        table.setSelectedInternalCell(hit);
+
+// On ne setter le focus interne que si c'est une vraie sous-cellule
+        if (hit != null && hit.parent != null) {
+            table.setFocusedInternalCell(hit);
+            table.setSelectedInternalCell(hit);
+        } else {
+            table.setFocusedInternalCell(null);
+            table.setSelectedInternalCell(null);
+        }
 
         if (!e.isShiftDown()) {
             anchorRow = row;
