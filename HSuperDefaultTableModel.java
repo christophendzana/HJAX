@@ -577,17 +577,43 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         principal.spanCol = colEnd - colStart + 1;
         principal.mergeOrigin = null;
 
-        // collecter le contenu de toutes les cellules de la zone
+// ── Sauvegarder les valeurs individuelles avant fusion ────────────────
+// On stocke chaque valeur dans mergedValues[dr][dc]
+// pour pouvoir les redistribuer lors de la défusion
+        int rSpan = rowEnd - rowStart + 1;
+        int cSpan = colEnd - colStart + 1;
+        principal.mergedValues = new Object[rSpan][cSpan];
+
         StringBuilder merged = new StringBuilder();
         for (int r = rowStart; r <= rowEnd; r++) {
             for (int c = colStart; c <= colEnd; c++) {
                 Object val = getValueAt(r, c);
+                // Sauvegarder la valeur individuelle
+                principal.mergedValues[r - rowStart][c - colStart] = val;
+                // Construire la valeur concaténée
                 if (val != null && !val.toString().trim().isEmpty()) {
                     if (merged.length() > 0) {
                         merged.append(" ");
                     }
                     merged.append(val.toString().trim());
                 }
+            }
+        }
+
+// Placer le contenu fusionné dans la cellule principale
+        setValueAt(merged.length() > 0 ? merged.toString() : null, rowStart, colStart);
+
+// Absorber les autres cellules
+        for (int r = rowStart; r <= rowEnd; r++) {
+            for (int c = colStart; c <= colEnd; c++) {
+                if (r == rowStart && c == colStart) {
+                    continue;
+                }
+                Cell absorbed = grid[r][c];
+                absorbed.spanRow = 0;
+                absorbed.spanCol = 0;
+                absorbed.mergeOrigin = new Point(rowStart, colStart);
+                setValueAt(null, r, c);
             }
         }
 
@@ -668,15 +694,42 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             return; // rien à faire
         }
         // C'est la principale : libère toutes les cellules absorbées
+        if (cell.isNormal()) {
+            return; // rien à faire
+        }
+
+// C'est la principale : libère toutes les cellules absorbées
         int rSpan = cell.spanRow;
         int cSpan = cell.spanCol;
+
+// ── Redistribution des valeurs individuelles ──────────────────────────
+// Si mergedValues est disponible, on redistribue chaque valeur
+// dans sa cellule d'origine. Sinon on laisse toutes les cellules vides.
+        Object[][] savedValues = cell.mergedValues;
+
         for (int dr = 0; dr < rSpan; dr++) {
             for (int dc = 0; dc < cSpan; dc++) {
                 if (isValidCell(row + dr, col + dc)) {
                     grid[row + dr][col + dc].resetSpan();
+
+                    // Restaurer la valeur individuelle si disponible
+                    if (savedValues != null
+                            && dr < savedValues.length
+                            && dc < savedValues[dr].length) {
+                        Object val = savedValues[dr][dc];
+                        setValueAt(val, row + dr, col + dc);
+                    } else if (dr == 0 && dc == 0) {
+                        // Cellule principale — on conserve la valeur concaténée
+                        // si pas de sauvegarde individuelle disponible
+                    } else {
+                        setValueAt(null, row + dr, col + dc);
+                    }
                 }
             }
         }
+
+// Nettoyer mergedValues après redistribution
+        cell.mergedValues = null;
     }
 
     /**
@@ -876,6 +929,182 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         return count;
     }
 
+    /**
+     * Subdivise une cellule en une grille de nbRows × nbCols sous-cellules.
+     *
+     * Construction par arborescence d'InternalGrid imbriquées : - On découpe
+     * d'abord horizontalement en nbRows lignes - Chaque ligne est ensuite
+     * découpée verticalement en nbCols colonnes
+     *
+     * @param row ligne de la cellule cible
+     * @param col colonne de la cellule cible
+     * @param nbRows nombre de lignes dans la grille
+     * @param nbCols nombre de colonnes dans la grille
+     */
+    public void splitCellGrid(int row, int col, int nbRows, int nbCols) {
+
+        if (row < 0 || row >= getRowCount()
+                || col < 0 || col >= getColumnCount()) {
+            throw new IndexOutOfBoundsException(
+                    "Coordonnées invalides : (" + row + ", " + col + ")"
+            );
+        }
+
+        if (nbRows < 1 || nbCols < 1) {
+            return;
+        }
+
+        // Cas trivial — pas de subdivision nécessaire
+        if (nbRows == 1 && nbCols == 1) {
+            return;
+        }
+
+        Cell cell = getCell(row, col);
+
+        if (cell.isAbsorbed()) {
+            return;
+        }
+
+        // Récupérer la valeur actuelle avant de modifier la cellule
+        Object currentValue = getValueAt(row, col);
+
+        // Construire l'arborescence récursivement
+        cell.internalGrid = buildGridStructure(nbRows, nbCols, currentValue, cell.style);
+        cell.value = null;
+
+        fireTableRowsUpdated(row, row);
+    }
+
+    /**
+     * Subdivise une Cell directement en une grille nbRows × nbCols. Utilisé
+     * quand une sous-cellule interne est focusée.
+     *
+     * @param targetCell cellule cible
+     * @param nbRows nombre de lignes
+     * @param nbCols nombre de colonnes
+     */
+    public void splitCellGridDirectly(Cell targetCell, int nbRows, int nbCols) {
+        if (targetCell == null || targetCell.isAbsorbed()) {
+            return;
+        }
+        if (nbRows < 1 || nbCols < 1) {
+            return;
+        }
+        if (nbRows == 1 && nbCols == 1) {
+            return;
+        }
+
+        Object currentValue = targetCell.value;
+        targetCell.internalGrid = buildGridStructure(
+                nbRows, nbCols, currentValue, targetCell.style);
+        targetCell.value = null;
+
+        fireTableDataChanged();
+    }
+
+    /**
+     * Construit récursivement l'arborescence d'InternalGrid pour simuler une
+     * grille de nbRows × nbCols.
+     *
+     * Principe : - Si nbRows > 1 : on coupe horizontalement en deux blocs
+     * (premier bloc = 1 ligne, second bloc = nbRows-1 lignes) - Si nbRows == 1
+     * et nbCols > 1 : on coupe verticalement (premier bloc = 1 colonne, second
+     * bloc = nbCols-1 colonnes)
+     *
+     * @param nbRows nombre de lignes restantes à créer
+     * @param nbCols nombre de colonnes restantes à créer
+     * @param value valeur à placer dans la première cellule
+     * @param style style de la cellule mère à copier
+     * @return InternalGrid racine de l'arborescence
+     */
+    private InternalGrid buildGridStructure(int nbRows, int nbCols,
+            Object value, HSuperTableCellModel style) {
+
+        if (nbRows == 1 && nbCols == 1) {
+            // Cas de base — cellule feuille, ne devrait pas être appelé
+            // directement mais sécurité
+            return null;
+        }
+
+        if (nbRows > 1) {
+            // ── Découpage horizontal ──────────────────────────────────────
+            // first = première ligne (1 × nbCols)
+            // second = lignes restantes ((nbRows-1) × nbCols)
+            float ratio = 1.0f / nbRows;
+            ratio = Math.max(0.15f, Math.min(0.85f, ratio));
+
+            Cell first = new Cell();
+            if (style != null) {
+                first.style = style.copy();
+            }
+
+            Cell second = new Cell();
+            if (style != null) {
+                second.style = style.copy();
+            }
+
+            // La première cellule reçoit la valeur originale
+            if (nbCols == 1) {
+                // Ligne unique sans subdivision verticale
+                first.value = value;
+            } else {
+                // Subdiviser horizontalement la première ligne
+                first.internalGrid = buildGridStructure(1, nbCols, value, style);
+            }
+
+            // Construire les lignes restantes récursivement
+            if (nbRows - 1 == 1 && nbCols == 1) {
+                // Dernière ligne simple
+                second.value = null;
+            } else if (nbRows - 1 == 1) {
+                // Dernière ligne à subdiviser verticalement
+                second.internalGrid = buildGridStructure(1, nbCols, null, style);
+            } else {
+                // Plusieurs lignes restantes
+                second.internalGrid = buildGridStructure(nbRows - 1, nbCols, null, style);
+            }
+
+            return new InternalGrid(
+                    InternalGrid.SPLIT_HORIZONTAL,
+                    ratio,
+                    first,
+                    second
+            );
+
+        } else {
+            // ── Découpage vertical (nbRows == 1) ──────────────────────────
+            // first = première colonne
+            // second = colonnes restantes
+            float ratio = 1.0f / nbCols;
+            ratio = Math.max(0.15f, Math.min(0.85f, ratio));
+
+            Cell first = new Cell();
+            if (style != null) {
+                first.style = style.copy();
+            }
+            first.value = value; // La valeur va dans la première colonne
+
+            Cell second = new Cell();
+            if (style != null) {
+                second.style = style.copy();
+            }
+
+            // Construire les colonnes restantes récursivement
+            if (nbCols - 1 > 1) {
+                second.internalGrid = buildGridStructure(1, nbCols - 1, null, style);
+            } else {
+                second.value = null;
+            }
+
+            return new InternalGrid(
+                    InternalGrid.SPLIT_VERTICAL,
+                    ratio,
+                    first,
+                    second
+            );
+        }
+    }
+
     // =========================================================================
     // VALIDATIONS INTERNES
     // =========================================================================
@@ -931,6 +1160,15 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
          * Subdivision interne de la cellule
          */
         public InternalGrid internalGrid;
+
+        /**
+         * Valeurs individuelles des cellules avant fusion. Stockées dans la
+         * cellule principale au moment de mergeCells(). Utilisées par
+         * unmergeCell() pour redistribuer les contenus. null si la cellule
+         * n'est pas fusionnée ou si les valeurs étaient vides. NB:
+         * mergedValues[dr][dc] = valeur de la cellule (row+dr, col+dc)
+         */
+        public Object[][] mergedValues;
 
         /**
          * Crée une cellule normale avec toutes les valeurs par défaut.
@@ -997,6 +1235,18 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
             copy.mergeOrigin = (this.mergeOrigin != null)
                     ? new Point(this.mergeOrigin.x, this.mergeOrigin.y)
                     : null;
+
+            // Copie de mergedValues si présent
+            if (this.mergedValues != null) {
+                int rows = this.mergedValues.length;
+                int cols = this.mergedValues[0].length;
+                copy.mergedValues = new Object[rows][cols];
+                for (int r = 0; r < rows; r++) {
+                    System.arraycopy(this.mergedValues[r], 0,
+                            copy.mergedValues[r], 0, cols);
+                }
+            }
+
             return copy;
         }
 
@@ -1355,9 +1605,28 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         if (!cell.hasInternalGrid()) {
             return;
         }
+
+        // LOG TEMPORAIRE
+        System.out.println("removeInternalGrid row=" + row + " col=" + col);
+        System.out.println("cell.isMerged=" + cell.isMerged());
+        System.out.println("cell.spanRow=" + cell.spanRow + " cell.spanCol=" + cell.spanCol);
+        System.out.println("cell.mergedValues=" + cell.mergedValues);
+        System.out.println("cell.value avant=" + cell.value);
+
         String finalValue = collectValue(cell);
         cell.value = finalValue;
         cell.internalGrid = null;
+
+        // ── Mise à jour de mergedValues si la cellule est fusionnée ───────────
+        // La valeur reconstituée depuis la subdivision doit remplacer
+        // mergedValues[0][0] pour que la défusion ultérieure soit correcte
+        if (cell.isMerged() && cell.mergedValues != null) {
+            cell.mergedValues[0][0] = finalValue;
+        }
+
+        System.out.println("cell.value après=" + cell.value);
+        System.out.println("mergedValues[0][0]=" + (cell.mergedValues != null ? cell.mergedValues[0][0] : "null"));
+
         setValueAt(finalValue, row, col);
         fireTableDataChanged();
     }
@@ -1367,6 +1636,7 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
      * gomme sur les sous-cellules.
      */
     public void removeInternalGridFromCell(Cell targetCell, int row, int col) {
+        System.out.println("removeInternalGridFromCell(Cell,int,int) called");
         if (targetCell == null || !targetCell.hasInternalGrid()) {
             return;
         }
@@ -1375,24 +1645,56 @@ public class HSuperDefaultTableModel extends DefaultTableModel {
         targetCell.value = finalValue;
         targetCell.internalGrid = null;
 
+        // Mise à jour de mergedValues si la cellule est fusionnée ───────────
+        if (targetCell.isMerged() && targetCell.mergedValues != null) {
+            targetCell.mergedValues[0][0] = finalValue;
+        }
+
         // resynchroniser DefaultTableModel
         if (isValidCell(row, col)) {
             setValueAt(finalValue, row, col);
         }
+        
         fireTableDataChanged();
     }
 
     /**
      * Supprime la subdivision d'une sous-cellule interne
      */
-    public void removeInternalGridFromCell(Cell subCell) {
-        if (subCell == null || !subCell.hasInternalGrid()) {
-            return;
-        }
-        String finalValue = collectValue(subCell);
-        subCell.value = finalValue;
-        subCell.internalGrid = null;
-        fireTableRowsUpdated(0, Math.max(0, getRowCount() - 1));
+   public void removeInternalGridFromCell(Cell subCell) {
+    if (subCell == null || !subCell.hasInternalGrid()) {
+        return;
     }
+
+    // ── Si la cellule est fusionnée, on restaure la valeur originale ──────
+    // mergedValues[0][0] contient la valeur qu'avait la cellule principale
+    // AVANT la fusion — c'est elle qu'on doit conserver, pas la valeur
+    // reconstruite depuis les sous-cellules de la subdivision
+    String finalValue;
+    if (subCell.isMerged() && subCell.mergedValues != null) {
+        // Valeur originale de la cellule principale avant fusion
+        Object original = subCell.mergedValues[0][0];
+        finalValue = (original != null) ? original.toString() : null;
+    } else {
+        // Cellule normale — on reconstitue depuis les sous-cellules
+        finalValue = collectValue(subCell);
+    }
+
+    subCell.value = finalValue;
+    subCell.internalGrid = null;
+
+    // Resynchroniser DefaultTableModel
+    outer:
+    for (int r = 0; r < getRowCount(); r++) {
+        for (int c = 0; c < getColumnCount(); c++) {
+            if (grid[r][c] == subCell) {
+                setValueAt(finalValue, r, c);
+                break outer;
+            }
+        }
+    }
+
+    fireTableDataChanged();
+}
 
 }

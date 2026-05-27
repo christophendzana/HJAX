@@ -3,6 +3,7 @@ package hsupertable;
 import hsupertable.HBasicTableUI.InternalCellHit;
 import hsupertable.HSuperDefaultTableModel.InternalGrid;
 import hsupertable.HSuperTable.CellRange;
+import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -16,7 +17,6 @@ import java.awt.event.MouseMotionAdapter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 
 /**
@@ -264,7 +264,6 @@ public class HSuperTableController {
     }
 
     private void handleDoubleClick(MouseEvent e, int row, int col) {
-        System.out.println("double clic called");
         HBasicTableUI ui = (HBasicTableUI) table.getUI();
 
         InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
@@ -411,23 +410,47 @@ public class HSuperTableController {
         col = resolved[1];
 
         //  Double-press 
-        if (e.getClickCount() == 2) {
-            HBasicTableUI ui = (HBasicTableUI) table.getUI();
-            InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+       if (e.getClickCount() == 2) {
+    HBasicTableUI ui = (HBasicTableUI) table.getUI();
+    InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
 
-            if (hit != null && hit.parent != null) {
-                e.consume();
-                table.startInternalEdit(hit);
-                return;
-            }
-            return;
+    if (hit != null && hit.parent != null) {
+        // Sous-cellule détectée — éditeur interne
+        e.consume();
+        table.startInternalEdit(hit);
+        return;
+    }
+
+    // ── Redirection vers la cellule principale si absorbée ────────────
+    int editRow = resolved[0];
+    int editCol = resolved[1];
+
+    // Mettre le focus sur la cellule principale
+    table.setFocusedCell(editRow, editCol);
+    table.setHighlightedRow(editRow);
+
+    // Forcer isCellEditable à true temporairement via editCellAt
+    // en contournant la vérification — on utilise changeSelection
+    // puis editCellAt sur la cellule principale
+    table.changeSelection(editRow, editCol, false, false);
+
+    if (table.isCellEditable(editRow, editCol)
+            || table.getHModel().isAbsorbed(row, col)) {
+        // Lancer l'éditeur sur la cellule principale
+        table.editCellAt(editRow, editCol, e);
+        Component editor = table.getEditorComponent();
+        if (editor != null) {
+            editor.requestFocusInWindow();
         }
+    }
+    return;
+}
 
         // Clic simple : sélection normale 
         HBasicTableUI ui = (HBasicTableUI) table.getUI();
         InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
 
-// On ne setter le focus interne que si c'est une vraie sous-cellule
+        // On ne setter le focus interne que si c'est une vraie sous-cellule
         if (hit != null && hit.parent != null) {
             table.setFocusedInternalCell(hit);
             table.setSelectedInternalCell(hit);
@@ -645,26 +668,36 @@ public class HSuperTableController {
     // =========================================================================
     private void handleMouseMove(MouseEvent e) {
 
-        // Détection resize en priorité 
-        // On appelle detectResize à chaque mouvement pour mettre à jour
-        // le curseur et les index de resize en temps réel.
-        // Si on est en mode DRAW ou ERASE, le resize est désactivé.
+        // ── Détection resize en priorité ──────────────────────────────────────
         if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
             detectResize(e.getPoint());
         }
 
-        // Hover normal 
-        // On ne met à jour le hover que si on n'est pas sur une bordure de resize
-        // pour éviter de déclencher un repaint inutile avec le mauvais état.
+        // ── Hover — désactivé si une sélection de plage multi-cellules active ─
+        // Le hover masquerait visuellement la sélection de plage
         if (table.getResizeRowIndex() < 0 && table.getResizeColIndex() < 0) {
-            int row = table.rowAtPoint(e.getPoint());
-            if (row != table.getHoveredRow()) {
-                table.setHoveredRow(row);
-            }
 
-            HBasicTableUI ui = (HBasicTableUI) table.getUI();
-            InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
-            table.setHoveredInternalCell(hit);
+            boolean hasMultiCellSelection = table.hasSelection()
+                    && !table.getSelection().isSingleCell();
+
+            if (hasMultiCellSelection) {
+                // Effacer le hover pendant la sélection de plage
+                if (table.getHoveredRow() >= 0) {
+                    table.setHoveredRow(-1);
+                }
+                if (table.getHoveredInternalCell() != null) {
+                    table.setHoveredInternalCell(null);
+                }
+            } else {
+                // Comportement normal du hover
+                int row = table.rowAtPoint(e.getPoint());
+                if (row != table.getHoveredRow()) {
+                    table.setHoveredRow(row);
+                }
+                HBasicTableUI ui = (HBasicTableUI) table.getUI();
+                InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+                table.setHoveredInternalCell(hit);
+            }
         }
     }
 

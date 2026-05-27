@@ -1005,7 +1005,7 @@ public class HBasicTableUI extends BasicTableUI {
      * additionne les largeurs des colonnes et les hauteurs des lignes
      * impliquées dans la fusion.
      */
-    private Rectangle computeMergedRect(HSuperTable t, int row, int col, int rSpan, int cSpan) {
+    public Rectangle computeMergedRect(HSuperTable t, int row, int col, int rSpan, int cSpan) {
         Rectangle cellBaseRect = t.getCellRect(row, col, false);
         int totalW = cellBaseRect.width;
         int totalH = cellBaseRect.height;

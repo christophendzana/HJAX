@@ -3,7 +3,6 @@ package hsupertable;
 import hcomponents.HMenu;
 import hcomponents.HMenuItem;
 import hcomponents.HPopupMenu;
-import hcomponents.HTextField;
 import hsupertable.HBasicTableUI.InternalCellHit;
 import hsupertable.HSuperDefaultTableModel.Cell;
 import javax.swing.*;
@@ -121,13 +120,16 @@ public class HSuperTable extends JTable {
      */
     private CellRange currentSelection = null;
 
-    private final HTextField internalEditor = new HTextField();
+    /**
+     * Edieur de sous cellule.
+     */
+    private final JTextField internalEditor = new JTextField();
 
     /**
      * Éditeur flottant pour le renommage des colonnes. Positionné sur la
      * cellule d'en-tête au double-clic.
      */
-    private final HTextField headerEditor = new HTextField();
+    private final JTextField headerEditor = new JTextField();
     private int editingColumnIndex = -1;
 
     // =========================================================================
@@ -947,12 +949,38 @@ public class HSuperTable extends JTable {
         refreshUI();
     }
 
+    /**
+     * Subdivise la cellule focusée ou la cellule (row, col) en une grille de
+     * nbRows × nbCols sous-cellules.
+     *
+     * Si une sous-cellule interne est focusée, la subdivision s'applique sur
+     * elle. Sinon elle s'applique sur la cellule aux coordonnées données.
+     *
+     * @param row ligne de la cellule cible
+     * @param col colonne de la cellule cible
+     * @param nbRows nombre de lignes dans la grille
+     * @param nbCols nombre de colonnes dans la grille
+     */
+    public void splitCellGrid(int row, int col, int nbRows, int nbCols) {
+        if (nbRows < 1 || nbCols < 1) {
+            return;
+        }
+        if (hasInternalFocus()) {
+            hModel.splitCellGridDirectly(
+                    focusedInternalCell.cell, nbRows, nbCols);
+            refreshUI();
+            return;
+        }
+        hModel.splitCellGrid(row, col, nbRows, nbCols);
+        refreshUI();
+    }
+
     public void removeInternalGrid(int row, int col) {
         hModel.removeInternalGrid(row, col);
         refreshUI();
     }
 
-    public void removeInternalGridFromFocused() {
+    public void removeInternalGridFromFocused() {        
         if (hasInternalFocus()) {
 
             hModel.removeInternalGridFromCell(
@@ -1849,6 +1877,17 @@ public class HSuperTable extends JTable {
         return editingCell;
     }
 
+    @Override
+public boolean isCellEditable(int row, int col) {
+    // Les cellules absorbées ne sont pas éditables directement par JTable
+    // L'édition est gérée manuellement dans HSuperTableController
+    // via redirection vers la cellule principale
+    if (hModel.isAbsorbed(row, col)) {
+        return false;
+    }
+    return super.isCellEditable(row, col);
+}
+
     public void addSelectedRow(int row) {
         selectedRows.add(row);
         refreshUI();
@@ -2298,7 +2337,7 @@ public class HSuperTable extends JTable {
             }
         });
 
-        // ── SUBDIVISER HORIZONTALEMENT ────────────────────────────────────────
+// ── SUBDIVISER HORIZONTALEMENT ────────────────────────────────────────
         contextActions.add(new ContextAction("Subdiviser horizontalement") {
             @Override
             public boolean isVisible(TableContext ctx) {
@@ -2317,6 +2356,24 @@ public class HSuperTable extends JTable {
                         HSuperDefaultTableModel.InternalGrid.SPLIT_HORIZONTAL,
                         0.5f
                 );
+            }
+        });
+
+// ── SUBDIVISER EN GRILLE ──────────────────────────────────────────────
+        contextActions.add(new ContextAction("Subdiviser en grille...") {
+            @Override
+            public boolean isVisible(TableContext ctx) {
+                return !ctx.isAbsorbed;
+            }
+
+            @Override
+            public boolean isEnabled(TableContext ctx) {
+                return !ctx.isAbsorbed;
+            }
+
+            @Override
+            public void perform(TableContext ctx) {
+                ctx.table.showSplitCellDialog(ctx.row, ctx.column);
             }
         });
 
@@ -3078,6 +3135,29 @@ public class HSuperTable extends JTable {
     }
 
     /**
+     * Ouvre la boîte de dialogue de subdivision en grille. Si l'utilisateur
+     * confirme, applique la subdivision sur la cellule focusée ou sur la
+     * cellule aux coordonnées données.
+     *
+     * @param row ligne de la cellule cible
+     * @param col colonne de la cellule cible
+     */
+    public void showSplitCellDialog(int row, int col) {
+        // Trouver la fenêtre parente
+        java.awt.Window parent = SwingUtilities.getWindowAncestor(this);
+
+        SplitCellDialog dialog = new SplitCellDialog(parent);
+        dialog.setVisible(true);
+
+        // Bloquant — on arrive ici après fermeture du dialog
+        if (dialog.isConfirmed()) {
+            int nbRows = dialog.getRows();
+            int nbCols = dialog.getCols();
+            splitCellGrid(row, col, nbRows, nbCols);
+        }
+    }
+
+    /**
      * Déclenche un repaint + revalidate du tableau. Toutes les méthodes
      * publiques qui modifient l'état visuel appellent cette méthode à la fin —
      * jamais repaint() directement.
@@ -3086,7 +3166,6 @@ public class HSuperTable extends JTable {
         revalidate();
         repaint();
     }
-    
 
     /**
      * Représente une zone rectangulaire sélectionnée. Toujours normalisée :
@@ -3124,6 +3203,162 @@ public class HSuperTable extends JTable {
         public String toString() {
             return "CellRange[(" + rowStart + "," + colStart + ")→("
                     + rowEnd + "," + colEnd + ")]";
+        }
+    }
+
+    // =========================================================================
+// BOÎTE DE DIALOGUE — SUBDIVISION EN GRILLE
+// =========================================================================
+    /**
+     * SplitCellDialog — Boîte de dialogue pour subdiviser une cellule en une
+     * grille de lignes × colonnes.
+     *
+     * Affiche deux spinners (lignes, colonnes) et des boutons OK/Annuler.
+     * Résultat accessible via getRows() et getCols() après fermeture.
+     */
+    public static class SplitCellDialog extends JDialog {
+
+        /**
+         * Résultat de la boîte de dialogue.
+         */
+        private boolean confirmed = false;
+
+        /**
+         * Spinner pour le nombre de lignes.
+         */
+        private final JSpinner rowSpinner;
+
+        /**
+         * Spinner pour le nombre de colonnes.
+         */
+        private final JSpinner colSpinner;
+
+        /**
+         * Crée la boîte de dialogue.
+         *
+         * @param parent fenêtre parente
+         */
+        public SplitCellDialog(java.awt.Window parent) {
+            super(parent, "Subdiviser en grille", ModalityType.APPLICATION_MODAL);
+
+            setResizable(false);
+            setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+
+            // ── Panneau principal ─────────────────────────────────────────
+            JPanel main = new JPanel(new BorderLayout(10, 10));
+            main.setBorder(BorderFactory.createEmptyBorder(20, 24, 16, 24));
+            main.setBackground(Color.WHITE);
+
+            // ── Titre ─────────────────────────────────────────────────────
+            JLabel title = new JLabel("Subdiviser la cellule en grille");
+            title.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            title.setForeground(new Color(15, 23, 42));
+            main.add(title, BorderLayout.NORTH);
+
+            // ── Formulaire ────────────────────────────────────────────────
+            JPanel form = new JPanel(new java.awt.GridLayout(2, 2, 12, 10));
+            form.setBackground(Color.WHITE);
+            form.setBorder(BorderFactory.createEmptyBorder(12, 0, 12, 0));
+
+            JLabel rowLabel = new JLabel("Nombre de lignes :");
+            rowLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            rowLabel.setForeground(new Color(51, 65, 85));
+
+            JLabel colLabel = new JLabel("Nombre de colonnes :");
+            colLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            colLabel.setForeground(new Color(51, 65, 85));
+
+            rowSpinner = new JSpinner(new SpinnerNumberModel(2, 1, 20, 1));
+            colSpinner = new JSpinner(new SpinnerNumberModel(2, 1, 20, 1));
+
+            // Style des spinners
+            styleSpinner(rowSpinner);
+            styleSpinner(colSpinner);
+
+            form.add(rowLabel);
+            form.add(rowSpinner);
+            form.add(colLabel);
+            form.add(colSpinner);
+
+            main.add(form, BorderLayout.CENTER);
+
+            // ── Boutons ───────────────────────────────────────────────────
+            JPanel buttons = new JPanel(new java.awt.FlowLayout(
+                    java.awt.FlowLayout.RIGHT, 8, 0));
+            buttons.setBackground(Color.WHITE);
+
+            JButton cancelBtn = new JButton("Annuler");
+            cancelBtn.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            cancelBtn.setForeground(new Color(51, 65, 85));
+            cancelBtn.setBackground(new Color(241, 245, 249));
+            cancelBtn.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(203, 213, 225), 1),
+                    BorderFactory.createEmptyBorder(6, 16, 6, 16)));
+            cancelBtn.setFocusPainted(false);
+            cancelBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            cancelBtn.addActionListener(e -> dispose());
+
+            JButton okBtn = new JButton("OK");
+            okBtn.setFont(new Font("Segoe UI", Font.BOLD, 13));
+            okBtn.setForeground(Color.WHITE);
+            okBtn.setBackground(new Color(13, 110, 253));
+            okBtn.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(9, 88, 217), 1),
+                    BorderFactory.createEmptyBorder(6, 20, 6, 20)));
+            okBtn.setFocusPainted(false);
+            okBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            okBtn.addActionListener(e -> {
+                confirmed = true;
+                dispose();
+            });
+
+            // Valider avec Enter
+            getRootPane().setDefaultButton(okBtn);
+
+            buttons.add(cancelBtn);
+            buttons.add(okBtn);
+            main.add(buttons, BorderLayout.SOUTH);
+
+            setContentPane(main);
+            pack();
+            setLocationRelativeTo(parent);
+        }
+
+        /**
+         * Applique un style cohérent à un JSpinner.
+         */
+        private void styleSpinner(JSpinner spinner) {
+            spinner.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            spinner.setPreferredSize(new Dimension(80, 30));
+            ((JSpinner.DefaultEditor) spinner.getEditor())
+                    .getTextField().setHorizontalAlignment(JTextField.CENTER);
+        }
+
+        /**
+         * Vrai si l'utilisateur a cliqué OK.
+         *
+         * @return true si confirmé
+         */
+        public boolean isConfirmed() {
+            return confirmed;
+        }
+
+        /**
+         * Retourne le nombre de lignes saisi.
+         *
+         * @return nombre de lignes
+         */
+        public int getRows() {
+            return (Integer) rowSpinner.getValue();
+        }
+
+        /**
+         * Retourne le nombre de colonnes saisi.
+         *
+         * @return nombre de colonnes
+         */
+        public int getCols() {
+            return (Integer) colSpinner.getValue();
         }
     }
 
