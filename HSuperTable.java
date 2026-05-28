@@ -980,7 +980,7 @@ public class HSuperTable extends JTable {
         refreshUI();
     }
 
-    public void removeInternalGridFromFocused() {        
+    public void removeInternalGridFromFocused() {
         if (hasInternalFocus()) {
 
             hModel.removeInternalGridFromCell(
@@ -1878,15 +1878,13 @@ public class HSuperTable extends JTable {
     }
 
     @Override
-public boolean isCellEditable(int row, int col) {
-    // Les cellules absorbées ne sont pas éditables directement par JTable
-    // L'édition est gérée manuellement dans HSuperTableController
-    // via redirection vers la cellule principale
-    if (hModel.isAbsorbed(row, col)) {
-        return false;
+    public boolean isCellEditable(int row, int col) {
+        // Les cellules absorbées ne sont pas éditables directement par JTable        
+        if (hModel.isAbsorbed(row, col)) {
+            return false;
+        }
+        return super.isCellEditable(row, col);
     }
-    return super.isCellEditable(row, col);
-}
 
     public void addSelectedRow(int row) {
         selectedRows.add(row);
@@ -3158,6 +3156,29 @@ public boolean isCellEditable(int row, int col) {
     }
 
     /**
+     * Résout les coordonnées réelles sous un point souris. Si la cellule sous
+     * le point est absorbée, retourne les coordonnées de la cellule principale
+     * de la fusion.
+     *
+     * @param point point souris
+     * @return int[]{row, col} de la cellule principale
+     */
+    public int[] resolvePoint(Point point) {
+        int row = rowAtPoint(point);
+        int col = columnAtPoint(point);
+        if (row < 0 || col < 0) {
+            return new int[]{row, col};
+        }
+        if (hModel.isAbsorbed(row, col)) {
+            Point origin = hModel.findMergeOrigin(row, col);
+            if (origin != null) {
+                return new int[]{origin.x, origin.y};
+            }
+        }
+        return new int[]{row, col};
+    }
+
+    /**
      * Déclenche un repaint + revalidate du tableau. Toutes les méthodes
      * publiques qui modifient l'état visuel appellent cette méthode à la fin —
      * jamais repaint() directement.
@@ -3873,5 +3894,4 @@ public boolean isCellEditable(int row, int col) {
     public boolean hasInternalFocus() {
         return focusedInternalCell != null && focusedInternalCell.parent != null;
     }
-
 }

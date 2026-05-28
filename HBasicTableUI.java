@@ -1000,6 +1000,23 @@ public class HBasicTableUI extends BasicTableUI {
     // =========================================================================
     // UTILITAIRES
     // =========================================================================
+    
+    /**
+ * Version publique de computeMergedRect — accessible depuis le contrôleur.
+ *
+ * @param t     tableau
+ * @param row   ligne de la cellule principale
+ * @param col   colonne de la cellule principale
+ * @param rSpan nombre de lignes fusionnées
+ * @param cSpan nombre de colonnes fusionnées
+ * @return rectangle total de la fusion
+ */
+public Rectangle computeMergedRectPublic(HSuperTable t,
+        int row, int col, int rSpan, int cSpan) {
+    return computeMergedRect(t, row, col, rSpan, cSpan);
+}
+    
+    
     /**
      * Calcule le rectangle total couvert par une cellule fusionnée. On
      * additionne les largeurs des colonnes et les hauteurs des lignes
@@ -1030,53 +1047,55 @@ public class HBasicTableUI extends BasicTableUI {
      * Dessine le trait de prévisualisation pendant le glisser en mode crayon.
      */
     private void paintDrawPreview(Graphics2D g2, HSuperTable t) {
-        HSuperTableController ctrl = t.getController();
-        if (!ctrl.isDrawing()) {
-            return;
-        }
-
-        int x1 = ctrl.getDrawStartX();
-        int y1 = ctrl.getDrawStartY();
-        int x2 = ctrl.getDrawEndX();
-        int y2 = ctrl.getDrawEndY();
-
-        if (x1 < 0 || y1 < 0) {
-            return;
-        }
-
-        // Déterminer la direction du glisser
-        int dx = Math.abs(x2 - x1);
-        int dy = Math.abs(y2 - y1);
-
-        // Identifier la cellule sous le point de départ
-        int row = t.rowAtPoint(new Point(x1, y1));
-        int col = t.columnAtPoint(new Point(x1, y1));
-        if (row < 0 || col < 0) {
-            return;
-        }
-
-        Rectangle cellRect = t.getCellRect(row, col, false);
-
-        g2.setColor(new Color(37, 99, 235, 180)); // bleu semi-transparent
-        g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT,
-                BasicStroke.JOIN_MITER, 10f, new float[]{6f, 3f}, 0f));
-
-        if (dx >= dy) {
-            // Trait vertical — coupe la cellule en deux colonnes
-            int splitX = x2;
-            splitX = Math.max(cellRect.x + 10, splitX);
-            splitX = Math.min(cellRect.x + cellRect.width - 10, splitX);
-            g2.drawLine(splitX, cellRect.y, splitX, cellRect.y + cellRect.height);
-        } else {
-            // Trait horizontal — coupe la cellule en deux lignes
-            int splitY = y2;
-            splitY = Math.max(cellRect.y + 10, splitY);
-            splitY = Math.min(cellRect.y + cellRect.height - 10, splitY);
-            g2.drawLine(cellRect.x, splitY, cellRect.x + cellRect.width, splitY);
-        }
-
-        g2.setStroke(new BasicStroke(1f));
+    HSuperTableController ctrl = t.getController();
+    if (!ctrl.isDrawing()) {
+        return;
     }
+
+    int x1 = ctrl.getDrawStartX();
+    int y1 = ctrl.getDrawStartY();
+    int x2 = ctrl.getDrawEndX();
+    int y2 = ctrl.getDrawEndY();
+
+    if (x1 < 0 || y1 < 0) {
+        return;
+    }
+
+    int dx = Math.abs(x2 - x1);
+    int dy = Math.abs(y2 - y1);
+
+    // ── Résolution via resolvePoint ───────────────────────────────────────
+    int[] resolved = t.resolvePoint(new Point(x1, y1));
+    int row = resolved[0];
+    int col = resolved[1];
+    if (row < 0 || col < 0) {
+        return;
+    }
+
+    // ── Rectangle de référence — fusionné si nécessaire ───────────────────
+    HSuperDefaultTableModel.Cell cell = t.getHModel().getCell(row, col);
+    Rectangle cellRect = (cell.spanRow > 1 || cell.spanCol > 1)
+            ? computeMergedRect(t, row, col, cell.spanRow, cell.spanCol)
+            : t.getCellRect(row, col, false);
+
+    g2.setColor(new Color(37, 99, 235, 180));
+    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT,
+            BasicStroke.JOIN_MITER, 10f, new float[]{6f, 3f}, 0f));
+
+    if (dx >= dy) {
+        int splitX = x2;
+        splitX = Math.max(cellRect.x + 10, splitX);
+        splitX = Math.min(cellRect.x + cellRect.width - 10, splitX);
+        g2.drawLine(splitX, cellRect.y, splitX, cellRect.y + cellRect.height);
+    } else {
+        int splitY = y2;
+        splitY = Math.max(cellRect.y + 10, splitY);
+        splitY = Math.min(cellRect.y + cellRect.height - 10, splitY);
+        g2.drawLine(cellRect.x, splitY, cellRect.x + cellRect.width, splitY);
+    }
+
+    g2.setStroke(new BasicStroke(1f));
+}
 
     /**
      * Dessine la ligne de prévisualisation pendant le redimensionnement manuel
@@ -1162,42 +1181,28 @@ public class HBasicTableUI extends BasicTableUI {
      */
     public InternalCellHit getInternalCellAt(HSuperTable t, Point point) {
 
-        int row = t.rowAtPoint(point);
-        int col = t.columnAtPoint(point);
+    // ── Résolution via resolvePoint ───────────────────────────────────────
+    int[] resolved = t.resolvePoint(point);
+    int row = resolved[0];
+    int col = resolved[1];
 
-        if (row < 0 || col < 0) {
-            return null;
-        }
-
-        HSuperDefaultTableModel model = t.getHModel();
-
-        Cell cell = model.getCell(row, col);
-
-        if (cell.isAbsorbed()) {
-            Point origin = cell.mergeOrigin;
-            row = origin.y;
-            col = origin.x;
-            cell = model.getCell(row, col);
-        }
-
-        Rectangle rect = t.getCellRect(row, col, false);
-
-        if (cell.isMerged()) {
-            rect = computeMergedRect(
-                    t,
-                    row,
-                    col,
-                    cell.spanRow,
-                    cell.spanCol
-            );
-        }
-
-        return findInternalCellAt(
-                cell,
-                rect,
-                point
-        );
+    if (row < 0 || col < 0) {
+        return null;
     }
+
+    HSuperDefaultTableModel model = t.getHModel();
+    Cell cell = model.getCell(row, col);
+
+    // La cellule est déjà résolue vers la principale — pas besoin
+    // de vérifier isAbsorbed ici
+    Rectangle rect = t.getCellRect(row, col, false);
+
+    if (cell.isMerged()) {
+        rect = computeMergedRect(t, row, col, cell.spanRow, cell.spanCol);
+    }
+
+    return findInternalCellAt(cell, rect, point);
+}
 
     /**
      * Recherche récursivement la sous-cellule interne située sous un point.
