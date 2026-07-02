@@ -14,6 +14,7 @@ import javax.swing.BorderFactory;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Element;
 
+
 /**
  * Composant HTextArea - Un text area Swing personnalisé.
  *
@@ -80,6 +81,9 @@ public class HTextArea extends JTextPane {
     private static final Object SUBSCRIPT_CUSTOM = new Object() {
         @Override public String toString() { return "HTextArea_Subscript"; }
     };
+    
+    /** Valeur d'un pas de retrait en pixels. Identique au comportement de Word. */
+    private static final float PAS_RETRAIT = 20f;
     
     // -------------------------------------------------------------------------
     // Constructeurs
@@ -1344,6 +1348,235 @@ public class HTextArea extends JTextPane {
 
         // On conserve le textAreaStyle si vous voulez garder la compatibilité
         this.textAreaStyle = style;
+    }
+    
+    //Plusieurs fonctionnalités sont déjà intégrer à JTextPane
+    
+    // =========================================================================
+    // Alignement
+    // =========================================================================
+    
+     /**
+     * Aligne le(s) paragraphe(s) courant(s) à gauche.     
+     */
+    public void alignerGauche() {
+        appliquerAttributParagraphe(StyleConstants.ALIGN_LEFT);
+    }
+
+    /**
+     * Centre le(s) paragraphe(s) courant(s).    
+     */
+    public void centrer() {
+        appliquerAttributParagraphe(StyleConstants.ALIGN_CENTER);
+    }
+
+    /**
+     * Aligne le(s) paragraphe(s) courant(s) à droite.    
+     */
+    public void alignerDroite() {
+        appliquerAttributParagraphe(StyleConstants.ALIGN_RIGHT);
+    }
+
+    /**
+     * Justifie le(s) paragraphe(s) courant(s).
+     */
+    public void justifier() {
+        appliquerAttributParagraphe(StyleConstants.ALIGN_JUSTIFIED);
+    }
+
+    /**
+     * Retourne l'alignement actif au niveau du curseur (ou de la sélection).
+     * @return une des constantes {@code StyleConstants.ALIGN_*}
+     * (0=gauche, 1=centre, 2=droite, 3=justifié)
+     */
+    public int getAlignementCourant() {
+        // getInputAttributes() retourne les attributs au niveau du curseur,
+        // qu'il y ait une sélection ou non.
+        return StyleConstants.getAlignment(getInputAttributes());
+    }
+
+    /**
+     * Méthode privée centrale pour l'alignement.
+     *
+     * <p>On crée un {@link SimpleAttributeSet} avec un seul attribut (l'alignement),
+     * puis on demande au document de l'appliquer sur les paragraphes touchés par
+     * la sélection. Le paramètre {@code replace=false} signifie qu'on fusionne
+     * avec les attributs existants</p>
+     *
+     * @param constante l'une des 4 constantes StyleConstants.ALIGN_*
+     */
+    private void appliquerAttributParagraphe(int constante) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setAlignment(attrs, constante);
+        appliquerSurParagraphes(attrs);
+    }
+    
+    // =========================================================================
+    // Interligne
+    // =========================================================================
+        
+    /**
+     * Définit l'interligne du (des) paragraphe(s) courant(s).     
+     * @param interligne le coefficient d'espacement (≥ 0.0)
+     */
+    public void setInterligne(float interligne) {
+        if (interligne < 0f) {
+            return; // parce que valeur négative non supportée par Swing
+        }
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setLineSpacing(attrs, interligne);
+        appliquerSurParagraphes(attrs);
+    }
+
+    /**
+     * Retourne l'interligne actif au niveau du curseur.
+     * @return le coefficient d'interligne 
+     */
+    public float getInterligne() {
+        return StyleConstants.getLineSpacing(getInputAttributes());
+    }
+    
+    // =========================================================================
+    // Retraits (indentation)
+    // =========================================================================
+
+    /**
+     * Augmente le retrait gauche du (des) paragraphe(s) courant(s) d'un pas.
+     *
+     * <p>Décale le texte vers la droite. Chaque appel ajoute
+     * {@value #PAS_RETRAIT} pixels au retrait existant.</p>
+     */
+    public void augmenterRetrait() {
+        modifierRetrait(+PAS_RETRAIT);
+    }
+
+    /**
+     * Diminue le retrait gauche du (des) paragraphe(s) courant(s) d'un pas.
+     *
+     * <p>Décale le texte vers la gauche. Le retrait ne peut pas descendre
+     * en dessous de 0 (on ne peut pas dépasser la marge gauche).</p>
+     */
+    public void diminuerRetrait() {
+        modifierRetrait(-PAS_RETRAIT);
+    }
+
+    /**
+     * Définit précisément le retrait gauche du (des) paragraphe(s) courant(s).
+     *
+     * @param pixels la valeur de retrait en pixels (≥ 0)
+     */
+    public void setRetraitGauche(float pixels) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setLeftIndent(attrs, Math.max(0f, pixels));
+        appliquerSurParagraphes(attrs);
+    }
+
+    /**
+     * Définit précisément le retrait droit du (des) paragraphe(s) courant(s).
+     *
+     * @param pixels la valeur de retrait en pixels (≥ 0)
+     */
+    public void setRetraitDroit(float pixels) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setRightIndent(attrs, Math.max(0f, pixels));
+        appliquerSurParagraphes(attrs);
+    }
+
+    /**
+     * Définit le retrait de la première ligne uniquement.
+     *
+     * <p>Une valeur négative crée un retrait un peu différent : la première ligne
+     * est plus à gauche que le reste du paragraphe. Ca peut être utilisé
+     * pour les listes à puces (le symbole "déborde" vers la gauche).</p>
+     *
+     * @param pixels le retrait supplémentaire de la première ligne en pixels
+     */
+    public void setRetraitPremiereLigne(float pixels) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setFirstLineIndent(attrs, pixels);
+        appliquerSurParagraphes(attrs);
+    }
+
+    /**
+     * Retourne le retrait gauche actif au niveau du curseur.
+     *
+     * @return le retrait gauche en pixels
+     */
+    public float getRetraitGauche() {
+        return StyleConstants.getLeftIndent(getInputAttributes());
+    }
+
+    /**
+     * Modifie le retrait gauche du paragraphe courant d'un delta donné.
+     *
+     * <p>On lit d'abord le retrait existant via {@code getInputAttributes()},
+     * on y ajoute le delta, puis on applique le résultat. Le retrait minimum
+     * est 0 — on ne peut pas aller à gauche de la marge.</p>
+     *
+     * @param delta la variation en pixels (positif = vers la droite,
+     *              négatif = vers la gauche)
+     */
+    private void modifierRetrait(float delta) {
+        // Lire la valeur actuelle au niveau du curseur
+        float retraitActuel = StyleConstants.getLeftIndent(getInputAttributes());
+        // Calculer la nouvelle valeur en s'assurant qu'elle reste >= 0
+        float nouvelleValeur = Math.max(0f, retraitActuel + delta);
+
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setLeftIndent(attrs, nouvelleValeur);
+        appliquerSurParagraphes(attrs);
+    }
+
+    // =========================================================================
+    // Espacement avant/après le paragraphe
+    // =========================================================================   
+
+    /**
+     * Définit l'espace (en pixels) avant le paragraphe courant.
+     *
+     * <p>Correspond à "Espacement — Avant" dans la boîte de dialogue
+     * Paragraphe de Word.</p>
+     *
+     * @param pixels espace en pixels avant le paragraphe (≥ 0)
+     */
+    public void setEspacementAvant(float pixels) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setSpaceAbove(attrs, Math.max(0f, pixels));
+        appliquerSurParagraphes(attrs);
+    }
+
+    /**
+     * Définit l'espace (en pixels) après le paragraphe courant.
+     *
+     * <p>Correspond à "Espacement — Après" dans la boîte de dialogue
+     * Paragraphe de Word.</p>
+     *
+     * @param pixels espace en pixels après le paragraphe (≥ 0)
+     */
+    public void setEspacementApres(float pixels) {
+        SimpleAttributeSet attrs = new SimpleAttributeSet();
+        StyleConstants.setSpaceBelow(attrs, Math.max(0f, pixels));
+        appliquerSurParagraphes(attrs);
+    }
+
+    // =========================================================================
+    // Méthode utilitaire privée — point central pour les attributs de paragraphe
+    // =========================================================================
+
+    /**
+     * Applique les effets d'attributs de PARAGRAPHE à tous les paragraphes
+     * touchés par la sélection courante (ou au paragraphe du curseur si
+     * rien n'est sélectionné).   
+     */
+    private void appliquerSurParagraphes(SimpleAttributeSet attrs) {
+        int debut    = getSelectionStart();
+        int longueur = getSelectionEnd() - debut;
+
+        // Si rien n'est sélectionné (longueur == 0), on passe quand même
+        // debut et longueur = 0 — Swing trouve le paragraphe du curseur.
+        // Si du texte est sélectionné, Swing trouve TOUS les paragraphes
+        // qui contiennent au moins un caractère de la sélection.
+        getStyledDocument().setParagraphAttributes(debut, longueur, attrs, false);
     }
 
 }
