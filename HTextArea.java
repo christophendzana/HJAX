@@ -1,6 +1,17 @@
 package htextarea;
 
+import htextarea.effect.HEffetEntree;
+import htextarea.effect.HEffectPainter;
+import htextarea.effect.HEffectDirection;
+import htextarea.effect.HTextEffectConfig;
+import htextarea.effect.HTextEffect;
 import javax.swing.JTextPane;
+import htextarea.attribute.HAttributeKeys;
+import htextarea.paragraph.HBorderConfig;
+import htextarea.paragraph.HListConfig;
+import htextarea.paragraph.HParagraphConfig;
+
+
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.SimpleAttributeSet;
@@ -13,7 +24,6 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Element;
-
 
 /**
  * Composant HTextArea - Un text area Swing personnalisé.
@@ -64,27 +74,35 @@ public class HTextArea extends JTextPane {
 
     private Insets padding = new Insets(8, 8, 8, 8);
 
-     /**
-     * Clé custom pour marquer un caractère comme exposant.
-     * Stocke un {@code Boolean} dans le {@code StyledDocument}.
-     * N'utilise PAS {@code StyleConstants.Superscript} pour éviter
-     * le bug de hauteur de ligne dans {@code GlyphView}.
+    /**
+     * Clé custom pour marquer un caractère comme exposant. Stocke un
+     * {@code Boolean} dans le {@code StyledDocument}. N'utilise PAS
+     * {@code StyleConstants.Superscript} pour éviter le bug de hauteur de ligne
+     * dans {@code GlyphView}.
      */
     private static final Object SUPERSCRIPT_CUSTOM = new Object() {
-        @Override public String toString() { return "HTextArea_Superscript"; }
+        @Override
+        public String toString() {
+            return "HTextArea_Superscript";
+        }
     };
 
     /**
-     * Clé custom pour marquer un caractère comme indice.
-     * Même principe que {@link #SUPERSCRIPT_CUSTOM}.
+     * Clé custom pour marquer un caractère comme indice. Même principe que
+     * {@link #SUPERSCRIPT_CUSTOM}.
      */
     private static final Object SUBSCRIPT_CUSTOM = new Object() {
-        @Override public String toString() { return "HTextArea_Subscript"; }
+        @Override
+        public String toString() {
+            return "HTextArea_Subscript";
+        }
     };
-    
-    /** Valeur d'un pas de retrait en pixels. Identique au comportement de Word. */
+
+    /**
+     * Valeur d'un pas de retrait en pixels. Identique au comportement de Word.
+     */
     private static final float PAS_RETRAIT = 20f;
-    
+
     // -------------------------------------------------------------------------
     // Constructeurs
     // -------------------------------------------------------------------------
@@ -134,7 +152,7 @@ public class HTextArea extends JTextPane {
      */
     private void configureDefaults() {
         setOpaque(false);
-        setBorder(null);
+//        setBorder(null);
         setBorder(BorderFactory.createEmptyBorder(padding.top, padding.left, padding.bottom, padding.right));
     }
 
@@ -619,14 +637,14 @@ public class HTextArea extends JTextPane {
     /**
      * Applique un effet avec une couleur et la configuration par défaut.
      *
-     * @param effet        l'effet à appliquer
+     * @param effet l'effet à appliquer
      * @param couleurEffet la couleur de l'effet
      */
     public void setTextEffect(HTextEffect effet, Color couleurEffet) {
         setTextEffect(effet, couleurEffet, new HTextEffectConfig());
     }
 
-     /**
+    /**
      * Applique un effet avec couleur et config par défaut.
      *
      * @param effet l'effet à appliquer
@@ -648,7 +666,7 @@ public class HTextArea extends JTextPane {
      * @param transparence alpha de l'ombre (0 = invisible, 255 = opaque)
      */
     public void setShadow(Color couleur, HEffectDirection direction,
-                          int distance, int flou, int transparence) {
+            int distance, int flou, int transparence) {
         HTextEffectConfig config = HTextEffectConfig.ombre(direction, distance, flou, transparence);
         setTextEffect(HTextEffect.SHADOW, couleur, config);
     }
@@ -798,30 +816,35 @@ public class HTextArea extends JTextPane {
     public void clearTextEffect() {
         setTextEffect(HTextEffect.NONE);
     }
-    
+
     /**
      * Supprime un effet spécifique de la sélection, en conservant les autres.
      *
-     * <p>Exemple : supprimer uniquement l'ombre sans toucher au contour
-     * ni au halo.</p>
+     * <p>
+     * Exemple : supprimer uniquement l'ombre sans toucher au contour ni au
+     * halo.</p>
      *
      * @param effetASupprimer le type d'effet à retirer
      */
     public void removeTextEffect(HTextEffect effetASupprimer) {
-        if (effetASupprimer == null || effetASupprimer == HTextEffect.NONE) return;
+        if (effetASupprimer == null || effetASupprimer == HTextEffect.NONE) {
+            return;
+        }
 
-        int debut    = getSelectionStart();
+        int debut = getSelectionStart();
         int longueur = getSelectionEnd() - debut;
-        if (longueur == 0) return;
+        if (longueur == 0) {
+            return;
+        }
 
         StyledDocument doc = getStyledDocument();
 
-        for (int i = debut; i < debut + longueur; ) {
+        for (int i = debut; i < debut + longueur;) {
             Element elem = doc.getCharacterElement(i);
-            int finElem  = Math.min(elem.getEndOffset(), debut + longueur);
+            int finElem = Math.min(elem.getEndOffset(), debut + longueur);
 
             List<HEffetEntree> listeExistante = lireListeEffets(elem.getAttributes());
-            List<HEffetEntree> nouvelleList   = construireSansEffet(listeExistante, effetASupprimer);
+            List<HEffetEntree> nouvelleList = construireSansEffet(listeExistante, effetASupprimer);
 
             SimpleAttributeSet attrs = new SimpleAttributeSet();
             attrs.addAttribute(HEffectPainter.EFFECTS_LIST_ATTRIBUTE, nouvelleList);
@@ -831,12 +854,13 @@ public class HTextArea extends JTextPane {
         }
         repaint();
     }
-    
-     /**
+
+    /**
      * Retourne l'effet typographique principal actif au niveau du curseur.
      *
-     * <p>Si plusieurs effets sont actifs, retourne le premier de la liste.
-     * Pour lire la liste complète, utiliser {@link #getSelectionTextEffects()}.</p>
+     * <p>
+     * Si plusieurs effets sont actifs, retourne le premier de la liste. Pour
+     * lire la liste complète, utiliser {@link #getSelectionTextEffects()}.</p>
      *
      * @return le premier effet actif, ou {@link HTextEffect#NONE} si aucun
      */
@@ -847,8 +871,8 @@ public class HTextArea extends JTextPane {
         }
         return HTextEffect.NONE;
     }
-    
-     /**
+
+    /**
      * Retourne la liste complète des effets actifs au niveau du curseur.
      *
      * @return la liste des effets (jamais {@code null}, peut être vide)
@@ -856,7 +880,7 @@ public class HTextArea extends JTextPane {
     public List<HEffetEntree> getSelectionTextEffects() {
         List<HEffetEntree> liste = lireListeEffets(getInputAttributes());
         return (liste != null) ? new ArrayList<>(liste) : new ArrayList<>();
-    }       
+    }
 
     // -------------------------------------------------------------------------
     // Interrogation de l'effet courant
@@ -1013,20 +1037,22 @@ public class HTextArea extends JTextPane {
     // =========================================================================
     // Méthodes utilitaires privées
     // =========================================================================
-   /**
+    /**
      * Applique un jeu d'attributs à la sélection courante.
      *
-     * <p>Point central par lequel passent toutes les méthodes de style de base
+     * <p>
+     * Point central par lequel passent toutes les méthodes de style de base
      * (gras, italique, taille…). Les effets typographiques passent quant à eux
      * directement par {@link #setTextEffect} qui gère la logique de liste.</p>
      *
-     * <p>{@code replace=false} signifie qu'on <em>fusionne</em> les nouveaux
+     * <p>
+     * {@code replace=false} signifie qu'on <em>fusionne</em> les nouveaux
      * attributs avec ceux déjà présents, sans écraser les autres.</p>
      *
      * @param attrs les attributs à appliquer
      */
     private void appliquerAttribut(SimpleAttributeSet attrs) {
-        int debut    = getSelectionStart();
+        int debut = getSelectionStart();
         int longueur = getSelectionEnd() - debut;
 
         StyledDocument doc = getStyledDocument();
@@ -1034,12 +1060,12 @@ public class HTextArea extends JTextPane {
         if (longueur > 0) {
             doc.setCharacterAttributes(debut, longueur, attrs, false);
         } else {
-            // Rien de sélectionné → mémoriser pour la prochaine frappe
+            // Rien de sélectionné -> mémoriser pour la prochaine frappe
             getInputAttributes().addAttributes(attrs);
         }
     }
-    
-     /**
+
+    /**
      * Lit la liste d'effets depuis un {@link AttributeSet}.
      *
      * @param attrs les attributs à lire
@@ -1058,20 +1084,22 @@ public class HTextArea extends JTextPane {
     /**
      * Construit une nouvelle liste en ajoutant ou remplaçant un effet.
      *
-     * <p>Règle : si la liste contient déjà un effet du même type que
+     * <p>
+     * Règle : si la liste contient déjà un effet du même type que
      * {@code nouvelleEntree}, il est remplacé à la même position (mise à jour
      * des paramètres). Sinon, l'entrée est ajoutée en fin de liste.</p>
      *
-     * <p>Ce comportement est intuitif : réappliquer SHADOW met à jour l'ombre
-     * existante sans la dupliquer, mais ajouter OUTLINE sur une sélection qui
-     * a déjà SHADOW conserve les deux effets.</p>
+     * <p>
+     * Ce comportement est intuitif : réappliquer SHADOW met à jour l'ombre
+     * existante sans la dupliquer, mais ajouter OUTLINE sur une sélection qui a
+     * déjà SHADOW conserve les deux effets.</p>
      *
      * @param listeExistante la liste actuelle (peut être {@code null})
      * @param nouvelleEntree l'entrée à ajouter ou remplacer
      * @return une nouvelle liste (l'originale n'est jamais modifiée)
      */
     private List<HEffetEntree> construireListeAvecEffet(List<HEffetEntree> listeExistante,
-                                                         HEffetEntree nouvelleEntree) {
+            HEffetEntree nouvelleEntree) {
         List<HEffetEntree> result = new ArrayList<>();
 
         if (listeExistante != null) {
@@ -1101,12 +1129,14 @@ public class HTextArea extends JTextPane {
      * Construit une nouvelle liste en retirant tous les effets d'un type donné.
      *
      * @param listeExistante la liste actuelle (peut être {@code null})
-     * @param effetARetirer  le type d'effet à supprimer de la liste
+     * @param effetARetirer le type d'effet à supprimer de la liste
      * @return une nouvelle liste sans les effets du type spécifié
      */
     private List<HEffetEntree> construireSansEffet(List<HEffetEntree> listeExistante,
-                                                    HTextEffect effetARetirer) {
-        if (listeExistante == null) return new ArrayList<>();
+            HTextEffect effetARetirer) {
+        if (listeExistante == null) {
+            return new ArrayList<>();
+        }
 
         List<HEffetEntree> result = new ArrayList<>();
         for (HEffetEntree entree : listeExistante) {
@@ -1346,237 +1376,448 @@ public class HTextArea extends JTextPane {
         // On peut aussi activer l'ombre par défaut pour les styles sombres
         setComponentShadowEnabled(true);
 
-        // On conserve le textAreaStyle si vous voulez garder la compatibilité
         this.textAreaStyle = style;
     }
-    
-    //Plusieurs fonctionnalités sont déjà intégrer à JTextPane
-    
-    // =========================================================================
-    // Alignement
-    // =========================================================================
-    
-     /**
-     * Aligne le(s) paragraphe(s) courant(s) à gauche.     
+
+    // ================================================
+    // GROUPE A — Alignement
+    // ==========================================================
+    /**
+     * Aligne le(s) paragraphe(s) courant(s) à gauche.
      */
     public void alignerGauche() {
-        appliquerAttributParagraphe(StyleConstants.ALIGN_LEFT);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setAlignement(StyleConstants.ALIGN_LEFT);
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Centre le(s) paragraphe(s) courant(s).    
+     * Centre le(s) paragraphe(s) courant(s).
      */
     public void centrer() {
-        appliquerAttributParagraphe(StyleConstants.ALIGN_CENTER);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setAlignement(StyleConstants.ALIGN_CENTER);
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Aligne le(s) paragraphe(s) courant(s) à droite.    
+     * Aligne le(s) paragraphe(s) courant(s) à droite.
      */
     public void alignerDroite() {
-        appliquerAttributParagraphe(StyleConstants.ALIGN_RIGHT);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setAlignement(StyleConstants.ALIGN_RIGHT);
+        appliquerConfigParagraphe(config);
     }
 
     /**
      * Justifie le(s) paragraphe(s) courant(s).
      */
     public void justifier() {
-        appliquerAttributParagraphe(StyleConstants.ALIGN_JUSTIFIED);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setAlignement(StyleConstants.ALIGN_JUSTIFIED);
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Retourne l'alignement actif au niveau du curseur (ou de la sélection).
-     * @return une des constantes {@code StyleConstants.ALIGN_*}
-     * (0=gauche, 1=centre, 2=droite, 3=justifié)
+     * Retourne l'alignement actif au niveau du curseur.
+     *
+     * @return une constante StyleConstants.ALIGN (0=gauche, 1=centre, 2=droite,
+     * 3=justifié)
      */
     public int getAlignementCourant() {
-        // getInputAttributes() retourne les attributs au niveau du curseur,
-        // qu'il y ait une sélection ou non.
         return StyleConstants.getAlignment(getInputAttributes());
     }
 
+    // ==============================================
+    // GROUPE B — Interligne
+    // =============================================================
     /**
-     * Méthode privée centrale pour l'alignement.
+     * Définit l'interligne du (des) paragraphe(s) courant(s).
      *
-     * <p>On crée un {@link SimpleAttributeSet} avec un seul attribut (l'alignement),
-     * puis on demande au document de l'appliquer sur les paragraphes touchés par
-     * la sélection. Le paramètre {@code replace=false} signifie qu'on fusionne
-     * avec les attributs existants</p>
-     *
-     * @param constante l'une des 4 constantes StyleConstants.ALIGN_*
+     * @param valeur coefficient d'espacement (≥ 0.0)
      */
-    private void appliquerAttributParagraphe(int constante) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setAlignment(attrs, constante);
-        appliquerSurParagraphes(attrs);
-    }
-    
-    // =========================================================================
-    // Interligne
-    // =========================================================================
-        
-    /**
-     * Définit l'interligne du (des) paragraphe(s) courant(s).     
-     * @param interligne le coefficient d'espacement (≥ 0.0)
-     */
-    public void setInterligne(float interligne) {
-        if (interligne < 0f) {
-            return; // parce que valeur négative non supportée par Swing
+    public void setInterligne(float valeur) {
+        if (valeur < 0f) {
+            return;
         }
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setLineSpacing(attrs, interligne);
-        appliquerSurParagraphes(attrs);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setLineSpacing(valeur);
+        appliquerConfigParagraphe(config);
     }
 
     /**
      * Retourne l'interligne actif au niveau du curseur.
-     * @return le coefficient d'interligne 
+     *
+     * @return le coefficient
      */
     public float getInterligne() {
         return StyleConstants.getLineSpacing(getInputAttributes());
     }
-    
-    // =========================================================================
-    // Retraits (indentation)
-    // =========================================================================
 
+    // =========================================================================
+    // Retraits
+    // ==================================================================
     /**
-     * Augmente le retrait gauche du (des) paragraphe(s) courant(s) d'un pas.
-     *
-     * <p>Décale le texte vers la droite. Chaque appel ajoute
-     * {@value #PAS_RETRAIT} pixels au retrait existant.</p>
+     * Augmente le retrait gauche du paragraphe courant d'un pas.
      */
     public void augmenterRetrait() {
-        modifierRetrait(+PAS_RETRAIT);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setLeftIndent(config.getLeftIndent() + PAS_RETRAIT);
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Diminue le retrait gauche du (des) paragraphe(s) courant(s) d'un pas.
-     *
-     * <p>Décale le texte vers la gauche. Le retrait ne peut pas descendre
-     * en dessous de 0 (on ne peut pas dépasser la marge gauche).</p>
+     * Diminue le retrait gauche du paragraphe courant d'un pas.
      */
     public void diminuerRetrait() {
-        modifierRetrait(-PAS_RETRAIT);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setLeftIndent(Math.max(0f, config.getLeftIndent() - PAS_RETRAIT));
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Définit précisément le retrait gauche du (des) paragraphe(s) courant(s).
+     * Définit précisément le retrait gauche du paragraphe courant.
      *
-     * @param pixels la valeur de retrait en pixels (≥ 0)
+     * @param pixels valeur en pixels
      */
     public void setRetraitGauche(float pixels) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setLeftIndent(attrs, Math.max(0f, pixels));
-        appliquerSurParagraphes(attrs);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setLeftIndent(Math.max(0f, pixels));
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Définit précisément le retrait droit du (des) paragraphe(s) courant(s).
+     * Définit le retrait droit du paragraphe courant.
      *
-     * @param pixels la valeur de retrait en pixels (≥ 0)
+     * @param pixels valeur en pixels (≥ 0)
      */
     public void setRetraitDroit(float pixels) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setRightIndent(attrs, Math.max(0f, pixels));
-        appliquerSurParagraphes(attrs);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setRightIndent(Math.max(0f, pixels));
+        appliquerConfigParagraphe(config);
     }
 
     /**
      * Définit le retrait de la première ligne uniquement.
      *
-     * <p>Une valeur négative crée un retrait un peu différent : la première ligne
-     * est plus à gauche que le reste du paragraphe. Ca peut être utilisé
-     * pour les listes à puces (le symbole "déborde" vers la gauche).</p>
+     * <p>
+     * Pour une valeur négative. la première ligne déborde vers la gauche.</p>
      *
-     * @param pixels le retrait supplémentaire de la première ligne en pixels
+     * @param pixels valeur en pixels (peut être négative)
      */
     public void setRetraitPremiereLigne(float pixels) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setFirstLineIndent(attrs, pixels);
-        appliquerSurParagraphes(attrs);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setFirstLineIndent(pixels);
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Retourne le retrait gauche actif au niveau du curseur.
+     * Retourne le retrait gauche.
      *
-     * @return le retrait gauche en pixels
+     * @return le retrait en pixels
      */
     public float getRetraitGauche() {
         return StyleConstants.getLeftIndent(getInputAttributes());
     }
 
-    /**
-     * Modifie le retrait gauche du paragraphe courant d'un delta donné.
-     *
-     * <p>On lit d'abord le retrait existant via {@code getInputAttributes()},
-     * on y ajoute le delta, puis on applique le résultat. Le retrait minimum
-     * est 0 — on ne peut pas aller à gauche de la marge.</p>
-     *
-     * @param delta la variation en pixels (positif = vers la droite,
-     *              négatif = vers la gauche)
-     */
-    private void modifierRetrait(float delta) {
-        // Lire la valeur actuelle au niveau du curseur
-        float retraitActuel = StyleConstants.getLeftIndent(getInputAttributes());
-        // Calculer la nouvelle valeur en s'assurant qu'elle reste >= 0
-        float nouvelleValeur = Math.max(0f, retraitActuel + delta);
-
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setLeftIndent(attrs, nouvelleValeur);
-        appliquerSurParagraphes(attrs);
-    }
-
     // =========================================================================
-    // Espacement avant/après le paragraphe
-    // =========================================================================   
-
+    // Espacement avant / après
+    // =========================================================================
     /**
-     * Définit l'espace (en pixels) avant le paragraphe courant.
+     * Définit l'espace avant le paragraphe courant.
      *
-     * <p>Correspond à "Espacement — Avant" dans la boîte de dialogue
-     * Paragraphe de Word.</p>
-     *
-     * @param pixels espace en pixels avant le paragraphe (≥ 0)
+     * @param pixels espace en pixels (≥ 0)
      */
     public void setEspacementAvant(float pixels) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setSpaceAbove(attrs, Math.max(0f, pixels));
-        appliquerSurParagraphes(attrs);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setSpaceBefore(Math.max(0f, pixels));
+        appliquerConfigParagraphe(config);
     }
 
     /**
-     * Définit l'espace (en pixels) après le paragraphe courant.
+     * Définit l'espace en pixels après le paragraphe courant.
      *
-     * <p>Correspond à "Espacement — Après" dans la boîte de dialogue
-     * Paragraphe de Word.</p>
-     *
-     * @param pixels espace en pixels après le paragraphe (≥ 0)
+     * @param pixels espace en pixels (≥ 0)
      */
     public void setEspacementApres(float pixels) {
-        SimpleAttributeSet attrs = new SimpleAttributeSet();
-        StyleConstants.setSpaceBelow(attrs, Math.max(0f, pixels));
-        appliquerSurParagraphes(attrs);
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setSpaceAfter(Math.max(0f, pixels));
+        appliquerConfigParagraphe(config);
     }
 
     // =========================================================================
-    // Méthode utilitaire privée — point central pour les attributs de paragraphe
-    // =========================================================================
+    // Listes (puces et numérotation)
+    // ================================
+    /**
+     * Applique une puce standard au(x) paragraphe(s) courant(s).
+     *
+     * @param listConfig la configuration de la puce
+     */
+    public void setBullet(HListConfig listConfig) {
+        if (listConfig == null) {
+            return;
+        }
+
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setListConfig(listConfig);
+
+        // Appliquer l'indentation automatique pour créer l'espace de la puce
+        float indentation = listConfig.calculerIndentation();
+        config.setLeftIndent(indentation);
+        config.setFirstLineIndent(-HListConfig.LARGEUR_ZONE_PUCE);
+
+        appliquerConfigParagraphe(config);
+    }
 
     /**
-     * Applique les effets d'attributs de PARAGRAPHE à tous les paragraphes
-     * touchés par la sélection courante (ou au paragraphe du curseur si
-     * rien n'est sélectionné).   
+     * Applique une puce avec le type et le niveau donnés.
+     *
+     * @param type le type de puce (BULLET_ROUND, BULLET_CIRCLE, etc.)
+     * @param niveau le niveau d'imbrication (0 = premier niveau)
      */
-    private void appliquerSurParagraphes(SimpleAttributeSet attrs) {
-        int debut    = getSelectionStart();
+    public void setBullet(HListConfig.Type type, int niveau) {
+        setBullet(new HListConfig(type, niveau));
+    }
+
+    /**
+     * Applique une puce simple de premier niveau.
+     *
+     * <p>
+     * Raccourci pour setBullet(HListConfig.Type.BULLET_ROUND, 0).</p>
+     */
+    public void setBullet() {
+        setBullet(new HListConfig(HListConfig.Type.BULLET_ROUND, 0));
+    }
+
+    /**
+     * Applique une numérotation au(x) paragraphe(s) courant(s).
+     *
+     * <p>
+     * Le numéro réel affiché est calculé dynamiquement par HParagraphPainter en
+     * comptant les paragraphes numérotés du même type qui précèdent.</p>
+     *
+     * @param listConfig la configuration de numérotation
+     */
+    public void setNumbering(HListConfig listConfig) {
+        if (listConfig == null) {
+            return;
+        }
+
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setListConfig(listConfig);
+
+        // Même principe d'indentation que pour les puces
+        float indentation = listConfig.calculerIndentation();
+        config.setLeftIndent(indentation);
+        config.setFirstLineIndent(-HListConfig.LARGEUR_ZONE_PUCE);
+
+        appliquerConfigParagraphe(config);
+    }
+
+    /**
+     * Applique une numérotation simple (1. 2. 3.) de premier niveau.
+     *
+     * <p>
+     * Raccourci pour le format le plus courant.</p>
+     */
+    public void setNumbering() {
+        setNumbering(new HListConfig(HListConfig.Type.NUMBER, 0));
+    }
+
+    /**
+     * Supprime la liste (puce ou numérotation) du (des) paragraphe(s)
+     * courant(s) et remet les retraits à zéro.
+     */
+    public void clearList() {
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setListConfig(null);
+
+        // Remettre les retraits à zéro vu qu'ils avaient été ajustés pour la liste
+        config.setLeftIndent(0f);
+        config.setFirstLineIndent(0f);
+
+        appliquerConfigParagraphe(config);
+    }
+
+    // =========================================================================
+    // Bordures de paragraphe
+    // =========================================================================
+    /**
+     * Applique une bordure au(x) paragraphe(s) courant(s).
+     *
+     * @param borderConfig la configuration de bordure
+     */
+    public void setBorder(HBorderConfig borderConfig) {
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setBorderConfig(borderConfig);
+        appliquerConfigParagraphe(config);
+    }
+
+    /**
+     * Applique une bordure complète avec type et couleur.
+     *
+     * @param type les côtés à dessiner
+     * @param couleur la couleur du trait
+     */
+    public void setBorder(HBorderConfig.Type type, Color couleur) {
+        setBorder(new HBorderConfig(type, couleur));
+    }
+
+    /**
+     * Supprime la bordure du (des) paragraphe(s) courant(s).
+     */
+    public void clearBorder() {
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setBorderConfig(null);
+        appliquerConfigParagraphe(config);
+    }
+
+    // =========================================================================
+    // Trame de fond paragraphe
+    // =========================================================================
+    /**
+     * Applique une couleur de fond sur tout le paragraphe courant.    
+     *
+     * @param couleur la couleur de trame null pour supprimer
+     */
+    public void setTrameFond(Color couleur) {
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setBackground(couleur);
+        appliquerConfigParagraphe(config);
+    }
+
+    /**
+     * Supprime la trame de fond du paragraphe courant.
+     */
+    public void clearTrameFond() {
+        setTrameFond(null);
+    }
+
+    // =============================================================
+    // Marques invisibles
+    // ================================================================
+    /**
+     * Active ou désactive l'affichage des caractères invisibles sur le(s)
+     * paragraphe(s) courant(s) : espaces (·), fin de paragraphe,
+     * tabulations.
+     *    
+     * @param afficher {@code true} pour afficher les marques
+     */
+    public void setAfficherMarques(boolean afficher) {
+        HParagraphConfig config = lireConfigParagraphe();
+        config.setShowMarks(afficher);
+        appliquerConfigParagraphe(config);
+    }
+
+    // =========================================================================
+    // MÉTHODE CENTRALE — appliquerConfigParagraphe()
+    //
+    
+    //  Elle fait deux choses :
+    //   1. Applique les attributs Swing natifs (alignement, retraits, interligne)
+    //      et Swing on laisse Swing dessiner le texte
+    //   2. Stocke le HParagraphConfig complet dans le document pour que notre moteur
+    //      HParagraphPainter puisse lire les fonctionnalités custom
+    //      (puces, bordures, marques).
+    // =========================================================================
+    
+    /**
+     * Applique un HParagraphConfig à tous les paragraphes touchés par
+     * la sélection courante ou au paragraphe du curseur si rien n'est
+     * sélectionné.     
+     *
+     * @param config la configuration complète du paragraphe à appliquer
+     */
+    private void appliquerConfigParagraphe(HParagraphConfig config) {
+        int debut = getSelectionStart();
         int longueur = getSelectionEnd() - debut;
 
-        // Si rien n'est sélectionné (longueur == 0), on passe quand même
-        // debut et longueur = 0 — Swing trouve le paragraphe du curseur.
-        // Si du texte est sélectionné, Swing trouve TOUS les paragraphes
-        // qui contiennent au moins un caractère de la sélection.
-        getStyledDocument().setParagraphAttributes(debut, longueur, attrs, false);
+        // Trouver les paragraphes touchés par la sélection
+        Element racine = getStyledDocument().getDefaultRootElement();
+        int indexDebut = racine.getElementIndex(debut);
+        // Si rien n'est sélectionné (longueur == 0), on agit sur le para du curseur
+        int indexFin = (longueur == 0)
+                ? indexDebut
+                : racine.getElementIndex(debut + longueur - 1);
+
+        for (int i = indexDebut; i <= indexFin; i++) {
+            Element para = racine.getElement(i);
+            int pDebut = para.getStartOffset();
+            int pLongueur = para.getEndOffset() - pDebut;
+
+            // Construire les attributs à appliquer
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+
+            // 1. Attributs Swing natifs — lus directement par Swing 
+            StyleConstants.setAlignment(attrs, config.getAlignement());
+            StyleConstants.setLeftIndent(attrs, config.getLeftIndent());
+            StyleConstants.setRightIndent(attrs, config.getRightIndent());
+            StyleConstants.setFirstLineIndent(attrs, config.getFirstLineIndent());
+            StyleConstants.setLineSpacing(attrs, config.getLineSpacing());
+            StyleConstants.setSpaceAbove(attrs, config.getSpaceBefore());
+            StyleConstants.setSpaceBelow(attrs, config.getSpaceAfter());
+
+            // 2. HParagraphConfig complet lu par HParagraphPainter 
+            attrs.addAttribute(HAttributeKeys.PARAGRAPH_STYLE, config);
+
+            // 3. Appliquer au paragraphe
+            // replace=false : on fusionne avec les attributs existants
+            // (on ne perd pas les attributs de caractère déjà appliqués)
+            getStyledDocument().setParagraphAttributes(pDebut, pLongueur, attrs, false);
+        }
+
+        repaint();
+    }
+
+    // =========================================================================
+    // MÉTHODE PRIVÉE — lireConfigParagraphe()
+    //
+    
+    //Mes Notes:
+    // Elle lit l'état actuel du paragraphe sous le curseur et retourne
+    // un HParagraphConfig prêt à être modifié.
+    //
+    // Si le paragraphe n'a jamais été modifié, elle retourne un
+    // HParagraphConfig avec les valeurs par défaut (alignement gauche,
+    // pas de retrait, interligne simple, etc.).
+    //
+    // Rappel: On lit avant de modifier pour ne pas perdre les autres
+    // propriétés déjà appliquées. Si le paragraphe est centré et qu'on
+    // veut changer l'interligne, on lit d'abord l'état (centré, interligne X),
+    // on modifie seulement l'interligne, puis on réécrit le tout.
+    // =========================================================================
+    /**
+     *
+     * @return la config existante, ou une config par défaut
+     */
+    private HParagraphConfig lireConfigParagraphe() {
+        // Trouver le paragraphe sous le curseur
+        int pos = getSelectionStart();
+        Element racine = getStyledDocument().getDefaultRootElement();
+        Element para = racine.getElement(racine.getElementIndex(pos));
+
+        // Lire la valeur stockée sous HAttributeKeys.PARAGRAPH_STYLE
+        Object valeur = para.getAttributes()
+                .getAttribute(HAttributeKeys.PARAGRAPH_STYLE);
+
+        if (valeur instanceof HParagraphConfig config) {
+            // Une config existe — on la retourne directement
+            // La méthode appelante va la modifier puis la réécrire
+            return config;
+        }
+
+        // Pas encore de config sur ce paragraphe — on en crée une par défaut
+        // et on y copie les valeurs Swing actuelles pour ne rien perdre
+        HParagraphConfig defaut = new HParagraphConfig();
+        defaut.setAlignement(StyleConstants.getAlignment(para.getAttributes()));
+        defaut.setLeftIndent(StyleConstants.getLeftIndent(para.getAttributes()));
+        defaut.setRightIndent(StyleConstants.getRightIndent(para.getAttributes()));
+        defaut.setFirstLineIndent(StyleConstants.getFirstLineIndent(para.getAttributes()));
+        defaut.setLineSpacing(StyleConstants.getLineSpacing(para.getAttributes()));
+        defaut.setSpaceBefore(StyleConstants.getSpaceAbove(para.getAttributes()));
+        defaut.setSpaceAfter(StyleConstants.getSpaceBelow(para.getAttributes()));
+
+        return defaut;
     }
 
 }
