@@ -11,7 +11,6 @@ import htextarea.paragraph.HBorderConfig;
 import htextarea.paragraph.HListConfig;
 import htextarea.paragraph.HParagraphConfig;
 
-
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
 import javax.swing.text.SimpleAttributeSet;
@@ -1545,11 +1544,8 @@ public class HTextArea extends JTextPane {
         appliquerConfigParagraphe(config);
     }
 
-    // =========================================================================
-    // Listes (puces et numérotation)
-    // ================================
     /**
-     * Applique une puce standard au(x) paragraphe(s) courant(s).
+     * Applique une puce au(x) paragraphe(s) courant(s).
      *
      * @param listConfig la configuration de la puce
      */
@@ -1561,10 +1557,11 @@ public class HTextArea extends JTextPane {
         HParagraphConfig config = lireConfigParagraphe();
         config.setListConfig(listConfig);
 
-        // Appliquer l'indentation automatique pour créer l'espace de la puce
-        float indentation = listConfig.calculerIndentation();
-        config.setLeftIndent(indentation);
-        config.setFirstLineIndent(-HListConfig.LARGEUR_ZONE_PUCE);
+        // leftIndent = largeur totale de l'indentation
+        // Toutes les lignes commencent à cette position
+        float leftIndent = listConfig.calculerIndentation();
+
+        config.setLeftIndent(leftIndent);
 
         appliquerConfigParagraphe(config);
     }
@@ -1606,10 +1603,12 @@ public class HTextArea extends JTextPane {
         HParagraphConfig config = lireConfigParagraphe();
         config.setListConfig(listConfig);
 
-        // Même principe d'indentation que pour les puces
-        float indentation = listConfig.calculerIndentation();
-        config.setLeftIndent(indentation);
-        config.setFirstLineIndent(-HListConfig.LARGEUR_ZONE_PUCE);
+        float zonePuce = HListConfig.LARGEUR_ZONE_PUCE;
+        float leftIndent = listConfig.calculerIndentation();
+        float firstLineIndent = -zonePuce;
+
+        config.setLeftIndent(leftIndent);
+        config.setFirstLineIndent(firstLineIndent);
 
         appliquerConfigParagraphe(config);
     }
@@ -1624,18 +1623,14 @@ public class HTextArea extends JTextPane {
         setNumbering(new HListConfig(HListConfig.Type.NUMBER, 0));
     }
 
-    /**
-     * Supprime la liste (puce ou numérotation) du (des) paragraphe(s)
-     * courant(s) et remet les retraits à zéro.
+     /**
+     * Supprime la liste (puce ou numérotation) et remet les retraits à zéro.
      */
     public void clearList() {
         HParagraphConfig config = lireConfigParagraphe();
         config.setListConfig(null);
-
-        // Remettre les retraits à zéro vu qu'ils avaient été ajustés pour la liste
         config.setLeftIndent(0f);
         config.setFirstLineIndent(0f);
-
         appliquerConfigParagraphe(config);
     }
 
@@ -1645,38 +1640,50 @@ public class HTextArea extends JTextPane {
     /**
      * Applique une bordure au(x) paragraphe(s) courant(s).
      *
+     * ici l'espace ajouté = padding de la bordure + épaisseur du trait.</p>
+     *
      * @param borderConfig la configuration de bordure
      */
     public void setBorder(HBorderConfig borderConfig) {
         HParagraphConfig config = lireConfigParagraphe();
         config.setBorderConfig(borderConfig);
+
+        if (borderConfig != null) {
+            // Espace automatique = padding + épaisseur 
+            float espace = borderConfig.getPadding() + borderConfig.getEpaisseur();
+            config.setSpaceBefore(espace);
+            config.setSpaceAfter(espace);
+        } else {
+            // Supprimer l'espace si on retire la bordure
+            config.setSpaceBefore(0f);
+            config.setSpaceAfter(0f);
+        }
+
         appliquerConfigParagraphe(config);
     }
 
     /**
-     * Applique une bordure complète avec type et couleur.
+     * Raccourci — applique une bordure avec type et couleur.
      *
-     * @param type les côtés à dessiner
-     * @param couleur la couleur du trait
+     * @param type
+     * @param couleur
      */
     public void setBorder(HBorderConfig.Type type, Color couleur) {
         setBorder(new HBorderConfig(type, couleur));
     }
 
     /**
-     * Supprime la bordure du (des) paragraphe(s) courant(s).
+     * Supprime la bordure et remet les espacements à zéro.
      */
     public void clearBorder() {
-        HParagraphConfig config = lireConfigParagraphe();
-        config.setBorderConfig(null);
-        appliquerConfigParagraphe(config);
+        setBorder((HBorderConfig) null);
     }
 
     // =========================================================================
     // Trame de fond paragraphe
     // =========================================================================
     /**
-     * Applique une couleur de fond sur tout le paragraphe courant.    
+     * Applique une couleur de fond sur tout le paragraphe courant.
      *
      * @param couleur la couleur de trame null pour supprimer
      */
@@ -1698,9 +1705,8 @@ public class HTextArea extends JTextPane {
     // ================================================================
     /**
      * Active ou désactive l'affichage des caractères invisibles sur le(s)
-     * paragraphe(s) courant(s) : espaces (·), fin de paragraphe,
-     * tabulations.
-     *    
+     * paragraphe(s) courant(s) : espaces (·), fin de paragraphe, tabulations.
+     *
      * @param afficher {@code true} pour afficher les marques
      */
     public void setAfficherMarques(boolean afficher) {
@@ -1712,7 +1718,6 @@ public class HTextArea extends JTextPane {
     // =========================================================================
     // MÉTHODE CENTRALE — appliquerConfigParagraphe()
     //
-    
     //  Elle fait deux choses :
     //   1. Applique les attributs Swing natifs (alignement, retraits, interligne)
     //      et Swing on laisse Swing dessiner le texte
@@ -1720,11 +1725,9 @@ public class HTextArea extends JTextPane {
     //      HParagraphPainter puisse lire les fonctionnalités custom
     //      (puces, bordures, marques).
     // =========================================================================
-    
     /**
-     * Applique un HParagraphConfig à tous les paragraphes touchés par
-     * la sélection courante ou au paragraphe du curseur si rien n'est
-     * sélectionné.     
+     * Applique un HParagraphConfig à tous les paragraphes touchés par la
+     * sélection courante ou au paragraphe du curseur si rien n'est sélectionné.
      *
      * @param config la configuration complète du paragraphe à appliquer
      */
@@ -1772,7 +1775,6 @@ public class HTextArea extends JTextPane {
     // =========================================================================
     // MÉTHODE PRIVÉE — lireConfigParagraphe()
     //
-    
     //Mes Notes:
     // Elle lit l'état actuel du paragraphe sous le curseur et retourne
     // un HParagraphConfig prêt à être modifié.

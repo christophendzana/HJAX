@@ -1,6 +1,7 @@
 package htextarea;
 
 import htextarea.effect.HEffectPainter;
+import htextarea.paragraph.HParagraphPainter;
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicTextPaneUI;
 import java.awt.*;
@@ -12,22 +13,7 @@ import java.awt.geom.RoundRectangle2D;
 import javax.swing.text.StyledDocument;
 
 /**
- * UI delegate moderne pour {@link HTextArea}.
- * <p>
- * Gère :
- * <ul>
- * <li>Fond arrondi avec couleurs différentes selon l'état (normal, hover,
- * focus)</li>
- * <li>Bordure arrondie personnalisable (épaisseur, couleur selon état)</li>
- * <li>Ombre portée du composant (drop shadow)</li>
- * <li>Délégation du rendu du texte stylisé au parent
- * {@link BasicTextPaneUI}</li>
- * </ul>
- * <p>
- * L'état "hover" est détecté via un {@link MouseAdapter}, l'état "focus" via un
- * {@link FocusAdapter}.
- * </p>
- *
+ * UI delegate moderne pour {@link HTextArea}. 
  * @author FIDELE
  * @version 3.0
  */
@@ -95,65 +81,88 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         super.uninstallUI(c);
     }
 
+    /**
+     * Point d'entrée du rendu.     
+     *     
+     */
     @Override
     protected void paintSafely(Graphics g) {
         Graphics2D g2 = (Graphics2D) g.create();
         try {
-            // Activation du lissage des formes (anti-aliasing)
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-
-            // Priorise la qualité de rendu
-            g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-
-            // Améliore le rendu du texte (plus net)
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING,
+                    RenderingHints.VALUE_RENDER_QUALITY);
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                     RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
-            int w = textArea.getWidth();
-            int h = textArea.getHeight();
+            int w      = textArea.getWidth();
+            int h      = textArea.getHeight();
             int radius = textArea.getCornerRadius();
 
-            // 1. Ombre du composant
+            // 1. Ombre portée
             if (textArea.isComponentShadowEnabled()) {
-                paintComponentShadow(g2, w, h, radius, 0.15f,
-                        textArea.getComponentShadowOffset());
+                paintComponentShadow(g2, w, h, radius,
+                        0.15f, textArea.getComponentShadowOffset());
             }
 
             // 2. Fond arrondi
             paintBackground(g2, w, h, radius);
 
-            // 3. Bordure arrondie
+            // 3. Bordure arrondie du composant
             paintBorder(g2, w, h, radius);
 
-            // 4. Clip arrondi pour que le texte ne déborde pas sur les coins
+            // Clip arrondi
             Shape oldClip = g2.getClip();
             g2.clip(new RoundRectangle2D.Float(0, 0, w, h, radius * 2, radius * 2));
 
-            //    les coordonnées retournées par modelToView()
-            //    sont dans l'espace du composant (0,0 = coin supérieur gauche du JTextPane).
-            //    Or, Swing paint le texte en tenant compte des insets du border.
-            //    On doit appliquer le même décalage au Graphics2D passé à HEffectPainter
-            //    pour que les effets soient dessinés exactement sur le texte.
+            // Translation des insets — à partir d'ici, le g2 est dans
+            // l'espace vue, cohérent avec modelToView()
             Insets insets = textArea.getInsets();
             g2.translate(insets.left, insets.top);
 
+            // 4. Effets de caractère (derrière le texte)
             HEffectPainter.peindreEffets(
                     g2,
                     (StyledDocument) textArea.getDocument(),
                     getRootView(textArea)
             );
 
-            // On retire la translation avant d'appeler super.paintSafely(),
-            // car Swing gère lui-même les insets dans sa propre passe de rendu.
+            // 5. Trame de fond (derrière le texte)
+            // g2 est translaté — HParagraphPainter travaille dans l'espace vue
+            HParagraphPainter.peindreArrierePlan(
+                    g2,
+                    (StyledDocument) textArea.getDocument(),
+                    getRootView(textArea),
+                    textArea
+            );
+
+            // Retirer la translation pour super.paintSafely()
+            // (Swing applique lui-même les insets en interne)
             g2.translate(-insets.left, -insets.top);
 
+            // 6. Texte Swing
             super.paintSafely(g2);
+
+            // Remettre la translation pour les painters de premier plan
+            g2.translate(insets.left, insets.top);
+
+            // 7. Puces, bordures, marques (devant le texte)
+            HParagraphPainter.peindrePremierPlan(
+                    g2,
+                    (StyledDocument) textArea.getDocument(),
+                    getRootView(textArea),
+                    textArea
+            );
+
+            g2.translate(-insets.left, -insets.top);
             g2.setClip(oldClip);
 
         } finally {
             g2.dispose();
         }
     }
+
 
     /**
      * Peint l'ombre portée du composant. Simule un flou en dessinant plusieurs
