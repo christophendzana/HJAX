@@ -169,7 +169,7 @@ public class HSortMoteur {
     // =========================================================================
     /**
      * Extrait la valeur à comparer depuis le texte d'un paragraphe.
-     *     
+     *
      * Si le champ est "Paragraphes" ou si pas de séparateur → texte entier. Si
      * le champ est "Colonne N" → on découpe le texte et on prend la Nème
      * colonne.
@@ -225,41 +225,92 @@ public class HSortMoteur {
     // Parsing des types
     // =========================================================================
     /**
-     * Parse une chaîne en double pour le tri numérique. Retourne
-     * {@code Double.MAX_VALUE} si le parsing échoue (les valeurs non numériques
-     * sont repoussées en fin de liste).
+     * Extrait et parse le premier nombre trouvé dans une chaîne.
+     *
+     * On cherche le premier nombre dans la chaîne et trie sur cette valeur.
+     *
+     * <p>
+     * Exemples :</p>
+     * <ul>
+     * <li>"Paragraphe 10" → 10.0</li>
+     * <li>"100" → 100.0</li>
+     * <li>"Prix : 3,50 €" → 3.5</li>
+     * <li>"Aucun chiffre" → Double.MAX_VALUE (repoussé en fin)</li>
+     * </ul>
+     *
+     * @param valeur la chaîne à analyser
+     * @return le premier nombre trouvé, ou {@code Double.MAX_VALUE} si aucun
      */
     private static double parseNombre(String valeur) {
         if (valeur == null || valeur.isBlank()) {
             return Double.MAX_VALUE;
         }
-        try {
-            // Remplacer la virgule décimale par un point pour la compatibilité
-            return Double.parseDouble(valeur.replace(',', '.').replace(" ", ""));
-        } catch (NumberFormatException e) {
-            return Double.MAX_VALUE;
+
+        // Chercher la première séquence de chiffres (avec virgule/point décimal)
+        // Le pattern reconnaît : 10, 3.5, 3,5, -42, +100
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("-?\\d+([.,]\\d+)?")
+                .matcher(valeur);
+
+        if (m.find()) {
+            try {
+                // Normaliser la virgule décimale en point
+                return Double.parseDouble(m.group().replace(',', '.'));
+            } catch (NumberFormatException e) {
+                return Double.MAX_VALUE;
+            }
         }
+        return Double.MAX_VALUE;
     }
 
     /**
-     * Parse une chaîne en timestamp pour le tri chronologique. Essaie plusieurs
-     * formats de date courants. Retourne {@code Long.MAX_VALUE} si aucun format
-     * ne correspond.
+     * Extrait et parse la première date trouvée dans une chaîne.
+     *
+     * <p>
+     * Même logique que {@link #parseNombre} : on cherche la première séquence
+     * qui ressemble à une date dans la chaîne, puis on la parse.</p>
+     *
+     * <p>
+     * Exemples :</p>
+     * <ul>
+     * <li>"15/03/1979" → timestamp de cette date</li>
+     * <li>"Martin;Jean;45;15/03/1979" → timestamp de 15/03/1979</li>
+     * <li>"Livraison prévue le 01/01/1996" → timestamp de 01/01/1996</li>
+     * <li>"Pas de date" → Long.MAX_VALUE</li>
+     * </ul>
+     *
+     * @param valeur la chaîne à analyser
+     * @return le timestamp de la première date trouvée, ou
+     * {@code Long.MAX_VALUE} si aucune date reconnue
      */
     private static long parseDate(String valeur) {
         if (valeur == null || valeur.isBlank()) {
             return Long.MAX_VALUE;
         }
 
-        for (String format : FORMATS_DATE) {
-            try {
-                SimpleDateFormat sdf = new SimpleDateFormat(format, Locale.getDefault());
-                sdf.setLenient(false);
-                return sdf.parse(valeur.trim()).getTime();
-            } catch (ParseException ignored) {
-                // Essayer le format suivant
+        // Chercher les séquences qui ressemblent à une date dans la chaîne
+        // Pattern large : groupe de chiffres séparés par / - ou espace
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("\\d{1,2}[/\\-]\\d{1,2}[/\\-]\\d{2,4}"
+                        + "|\\d{4}[/\\-]\\d{1,2}[/\\-]\\d{1,2}")
+                .matcher(valeur);
+
+        while (m.find()) {
+            String candidat = m.group();
+            // Essayer tous les formats connus sur ce candidat
+            for (String format : FORMATS_DATE) {
+                try {
+                    java.text.SimpleDateFormat sdf
+                            = new java.text.SimpleDateFormat(format,
+                                    java.util.Locale.getDefault());
+                    sdf.setLenient(false);
+                    return sdf.parse(candidat).getTime();
+                } catch (java.text.ParseException ignored) {
+                    // Essayer le format suivant
+                }
             }
         }
+
         return Long.MAX_VALUE;
     }
 
@@ -272,8 +323,8 @@ public class HSortMoteur {
      * paragraphes, selon le séparateur défini dans les options.
      *
      * <p>
-     * Utilisé par  HSortDialog pour construire les choix "Colonne 1",
-     * "Colonne 2"... dans les combos "Trier par".</p>
+     * Utilisé par HSortDialog pour construire les choix "Colonne 1", "Colonne
+     * 2"... dans les combos "Trier par".</p>
      *
      * @param paragraphes la liste des paragraphes
      * @param options les options (pour le séparateur)

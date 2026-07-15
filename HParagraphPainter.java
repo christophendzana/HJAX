@@ -156,16 +156,42 @@ public class HParagraphPainter {
 
     // =========================================================================
     // Trame de fond
-    // =========================================================================
+    // =========================================================================    
     /**
-     * Peint la trame de fond sur toute la largeur du composant.     
+     * Peint la trame de fond du paragraphe.
+     *
+     * <p>
+     * Utilise {@link #calculerZoneHorizontale} pour avoir exactement les mêmes
+     * dimensions que la bordure. La hauteur est inchangée (déjà correcte).</p>
      */
-    private static void peindreTrame(Graphics2D g2, Rectangle rect,
+    private static void peindreTrame(Graphics2D g2,
+            Rectangle rect,
             HParagraphConfig config,
             JTextPane composant) {
+
+        float ep = config.hasBordure()
+                ? config.getBorderConfig().getEpaisseur()
+                : 0f;
+
+        float padding = config.hasBordure()
+                ? config.getBorderConfig().getPadding()
+                : 4f;
+
+        // Zone intérieure commune (identique à celle utilisée par les bordures)
+        float[] zone = calculerZoneInterieure(
+                rect,
+                composant,
+                config,
+                padding,
+                ep);
+
         g2.setColor(config.getBackground());
-        // Toute la largeur du composant, rectangle étendu en hauteur
-        g2.fillRect(0, rect.y, composant.getWidth(), rect.height);
+
+        g2.fillRect(
+                Math.round(zone[0]),
+                Math.round(zone[1]),
+                Math.round(zone[2]),
+                Math.round(zone[3]));
     }
 
     // =========================================================================
@@ -173,46 +199,65 @@ public class HParagraphPainter {
     // =========================================================================
     /**
      * Peint les traits de bordure autour du paragraphe.
-     *     
+     *
      */
-    private static void peindreBordure(Graphics2D g2, Rectangle rect,
-            JTextPane composant, HParagraphConfig config) {
+    private static void peindreBordure(Graphics2D g2,
+            Rectangle rect,
+            JTextPane composant,
+            HParagraphConfig config) {
+
         HBorderConfig bc = config.getBorderConfig();
+
         float ep = bc.getEpaisseur();
         float padding = bc.getPadding();
-        Insets ins = composant.getInsets();
 
-        // Largeur de la zone de texte (sans les insets)
-        float largeurTexte = composant.getWidth() - ins.left - ins.right;
+        // Zone intérieure commune
+        float[] zone = calculerZoneInterieure(
+                rect,
+                composant,
+                config,
+                padding,
+                ep);
 
-        // Bordure gauche : à -padding depuis le bord gauche du texte
-        // Bordure droite : à largeurTexte + padding depuis le bord gauche du texte
-        float x = -padding + ep / 2f;
-        float largeur = largeurTexte + padding * 2 - ep;
-
-        // Bordure haut/bas : depuis le rect du paragraphe (inchangé — correct)
-        float y = rect.y + ep / 2f;
-        float hauteur = rect.height - ep;
+        /*
+     * drawRect() dessine le trait centré sur les coordonnées.
+     * calculerZoneInterieure() renvoie les bords intérieurs.
+     * On revient donc aux coordonnées du centre du trait.
+         */
+        float x = zone[0] - ep / 2f;
+        float y = zone[1] - ep / 2f;
+        float largeur = zone[2] + ep;
+        float hauteur = zone[3] + ep;
 
         g2.setColor(bc.getCouleur());
-        g2.setStroke(new BasicStroke(ep, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
-        int ix = (int) x;
-        int iy = (int) y;
-        int iw = (int) largeur;
-        int ih = (int) hauteur;
+        g2.setStroke(new BasicStroke(
+                ep,
+                BasicStroke.CAP_ROUND,
+                BasicStroke.JOIN_ROUND));
+
+        int ix = Math.round(x);
+        int iy = Math.round(y);
+        int iw = Math.round(largeur);
+        int ih = Math.round(hauteur);
 
         switch (bc.getType()) {
+
             case ALL ->
                 g2.drawRect(ix, iy, iw, ih);
+
             case TOP ->
                 g2.drawLine(ix, iy, ix + iw, iy);
+
             case BOTTOM ->
                 g2.drawLine(ix, iy + ih, ix + iw, iy + ih);
+
             case LEFT ->
                 g2.drawLine(ix, iy, ix, iy + ih);
+
             case RIGHT ->
                 g2.drawLine(ix + iw, iy, ix + iw, iy + ih);
+
             case TOP_BOTTOM -> {
                 g2.drawLine(ix, iy, ix + iw, iy);
                 g2.drawLine(ix, iy + ih, ix + iw, iy + ih);
@@ -225,7 +270,7 @@ public class HParagraphPainter {
     // =========================================================================
     /**
      * Peint le symbole de liste (puce ou numéro) devant le paragraphe.
-     *    
+     *
      */
     private static void peindreListe(Graphics2D g2, View view,
             Element para, HParagraphConfig config,
@@ -526,4 +571,103 @@ public class HParagraphPainter {
             return null;
         }
     }
+
+    /**
+     * Calcule les coordonnées horizontales de la zone à peindre (trame ou
+     * bordure) en tenant compte de l'indentation et des puces.
+     *
+     * @param composant le JTextPane
+     * @param config la config du paragraphe (pour leftIndent, rightIndent,
+     * liste)
+     * @param padding espace entre le contenu et le bord de la zone
+     * @return tableau [x, largeur] en pixels dans l'espace vue
+     */
+    /**
+     * Calcule les coordonnées horizontales de la zone à peindre (trame ou
+     * bordure) en tenant compte de l'indentation et des puces.
+     */
+    private static float[] calculerZoneHorizontale(JTextPane composant,
+            HParagraphConfig config,
+            float padding,
+            float ep) {
+
+        Insets ins = composant.getInsets();
+        float largeurVue = composant.getWidth() - ins.left - ins.right;
+        float rightIndent = config.getRightIndent();
+
+        // Espace entre la puce et le bord gauche de la bordure
+        final float LIST_MARGIN = 6f;
+
+        float xBordInterieurGauche;
+
+        if (config.hasListe()) {
+
+            float leftIndent = config.getLeftIndent();
+
+            // Position horizontale de la puce
+            float xPuce = leftIndent / 2f;
+
+            // Bord légèrement décalé vers la gauche de la puce
+            xBordInterieurGauche = xPuce - padding - LIST_MARGIN;
+
+        } else {
+
+            // Cas normal : bord légèrement avant le texte
+            xBordInterieurGauche = -padding;
+
+        }
+
+        // Bord intérieur droit
+        float xBordInterieurDroit = largeurVue - rightIndent + padding;
+
+        // Conversion pour drawRect()
+        float xCentre = xBordInterieurGauche - ep / 2f;
+        float largeur = (xBordInterieurDroit - xBordInterieurGauche) + ep;
+
+        return new float[]{xCentre, largeur};
+    }
+
+    /**
+     * Calcule la zone intérieure du paragraphe (hors épaisseur du trait).
+     *
+     * Cette zone est utilisée aussi bien par la trame de fond que comme
+     * référence pour les bordures afin que les deux coïncident parfaitement.
+     *
+     * @param rect rectangle de base du paragraphe
+     * @param composant composant texte
+     * @param config configuration du paragraphe
+     * @param padding espace intérieur entre le contenu et la bordure
+     * @param ep épaisseur de la bordure
+     * @return tableau {x, y, largeur, hauteur}
+     */
+    private static float[] calculerZoneInterieure(
+            Rectangle rect,
+            JTextPane composant,
+            HParagraphConfig config,
+            float padding,
+            float ep) {
+
+        // ----- Zone horizontale -----
+        float[] zoneH = calculerZoneHorizontale(
+                composant,
+                config,
+                padding,
+                ep);
+
+        // calculerZoneHorizontale() renvoie les coordonnées du CENTRE du trait.
+        float x = zoneH[0] + ep / 2f;
+        float largeur = zoneH[1] - ep;
+
+        // ----- Zone verticale -----
+        float y = rect.y - padding;
+        float hauteur = rect.height + (padding * 2);
+
+        return new float[]{
+            x,
+            y,
+            largeur,
+            hauteur
+        };
+    }
+
 }

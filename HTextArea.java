@@ -10,6 +10,11 @@ import htextarea.attribute.HAttributeKeys;
 import htextarea.paragraph.HBorderConfig;
 import htextarea.paragraph.HListConfig;
 import htextarea.paragraph.HParagraphConfig;
+import htextarea.sort.HParagrapheAvecStyle;
+import htextarea.sort.HSortCritere;
+import htextarea.sort.HSortDialog;
+import htextarea.sort.HSortMoteur;
+import htextarea.sort.HSortOptions;
 
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultStyledDocument;
@@ -18,9 +23,11 @@ import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.Color;
 import java.awt.Insets;
+import java.awt.Window;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.BorderFactory;
+import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.Element;
 
@@ -1605,10 +1612,8 @@ public class HTextArea extends JTextPane {
 
         float zonePuce = HListConfig.LARGEUR_ZONE_PUCE;
         float leftIndent = listConfig.calculerIndentation();
-        float firstLineIndent = -zonePuce;
 
         config.setLeftIndent(leftIndent);
-        config.setFirstLineIndent(firstLineIndent);
 
         appliquerConfigParagraphe(config);
     }
@@ -1623,7 +1628,7 @@ public class HTextArea extends JTextPane {
         setNumbering(new HListConfig(HListConfig.Type.NUMBER, 0));
     }
 
-     /**
+    /**
      * Supprime la liste (puce ou numérotation) et remet les retraits à zéro.
      */
     public void clearList() {
@@ -1820,6 +1825,228 @@ public class HTextArea extends JTextPane {
         defaut.setSpaceAfter(StyleConstants.getSpaceBelow(para.getAttributes()));
 
         return defaut;
+    }
+
+    // =========================================================================
+    // GROUPE — Tri des paragraphes
+    // =========================================================================
+    /**
+     * Ouvre la boîte de dialogue "Trier le texte" et trie les paragraphes selon
+     * les critères choisis par l'utilisateur.
+     *
+     * <h3>Périmètre du tri</h3>
+     * <p>
+     * Si du texte est sélectionné, seuls les paragraphes touchés par la
+     * sélection sont triés. Sinon, tous les paragraphes du document sont triés.
+     * Le style de chaque paragraphe (police, couleur, puce, bordure...) est
+     * préservé et déplacé avec son paragraphe.</p>
+     *
+     * <h3>Flux</h3>
+     * <ol>
+     * <li>Extraire les paragraphes concernés avec leurs styles</li>
+     * <li>Ouvrir {@link HSortDialog}</li>
+     * <li>Si OK → appeler {@link HSortMoteur#trier}</li>
+     * <li>Réécrire les paragraphes triés dans le {@code StyledDocument}</li>
+     * </ol>
+     */
+    public void trier() {
+        StyledDocument doc = getStyledDocument();
+        Element racine = doc.getDefaultRootElement();
+
+        // 1. Déterminer la plage de paragraphes à trier
+        int debut = getSelectionStart();
+        int fin = getSelectionEnd(); //Renvoi la position juste après le dernier caractère sélectionné 
+        boolean toutDocument = (debut == fin); // rien n'est sélectionné
+
+        int indexDebut, indexFin;
+        if (toutDocument) {
+            indexDebut = 0;
+            indexFin = racine.getElementCount() - 1;
+        } else {
+            indexDebut = racine.getElementIndex(debut);
+            
+            //fin-1: prend exactement le dernier caractère sélectione
+            indexFin = racine.getElementIndex(fin > debut ? fin - 1 : fin);  
+        }
+
+        // 2. Extraire les paragraphes avec leurs styles
+        List<HParagrapheAvecStyle> paragraphes = new ArrayList<>();
+
+        for (int i = indexDebut; i <= indexFin; i++) {
+            Element para = racine.getElement(i);
+            paragraphes.add(extraireParagraphe(doc, para));
+        }
+
+        if (paragraphes.isEmpty()) {
+            return;
+        }
+
+        //  3. Ouvrir la boîte de dialogue
+        Window parent = SwingUtilities.getWindowAncestor(this);
+        HSortDialog dialog = new HSortDialog(parent, paragraphes);
+        dialog.setVisible(true);
+
+        if (!dialog.isConfirme()) {
+            return; // l'utilisateur a annulé
+        }
+        // ---- 4. Trier ----
+        List<HSortCritere> criteres = dialog.getCriteres();
+        HSortOptions options = dialog.getOptions();
+
+        List<HParagrapheAvecStyle> tries
+                = HSortMoteur.trier(paragraphes, criteres, options);
+
+        // ---- 5. Réécrire dans le document ----
+        réécrireParagraphes(doc, racine, tries, indexDebut, indexFin);
+
+        // Remettre le focus sur la zone de texte
+        requestFocusInWindow();
+    }
+
+    // =========================================================================
+    // Extraction d'un paragraphe avec son style
+    // =========================================================================
+    /**
+     * Extrait le texte et les styles d'un paragraphe du document.
+     *
+     * <p>
+     * Pour chaque caractère du paragraphe, on copie ses attributs dans un
+     * tableau {@code AttributeSet[]}. On copie également le
+     * {@link htextarea.paragraph.HParagraphConfig} du paragraphe.</p>
+     *
+     * @param doc le document
+     * @param para l'élément paragraphe
+     * @return le conteneur texte + style
+     */
+    private HParagrapheAvecStyle extraireParagraphe(StyledDocument doc,
+            Element para) {
+        int debut = para.getStartOffset();
+        int fin = para.getEndOffset();
+
+        // Texte brut sans le \n final
+        String texte;
+        try {
+            int longueur = fin - debut;
+            String brut = doc.getText(debut, longueur);
+            // Retirer le \n final s'il existe
+            texte = brut.endsWith("\n")
+                    ? brut.substring(0, brut.length() - 1)
+                    : brut;
+        } catch (BadLocationException e) {
+            texte = "";
+        }
+
+        // Attributs de chaque caractère
+        AttributeSet[] attrs = new AttributeSet[texte.length()];
+        for (int i = 0; i < texte.length(); i++) {
+            Element charElem = doc.getCharacterElement(debut + i);
+            // Copie défensive pour éviter les références partagées
+            attrs[i] = charElem.getAttributes().copyAttributes();
+        }
+
+        // Config de paragraphe (puce, bordure, alignement...)
+        Object configObj = para.getAttributes()
+                .getAttribute(HAttributeKeys.PARAGRAPH_STYLE);
+        HParagraphConfig configPara = (configObj instanceof HParagraphConfig c)
+                        ? c : null;
+
+        return new HParagrapheAvecStyle(texte, attrs, configPara);
+    }
+
+    // =========================================================================
+    // Réécriture des paragraphes triés dans le document
+    // =========================================================================
+    /**
+     * Réécrit les paragraphes triés dans le {@code StyledDocument}.
+     *
+     * <h3>Algorithme</h3>
+     * <ol>
+     * <li>Supprimer le contenu existant entre le premier et le dernier
+     * paragraphe à remplacer.</li>
+     * <li>Insérer les paragraphes triés dans l'ordre, chacun suivi d'un
+     * {@code \n} (sauf le dernier).</li>
+     * <li>Réappliquer les attributs de caractère et de paragraphe.</li>
+     * </ol>
+     *
+     * @param doc le document
+     * @param racine l'élément racine du document
+     * @param tries les paragraphes triés
+     * @param idxDebut index du premier paragraphe à remplacer
+     * @param idxFin index du dernier paragraphe à remplacer
+     */
+    private void réécrireParagraphes(StyledDocument doc, Element racine,
+            List<HParagrapheAvecStyle> tries,
+            int idxDebut, int idxFin) {
+        try {
+            // Position de début et de fin dans le document
+            int posDebut = racine.getElement(idxDebut).getStartOffset();
+            int posFin = racine.getElement(idxFin).getEndOffset();
+
+            // Longueur totale à supprimer (on garde le \n final du dernier para)
+            int longueurASupprimer = posFin - posDebut;
+            // Ne pas supprimer le tout dernier \n du document
+            if (posFin >= doc.getLength()) {
+                longueurASupprimer = doc.getLength() - posDebut;
+            }
+
+            // Supprimer le contenu existant
+            doc.remove(posDebut, longueurASupprimer);
+
+            // Insérer les paragraphes triés
+            int posInsertion = posDebut;
+
+            for (int i = 0; i < tries.size(); i++) {
+                HParagrapheAvecStyle para = tries.get(i);
+                String texte = para.getText();
+
+                // Insérer le texte du paragraphe sans attributs d'abord
+                doc.insertString(posInsertion, texte, null);
+
+                // Réappliquer les attributs caractère par caractère
+                AttributeSet[] attrs = para.getAttrsParCaractere();
+                if (attrs != null) {
+                    for (int j = 0; j < Math.min(texte.length(), attrs.length); j++) {
+                        if (attrs[j] != null) {
+                            doc.setCharacterAttributes(
+                                    posInsertion + j, 1, attrs[j], true);
+                        }
+                    }
+                }
+
+                // Réappliquer les attributs de paragraphe
+                htextarea.paragraph.HParagraphConfig config
+                        = para.getConfigParagraphe();
+                if (config != null) {
+                    // Construire les attributs Swing natifs + notre config
+                    SimpleAttributeSet paraAttrs = new SimpleAttributeSet();
+                    StyleConstants.setAlignment(paraAttrs, config.getAlignement());
+                    StyleConstants.setLeftIndent(paraAttrs, config.getLeftIndent());
+                    StyleConstants.setRightIndent(paraAttrs, config.getRightIndent());
+                    StyleConstants.setFirstLineIndent(paraAttrs, config.getFirstLineIndent());
+                    StyleConstants.setLineSpacing(paraAttrs, config.getLineSpacing());
+                    StyleConstants.setSpaceAbove(paraAttrs, config.getSpaceBefore());
+                    StyleConstants.setSpaceBelow(paraAttrs, config.getSpaceAfter());
+                    paraAttrs.addAttribute(HAttributeKeys.PARAGRAPH_STYLE, config);
+
+                    doc.setParagraphAttributes(posInsertion, texte.length(),
+                            paraAttrs, false);
+                }
+
+                posInsertion += texte.length();
+
+                // Insérer le \n séparateur sauf après le dernier paragraphe
+                if (i < tries.size() - 1) {
+                    doc.insertString(posInsertion, "\n", null);
+                    posInsertion += 1;
+                }
+            }
+
+        } catch (BadLocationException e) {
+            // Position invalide — on ignore pour ne pas planter
+            // Dans un cas réel on pourrait logguer l'erreur
+        }
+
+        repaint();
     }
 
 }
