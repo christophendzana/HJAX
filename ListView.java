@@ -26,6 +26,8 @@ public class ListView extends HView {
 
     private PucesStyle puces = PucesStyle.ALPHA_NUMERIC;
 
+    private PuceRenderer customRenderer;
+
     private int interligne = 3;
 
     /**
@@ -212,12 +214,7 @@ public class ListView extends HView {
                 return 10;
             }
         },
-        QUATRE_LOSANGES() {
-            @Override
-            public int largeur() {
-                return 16;
-            }
-        },;
+        CUSTOM(),;
 
         private PucesStyle() {
         }
@@ -278,6 +275,14 @@ public class ListView extends HView {
             throw new IllegalArgumentException("Bad Argument: Indent");
         }
         this.indent = indent;
+    }
+
+    public void setCustomRenderer(PuceRenderer renderer) {
+        this.customRenderer = renderer;
+    }
+
+    public PuceRenderer getCustomRenderer() {
+        return customRenderer;
     }
 
     @Override
@@ -380,17 +385,19 @@ public class ListView extends HView {
                         dessinerLosange((Graphics2D) g.create(), decalageX, y - puces.largeur(), puces.largeur());
                     case COCHE ->
                         dessinerCoche((Graphics2D) g.create(), decalageX, y - puces.largeur(), puces.largeur());
-                    case QUATRE_LOSANGES ->
-                        dessinerQuatreLosanges(
-                                (Graphics2D) g.create(),
-                                decalageX,
-                                y - puces.largeur() + 2,
-                                puces.largeur());
+                    case CUSTOM -> {
+                        if (customRenderer == null) {
+                            throw new IllegalStateException("Aucun renderer défini");
+                        }
+                        customRenderer.dessiner(g, decalageX, y, customRenderer.largeur());
+                    }
                     default -> {
                     }
                 }
-
-                int gap = decalageX + puces.largeur() + gapList;
+                
+                //ligne de calcul de gap doit tenir compte du renderer personnalisé quand il est actif
+                int largeurPuceActive = (puces == PucesStyle.CUSTOM) ? customRenderer.largeur() : puces.largeur();
+                int gap = decalageX + largeurPuceActive + gapList;
                 g.drawString(buffer.toString(), gap, y);
             }
         }
@@ -520,6 +527,18 @@ public class ListView extends HView {
         diamond.lineTo(cx - d / 2.0, cy);
         diamond.closePath();
         g2d.fill(diamond);
+    }
+
+    /**
+     * Permet à l'utilisateur de ListView de définir sa propre puce, sans avoir
+     * à modifier ListView elle-même. Même principe que TreeCellRenderer dans
+     * JTree : ListView ne connaît rien du contenu du dessin, elle délègue.
+     */
+    public interface PuceRenderer {
+
+        void dessiner(Graphics g, int x, int y, int taille);
+
+        int largeur();
     }
 
 }

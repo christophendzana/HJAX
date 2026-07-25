@@ -42,6 +42,8 @@ public class ListView2 extends HView {
      */
     private PucesStyle puces = PucesStyle.ROND;
 
+    private PuceRenderer customRenderer;
+
     /**
      * Format des nombres/lettres par niveau, utilisé uniquement en mode
      * NUMEROTEE
@@ -200,6 +202,14 @@ public class ListView2 extends HView {
         return numero.toString();
     }
 
+    public void setCustomRenderer(PuceRenderer renderer) {
+        this.customRenderer = renderer;
+    }
+
+    public PuceRenderer getCustomRenderer() {
+        return customRenderer;
+    }
+
     @Override
     public void Paint(Graphics g, int x, int y) {
 
@@ -253,10 +263,21 @@ public class ListView2 extends HView {
                 g.drawString(texte, xNiveau + largeurNumero + listGap, y);
 
             } else {
-                puces.dessiner(g, xNiveau, y);
+                if (puces == PucesStyle.CUSTOM) {
+                    if (customRenderer == null) {
+                        throw new IllegalStateException("Aucun renderer défini : appeler setCustomRenderer(...) avant Paint()");
+                    }
+                    customRenderer.dessiner(g, xNiveau, y, customRenderer.largeur());
 
-                int largeurPuce = puces.largeur();
-                g.drawString(texte, xNiveau + largeurPuce + listGap, y);
+                    int largeurPuce = customRenderer.largeur();
+                    g.drawString(texte, xNiveau + largeurPuce + listGap, y);
+
+                } else {
+                    puces.dessiner(g, xNiveau, y);
+
+                    int largeurPuce = puces.largeur();
+                    g.drawString(texte, xNiveau + largeurPuce + listGap, y);
+                }
             }
         }
     }
@@ -454,27 +475,10 @@ public class ListView2 extends HView {
             public int largeur() {
                 return 10;
             }
-        },
-        QUATRE_LOSANGES {
+        }, CUSTOM {
             @Override
-            public void dessiner(Graphics g, int x, int y) {
-                Graphics2D g2d = (Graphics2D) g;
-                g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int size = largeur();
-                int yTop = y - size + 2;
-                int d = size / 3;
-                int centerX = x + size / 2;
-                int centerY = yTop + size / 2;
-                int offset = d;
-                dessinerUnLosange(g2d, centerX, centerY - offset, d);
-                dessinerUnLosange(g2d, centerX - offset, centerY, d);
-                dessinerUnLosange(g2d, centerX + offset, centerY, d);
-                dessinerUnLosange(g2d, centerX, centerY + offset, d);
-            }
-
-            @Override
-            public int largeur() {
-                return 16;
+            public void dessiner(Graphics g, int x, int y) {  
+                
             }
         },;
 
@@ -483,16 +487,6 @@ public class ListView2 extends HView {
          * ListGap
          */
         static final int TAILLE = 6;
-
-        private static void dessinerUnLosange(Graphics2D g2d, int cx, int cy, int d) {
-            Path2D.Double diamond = new Path2D.Double();
-            diamond.moveTo(cx, cy - d / 2.0);
-            diamond.lineTo(cx + d / 2.0, cy);
-            diamond.lineTo(cx, cy + d / 2.0);
-            diamond.lineTo(cx - d / 2.0, cy);
-            diamond.closePath();
-            g2d.fill(diamond);
-        }
 
         public abstract void dessiner(Graphics g, int x, int y);
 
@@ -509,4 +503,12 @@ public class ListView2 extends HView {
             // no-op par défaut, seule IMAGE la redéfinit
         }
     }
+
+    public interface PuceRenderer {
+
+        void dessiner(Graphics g, int x, int y, int taille);
+
+        int largeur();
+    }
+
 }
