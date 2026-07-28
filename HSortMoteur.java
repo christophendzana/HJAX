@@ -1,13 +1,10 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
 package htextarea.sort;
 
 import java.text.Collator;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 
 /**
  * Moteur de tri des paragraphes.
@@ -16,8 +13,12 @@ import java.util.*;
  * l'interface. Elle reçoit une liste de paragraphes avec leurs styles, les
  * critères et options de tri, et retourne la liste réordonnée.
  *
+ * NOTE: la logique « brute » de comparaison a été extraite vers SortView.
+ * HSortMoteur prépare les données (List<String>), appelle SortView et reconstruit
+ * la liste de HParagrapheAvecStyle selon la permutation renvoyée.
+ *
  * @author FIDELE
- * @version 1.0
+ * @version 1.1
  */
 public class HSortMoteur {
 
@@ -30,10 +31,14 @@ public class HSortMoteur {
     };
 
     // =========================================================================
-    // Point d'entrée principal
+    // Point d'entrée principal (synchrones)
     // =========================================================================
     /**
      * Trie une liste de paragraphes selon les critères et options donnés.
+     *
+     * Cette implémentation délègue le tri « brut » à SortView (qui travaille
+     * uniquement sur des Strings), puis reconstruit la liste de paragraphes
+     * stylés selon la permutation renvoyée.
      *
      * @param paragraphes la liste des paragraphes à trier (avec leurs styles)
      * @param criteres les 1 à 3 critères de tri (les inactifs sont ignorés)
@@ -49,43 +54,149 @@ public class HSortMoteur {
             return new ArrayList<>();
         }
 
-        // Séparer l'en-tête du reste si nécessaire
-        HParagrapheAvecStyle enTete = null;
-        List<HParagrapheAvecStyle> aTriar;
-
-        if (options.isLigneEnTete() && paragraphes.size() > 1) {
-            // La première ligne est figée — on ne la trie pas
-            enTete = paragraphes.get(0);
-            aTriar = new ArrayList<>(paragraphes.subList(1, paragraphes.size()));
-        } else {
-            aTriar = new ArrayList<>(paragraphes);
+        // 1) Construire la liste de chaînes (texte brut) depuis les paragraphes
+        List<String> texts = new ArrayList<>(paragraphes.size());
+        for (HParagrapheAvecStyle p : paragraphes) {
+            texts.add(p == null ? "" : p.getText());
         }
 
-        // Construire le Comparator depuis les critères actifs
-        Comparator<HParagrapheAvecStyle> comparateur = construireComparateur(
-                criteres, options);
+        // 2) Construire les Options pour SortView depuis HSortOptions
+        SortView.Options svOptions = new SortView.Options()
+                .setRespecterCasse(options.isRespecterCasse())
+                .setLocale(options.getLocale())
+                .setLigneEnTete(options.isLigneEnTete())
+                .setStable(true);
 
-        aTriar.sort(comparateur);
-
-        // Reconstruire la liste finale avec l'en-tête en tête si nécessaire
-        List<HParagrapheAvecStyle> resultat = new ArrayList<>();
-        if (enTete != null) {
-            resultat.add(enTete);
+        // Traduire le séparateur
+        switch (options.getSeparateur()) {
+            case TABULATION -> svOptions.setSeparateur(SortView.Options.Separateur.TABULATION);
+            case POINT_VIRGULE -> svOptions.setSeparateur(SortView.Options.Separateur.POINT_VIRGULE);
+            case AUTRE -> svOptions.setSeparateur(SortView.Options.Separateur.AUTRE).setSeparateurAutre(options.getSeparateurAutre());
+            default -> svOptions.setSeparateur(SortView.Options.Separateur.AUCUN);
         }
-        resultat.addAll(aTriar);
+
+        // 3) Traduire les critères actifs vers SortView.Criterion
+        List<SortView.Criterion> svCriteria = new ArrayList<>();
+        if (criteres != null) {
+            for (HSortCritere c : criteres) {
+                if (c == null || !c.isActif()) continue;
+                SortView.Criterion.Type t = switch (c.getType()) {
+                    case NOMBRE -> SortView.Criterion.Type.NOMBRE;
+                    case DATE -> SortView.Criterion.Type.DATE;
+                    default -> SortView.Criterion.Type.TEXTE;
+                };
+                SortView.Criterion.Sens s = (c.getSens() == HSortCritere.Sens.DECROISSANT)
+                        ? SortView.Criterion.Sens.DECROISSANT
+                        : SortView.Criterion.Sens.CROISSANT;
+                svCriteria.add(new SortView.Criterion(c.getChamp(), t, s));
+            }
+        }
+
+        // 4) Déléguer le tri à SortView
+        SortView sorter = new SortView(texts, svOptions, svCriteria);
+        SortView.Result result = sorter.sort();
+
+        // 5) Recomposer la liste de paragraphes stylés à partir de la permutation
+        List<HParagrapheAvecStyle> resultat = new ArrayList<>(result.permutation.length);
+        for (int i = 0; i < result.permutation.length; i++) {
+            int origIndex = result.permutation[i];
+            if (origIndex >= 0 && origIndex < paragraphes.size()) {
+                resultat.add(paragraphes.get(origIndex));
+            }
+        }
 
         return resultat;
     }
 
     // =========================================================================
-    // Construction du Comparator 
+    // Version asynchrone
     // =========================================================================
     /**
-     * Construit un {@link Comparator} chaîné depuis la liste des critères.
+     * Version asynchrone du tri : exécute le calcul de tri hors du thread
+     * appelant (par ex. hors de l'EDT) et renvoie un CompletableFuture qui
+     * contient la liste de paragraphes réordonnée.
      *
-     * Les critères inactifs sont ignorés. Si aucun critère n'est actif, on
-     * retourne un comparateur neutre.
+     * Important : cette méthode calcule et reconstruit les paragraphes, mais
+     * n'applique pas les changements dans le StyledDocument. L'appelant (par
+     * exemple HTextArea) doit appliquer la liste retournée sur l'EDT et gérer
+     * l'undo si nécessaire.
+     *
+     * @param paragraphes la liste d'origine (avec style)
+     * @param criteres les critères HSortCritere (1..3) - inactifs ignorés
+     * @param options options HSortOptions
+     * @param executor executor optionnel; si null, ForkJoinPool.commonPool() est utilisé
+     * @return CompletableFuture qui contiendra la liste réordonnée
      */
+    public static CompletableFuture<List<HParagrapheAvecStyle>> trierAsync(
+            List<HParagrapheAvecStyle> paragraphes,
+            List<HSortCritere> criteres,
+            HSortOptions options,
+            Executor executor) {
+
+        if (paragraphes == null || paragraphes.isEmpty()) {
+            return CompletableFuture.completedFuture(new ArrayList<>());
+        }
+
+        // Construire la liste de textes
+        List<String> texts = new ArrayList<>(paragraphes.size());
+        for (HParagrapheAvecStyle p : paragraphes) {
+            texts.add(p == null ? "" : p.getText());
+        }
+
+        // Construire options SortView
+        SortView.Options svOptions = new SortView.Options()
+                .setRespecterCasse(options.isRespecterCasse())
+                .setLocale(options.getLocale())
+                .setLigneEnTete(options.isLigneEnTete())
+                .setStable(true);
+
+        switch (options.getSeparateur()) {
+            case TABULATION -> svOptions.setSeparateur(SortView.Options.Separateur.TABULATION);
+            case POINT_VIRGULE -> svOptions.setSeparateur(SortView.Options.Separateur.POINT_VIRGULE);
+            case AUTRE -> svOptions.setSeparateur(SortView.Options.Separateur.AUTRE).setSeparateurAutre(options.getSeparateurAutre());
+            default -> svOptions.setSeparateur(SortView.Options.Separateur.AUCUN);
+        }
+
+        // Construire critères
+        List<SortView.Criterion> svCriteria = new ArrayList<>();
+        if (criteres != null) {
+            for (HSortCritere c : criteres) {
+                if (c == null || !c.isActif()) continue;
+                SortView.Criterion.Type t = switch (c.getType()) {
+                    case NOMBRE -> SortView.Criterion.Type.NOMBRE;
+                    case DATE -> SortView.Criterion.Type.DATE;
+                    default -> SortView.Criterion.Type.TEXTE;
+                };
+                SortView.Criterion.Sens s = (c.getSens() == HSortCritere.Sens.DECROISSANT)
+                        ? SortView.Criterion.Sens.DECROISSANT
+                        : SortView.Criterion.Sens.CROISSANT;
+                svCriteria.add(new SortView.Criterion(c.getChamp(), t, s));
+            }
+        }
+
+        Executor exec = executor != null ? executor : ForkJoinPool.commonPool();
+        SortView sorter = new SortView(texts, svOptions, svCriteria);
+
+        // Lancer le tri asynchrone et reconstruire la liste à la complétion
+        return sorter.sortAsync(exec)
+                .thenApply(result -> {
+                    List<HParagrapheAvecStyle> reordered = new ArrayList<>(result.permutation.length);
+                    for (int i = 0; i < result.permutation.length; i++) {
+                        int origIndex = result.permutation[i];
+                        if (origIndex >= 0 && origIndex < paragraphes.size()) {
+                            reordered.add(paragraphes.get(origIndex));
+                        }
+                    }
+                    return reordered;
+                });
+    }
+
+    // =========================================================================
+    // Les méthodes suivantes (comparateurs, extraction, parsing) sont conservées
+    // pour compatibilité et référence ; la logique de tri principale est faite
+    // par SortView.
+    // =========================================================================
+
     private static Comparator<HParagrapheAvecStyle> construireComparateur(
             List<HSortCritere> criteres, HSortOptions options) {
 
@@ -108,22 +219,13 @@ public class HSortMoteur {
         return (comp != null) ? comp : Comparator.comparing(HParagrapheAvecStyle::getText);
     }
 
-    /**
-     * Crée un {@link Comparator} pour un seul critère de tri.
-     *
-     * <p>
-     * Extrait la valeur à comparer depuis le paragraphe (texte entier ou
-     * colonne spécifique), puis compare selon le type (texte, nombre, date) et
-     * applique le sens (croissant ou décroissant).</p>
-     */
     private static Comparator<HParagrapheAvecStyle> comparateurPourCritere(
             HSortCritere critere, HSortOptions options) {
 
-        // Collator pour le tri textuel (gère les accents, la locale, la casse)
         Collator collator = Collator.getInstance(options.getLocale());
         collator.setStrength(options.isRespecterCasse()
-                ? Collator.TERTIARY // distingue la casse
-                : Collator.SECONDARY // ignore la casse, respecte les accents
+                ? Collator.TERTIARY
+                : Collator.SECONDARY
         );
 
         Comparator<HParagrapheAvecStyle> comp;
@@ -131,7 +233,6 @@ public class HSortMoteur {
         switch (critere.getType()) {
 
             case NOMBRE -> {
-                // Tri numérique : extraire le nombre et comparer les doubles
                 comp = Comparator.comparingDouble(p -> {
                     String val = extraireValeur(p.getText(), critere.getChamp(), options);
                     return parseNombre(val);
@@ -139,7 +240,6 @@ public class HSortMoteur {
             }
 
             case DATE -> {
-                // Tri chronologique : parser la date et comparer les timestamps
                 comp = Comparator.comparingLong(p -> {
                     String val = extraireValeur(p.getText(), critere.getChamp(), options);
                     return parseDate(val);
@@ -147,7 +247,6 @@ public class HSortMoteur {
             }
 
             default -> {
-                // Tri textuel avec Collator (gère locale et casse)
                 comp = (a, b) -> {
                     String va  = extraireValeur(a.getText(), critere.getChamp(), options);
                     String vb = extraireValeur(b.getText(), critere.getChamp(), options);
@@ -156,7 +255,6 @@ public class HSortMoteur {
             }
         }
 
-        // Inverser si décroissant
         if (critere.getSens() == HSortCritere.Sens.DECROISSANT) {
             comp = comp.reversed();
         }
@@ -164,40 +262,22 @@ public class HSortMoteur {
         return comp;
     }
 
-    // =========================================================================
-    // Extraction de valeur depuis un paragraphe
-    // =========================================================================
-    /**
-     * Extrait la valeur à comparer depuis le texte d'un paragraphe.
-     *
-     * Si le champ est "Paragraphes" ou si pas de séparateur → texte entier. Si
-     * le champ est "Colonne N" → on découpe le texte et on prend la Nème
-     * colonne.
-     *
-     * @param texte le texte du paragraphe
-     * @param champ le champ demandé ("Paragraphes", "Colonne 1", etc.)
-     * @param options les options (pour le séparateur)
-     * @return la valeur à comparer
-     */
     private static String extraireValeur(String texte, String champ,
             HSortOptions options) {
         if (texte == null) {
             return "";
         }
 
-        // Si pas de séparateur ou champ = "Paragraphes" → texte entier
         if (!options.aUnSeparateur() || champ == null
                 || champ.equalsIgnoreCase("Paragraphes")) {
             return texte.trim();
         }
 
-        // Extraire le numéro de colonne depuis "Colonne N"
         int numColonne = extraireNumeroColonne(champ);
         if (numColonne < 1) {
             return texte.trim();
         }
 
-        // Découper le texte selon le séparateur
         String sep = String.valueOf(options.getCaractereSeparateur());
         String[] parts = texte.split(sep, -1);
 
@@ -205,10 +285,6 @@ public class HSortMoteur {
         return (index < parts.length) ? parts[index].trim() : "";
     }
 
-    /**
-     * Extrait le numéro depuis "Colonne N". Retourne -1 si le format est
-     * invalide.
-     */
     private static int extraireNumeroColonne(String champ) {
         if (champ == null) {
             return -1;
@@ -221,40 +297,17 @@ public class HSortMoteur {
         }
     }
 
-    // =========================================================================
-    // Parsing des types
-    // =========================================================================
-    /**
-     * Extrait et parse le premier nombre trouvé dans une chaîne.
-     *
-     * On cherche le premier nombre dans la chaîne et trie sur cette valeur.
-     *
-     * <p>
-     * Exemples :</p>
-     * <ul>
-     * <li>"Paragraphe 10" → 10.0</li>
-     * <li>"100" → 100.0</li>
-     * <li>"Prix : 3,50 €" → 3.5</li>
-     * <li>"Aucun chiffre" → Double.MAX_VALUE (repoussé en fin)</li>
-     * </ul>
-     *
-     * @param valeur la chaîne à analyser
-     * @return le premier nombre trouvé, ou {@code Double.MAX_VALUE} si aucun
-     */
     private static double parseNombre(String valeur) {
         if (valeur == null || valeur.isBlank()) {
             return Double.MAX_VALUE;
         }
 
-        // Chercher la première séquence de chiffres (avec virgule/point décimal)
-        // Le pattern reconnaît : 10, 3.5, 3,5, -42, +100
         java.util.regex.Matcher m = java.util.regex.Pattern
                 .compile("-?\\d+([.,]\\d+)?")
                 .matcher(valeur);
 
         if (m.find()) {
             try {
-                // Normaliser la virgule décimale en point
                 return Double.parseDouble(m.group().replace(',', '.'));
             } catch (NumberFormatException e) {
                 return Double.MAX_VALUE;
@@ -263,33 +316,11 @@ public class HSortMoteur {
         return Double.MAX_VALUE;
     }
 
-    /**
-     * Extrait et parse la première date trouvée dans une chaîne.
-     *
-     * <p>
-     * Même logique que {@link #parseNombre} : on cherche la première séquence
-     * qui ressemble à une date dans la chaîne, puis on la parse.</p>
-     *
-     * <p>
-     * Exemples :</p>
-     * <ul>
-     * <li>"15/03/1979" → timestamp de cette date</li>
-     * <li>"Martin;Jean;45;15/03/1979" → timestamp de 15/03/1979</li>
-     * <li>"Livraison prévue le 01/01/1996" → timestamp de 01/01/1996</li>
-     * <li>"Pas de date" → Long.MAX_VALUE</li>
-     * </ul>
-     *
-     * @param valeur la chaîne à analyser
-     * @return le timestamp de la première date trouvée, ou
-     * {@code Long.MAX_VALUE} si aucune date reconnue
-     */
     private static long parseDate(String valeur) {
         if (valeur == null || valeur.isBlank()) {
             return Long.MAX_VALUE;
         }
 
-        // Chercher les séquences qui ressemblent à une date dans la chaîne
-        // Pattern large : groupe de chiffres séparés par / - ou espace
         java.util.regex.Matcher m = java.util.regex.Pattern
                 .compile("\\d{1,2}[/\\-]\\d{1,2}[/\\-]\\d{2,4}"
                         + "|\\d{4}[/\\-]\\d{1,2}[/\\-]\\d{1,2}")
@@ -297,7 +328,6 @@ public class HSortMoteur {
 
         while (m.find()) {
             String candidat = m.group();
-            // Essayer tous les formats connus sur ce candidat
             for (String format : FORMATS_DATE) {
                 try {
                     java.text.SimpleDateFormat sdf
@@ -306,7 +336,6 @@ public class HSortMoteur {
                     sdf.setLenient(false);
                     return sdf.parse(candidat).getTime();
                 } catch (java.text.ParseException ignored) {
-                    // Essayer le format suivant
                 }
             }
         }
@@ -316,20 +345,8 @@ public class HSortMoteur {
 
     // =======================================================================
     // Utilitaire — déterminer le nombre de colonnes dans un ensemble de
-    // paragraphes 
-    // =============================================================
-    /**
-     * Calcule le nombre maximum de colonnes trouvé dans l'ensemble des
-     * paragraphes, selon le séparateur défini dans les options.
-     *
-     * <p>
-     * Utilisé par HSortDialog pour construire les choix "Colonne 1", "Colonne
-     * 2"... dans les combos "Trier par".</p>
-     *
-     * @param paragraphes la liste des paragraphes
-     * @param options les options (pour le séparateur)
-     * @return le nombre max de colonnes (0 si pas de séparateur)
-     */
+    // paragraphes
+    // =======================================================================
     public static int compterColonnesMax(List<HParagrapheAvecStyle> paragraphes,
             HSortOptions options) {
         if (!options.aUnSeparateur() || paragraphes == null) {
