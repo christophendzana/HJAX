@@ -17,86 +17,87 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ForkJoinPool;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import view.HView;
 
 /**
  * SortView
  * <p>
  * Classe complètement autonome qui réalise le tri « brut » sur une liste de
  * chaînes (List<String>) selon des options et jusqu'à 3 critères. Elle ne
- * touche pas au document, aux styles, ni à l'UI : elle retourne simplement la
- * liste triée et un tableau de permutation indiquant d'où venait chaque ligne.
+ * touche pas au document ni aux styles ; l'affichage (Paint) reste disponible
+ * en option pour l'utilisateur qui souhaite un rendu rapide, mais la classe
+ * n'hérite plus d'aucun composant graphique : elle peut être utilisée dans un
+ * contexte purement logique (tests, export, etc.).
  * </p>
- * 
+ *
  * Utilisation typique : - Construire une instance avec la liste et les
- * options/critères, ou avec un CustomComparator pour un tri entièrement
+ * options/critères, ou avec un Comparator<String> pour un tri entièrement
  * personnalisé. - Appeler sort() pour un résultat synchrone ou
  * sortAsync(executor) pour exécuter le tri hors de l'EDT.
  *
- * Le Result contient : List<String> sortedLines et int[] permutation tel que
+ * Le Result expose : getSortedLines() et getPermutation() tel que
  * permutation[newIndex] = oldIndex.
  */
-public class SortView extends HView {
+public class SortView {
 
-    // Formats de date reconnus (mêmes que HSortMoteur)
-    private static final String[] FORMATS_DATE = {
+    // Formats de date reconnus
+    private static final String[] DATE_FORMATS = {
         "dd/MM/yyyy", "dd-MM-yyyy", "MM/dd/yyyy",
         "yyyy-MM-dd", "dd/MM/yy", "d MMMM yyyy"
     };
 
-    // Pattern pour extraire le premier nombre (même logique que HSortMoteur)
+    // Pattern pour extraire le premier nombre
     private static final Pattern NUMBER_PATTERN = Pattern.compile("-?\\d+([.,]\\d+)?");
 
     // ---------------------------------------------------------------------
-    // Classes internes pour Options, Criterion (copie de HSortCritere) et Result
+    // Classes internes pour Options, Critères et Result
     // ---------------------------------------------------------------------
     /**
-     * Options générales de tri (reprend les champs de HSortOptions).
+     * Options générales de tri.
      */
     public static class Options {
 
-        public enum Separateur {
-            AUCUN,
-            TABULATION,
-            POINT_VIRGULE,
-            AUTRE
+        public enum Separator {
+            NONE,
+            TAB,
+            SEMICOLON,
+            OTHER
         }
 
-        private Separateur separateur = Separateur.AUCUN;
-        private char separateurAutre = ',';
-        private boolean respecterCasse = false; // false = ignore case
+        private Separator separator = Separator.NONE;
+        private char otherSeparator = '-';
+        private boolean respectCase = false; // false = ignore case
         private Locale locale = Locale.getDefault();
-        private boolean ligneEnTete = false;
+        private boolean headerLine = false;
         private boolean stable = true; // par défaut nous garantissons la stabilité
 
         public Options() {
         }
 
         // Getters / setters fluides
-        public Separateur getSeparateur() {
-            return separateur;
+        public Separator getSeparator() {
+            return separator;
         }
 
-        public Options setSeparateur(Separateur s) {
-            this.separateur = s;
+        public Options setSeparator(Separator s) {
+            this.separator = s;
             return this;
         }
 
-        public char getSeparateurAutre() {
-            return separateurAutre;
+        public char getOtherSeparator() {
+            return otherSeparator;
         }
 
-        public Options setSeparateurAutre(char c) {
-            this.separateurAutre = c;
+        public Options setOtherSeparator(char c) {
+            this.otherSeparator = c;
             return this;
         }
 
-        public boolean isRespecterCasse() {
-            return respecterCasse;
+        public boolean isRespectCase() {
+            return respectCase;
         }
 
-        public Options setRespecterCasse(boolean b) {
-            this.respecterCasse = b;
+        public Options setRespectCase(boolean b) {
+            this.respectCase = b;
             return this;
         }
 
@@ -109,12 +110,12 @@ public class SortView extends HView {
             return this;
         }
 
-        public boolean isLigneEnTete() {
-            return ligneEnTete;
+        public boolean isHeaderLine() {
+            return headerLine;
         }
 
-        public Options setLigneEnTete(boolean ligneEnTete) {
-            this.ligneEnTete = ligneEnTete;
+        public Options setHeaderLine(boolean headerLine) {
+            this.headerLine = headerLine;
             return this;
         }
 
@@ -127,20 +128,20 @@ public class SortView extends HView {
             return this;
         }
 
-        // Helper : indique si un séparateur actif est défini
-        public boolean aUnSeparateur() {
-            return separateur != Separateur.AUCUN;
+        // Indique si un séparateur actif est défini
+        public boolean hasSeparator() {
+            return separator != Separator.NONE;
         }
 
         // Retourne le caractère séparateur effectif
-        public char getCaractereSeparateur() {
-            return switch (separateur) {
-                case TABULATION ->
+        public char getSeparatorChar() {
+            return switch (separator) {
+                case TAB ->
                     '\t';
-                case POINT_VIRGULE ->
+                case SEMICOLON ->
                     ';';
-                case AUTRE ->
-                    separateurAutre;
+                case OTHER ->
+                    otherSeparator;
                 default ->
                     '\0';
             };
@@ -148,49 +149,49 @@ public class SortView extends HView {
     }
 
     /**
-     * Criterion est une copie de HSortCritere (simple et autonome). Il décrit
-     * un niveau de tri : champ ("Paragraphes" ou "Colonne N"), type et sens.
+     * Criteria décrit un niveau de tri : champ ("Paragraphs" ou "Column N"),
+     * type et sens.
      */
-    public static class Criterion {
+    public static class Criteria {
 
         public enum Type {
-            TEXTE,
-            NOMBRE,
+            TEXT,
+            NUMBER,
             DATE
         }
 
-        public enum Sens {
-            CROISSANT,
-            DECROISSANT
+        public enum Direction {
+            ASCENDING,
+            DESCENDING
         }
 
-        private String champ; // "Paragraphes" ou "Colonne N"
-        private Type type = Type.TEXTE;
-        private Sens sens = Sens.CROISSANT;
-        private boolean actif = false;
+        private String field; // "Paragraphs" ou "Column N"
+        private Type type = Type.TEXT;
+        private Direction direction = Direction.ASCENDING;
+        private boolean active = false;
 
-        public Criterion() {
-            this.champ = null;
-            this.type = Type.TEXTE;
-            this.sens = Sens.CROISSANT;
-            this.actif = false;
+        public Criteria() {
+            this.field = null;
+            this.type = Type.TEXT;
+            this.direction = Direction.ASCENDING;
+            this.active = false;
         }
 
-        public Criterion(String champ, Type type, Sens sens) {
-            this.champ = champ;
-            this.type = type == null ? Type.TEXTE : type;
-            this.sens = sens == null ? Sens.CROISSANT : sens;
-            this.actif = champ != null && !champ.isBlank();
+        public Criteria(String field, Type type, Direction direction) {
+            this.field = field;
+            this.type = type == null ? Type.TEXT : type;
+            this.direction = direction == null ? Direction.ASCENDING : direction;
+            this.active = field != null && !field.isBlank();
         }
 
         // Getters / setters
-        public String getChamp() {
-            return champ;
+        public String getField() {
+            return field;
         }
 
-        public void setChamp(String champ) {
-            this.champ = champ;
-            this.actif = champ != null && !champ.isBlank();
+        public void setField(String field) {
+            this.field = field;
+            this.active = field != null && !field.isBlank();
         }
 
         public Type getType() {
@@ -201,40 +202,55 @@ public class SortView extends HView {
             this.type = type;
         }
 
-        public Sens getSens() {
-            return sens;
+        public Direction getDirection() {
+            return direction;
         }
 
-        public void setSens(Sens sens) {
-            this.sens = sens;
+        public void setDirection(Direction direction) {
+            this.direction = direction;
         }
 
-        public boolean isActif() {
-            return actif;
+        public boolean isActive() {
+            return active;
         }
 
-        public void setActif(boolean actif) {
-            this.actif = actif;
+        public void setActive(boolean active) {
+            this.active = active;
         }
 
         @Override
         public String toString() {
-            return "Criterion{" + "champ='" + champ + '\'' + ", type=" + type + ", sens=" + sens + ", actif=" + actif + '}';
+            return "Criteria{" + "field='" + field + '\'' + ", type=" + type + ", direction=" + direction + ", active=" + active + '}';
         }
     }
 
     /**
-     * Resultat du tri : la nouvelle liste et la permutation newIndex ->
-     * oldIndex.
+     * Résultat du tri : la nouvelle liste et la permutation newIndex ->
+     * oldIndex. Les deux informations sont accessibles séparément via
+     * getSortedLines() et getPermutation().
      */
     public static class Result {
 
-        public final List<String> sortedLines;
-        public final int[] permutation; // permutation[newIndex] = oldIndex
+        private final List<String> sortedLines;
+        private final int[] permutation; // permutation[newIndex] = oldIndex
 
         public Result(List<String> sortedLines, int[] permutation) {
             this.sortedLines = Collections.unmodifiableList(new ArrayList<>(sortedLines));
             this.permutation = permutation.clone();
+        }
+
+        /**
+         * Retourne la liste triée (lecture seule).
+         */
+        public List<String> getSortedLines() {
+            return sortedLines;
+        }
+
+        /**
+         * Retourne la permutation newIndex -> oldIndex (copie défensive).
+         */
+        public int[] getPermutation() {
+            return permutation.clone();
         }
 
         /**
@@ -252,44 +268,34 @@ public class SortView extends HView {
         }
     }
 
-    /**
-     * Interface pour le tri personnalisé demandé par l'utilisateur. On a choisi
-     * une interface simple (plutôt qu'utiliser java.util.Comparator) pour
-     * rester explicite et autonome.
-     */
-    public interface CustomComparator {
-
-        int compare(String a, String b);
-    }
-
     // ---------------------------------------------------------------------
     // Instances
     // ---------------------------------------------------------------------
     private final List<String> lines; // copie locale
     private final Options options;
-    private final List<Criterion> criteres; // peut être null/empty
-    private final CustomComparator customComparator; // si non-null, utilisé
+    private final List<Criteria> criteria; // peut être null/empty
+    private final Comparator<String> customComparator; // si non-null, utilisé
 
     /**
-     * Constructeur principal : options + criteres (liste 0..3, les inactifs
+     * Constructeur principal : options + critères (liste 0..3, les inactifs
      * sont ignorés)
      */
-    public SortView(List<String> lines, Options options, List<Criterion> criteres) {
+    public SortView(List<String> lines, Options options, List<Criteria> criteria) {
         this.lines = lines != null ? new ArrayList<>(lines) : new ArrayList<>();
         this.options = options != null ? options : new Options();
-        this.criteres = criteres != null ? new ArrayList<>(criteres) : new ArrayList<>();
+        this.criteria = criteria != null ? new ArrayList<>(criteria) : new ArrayList<>();
         this.customComparator = null;
     }
 
     /**
-     * Constructeur pour un tri entièrement personnalisé via CustomComparator.
-     * Les options/critères sont ignorés dans ce mode (sauf ligneEnTete qui est
+     * Constructeur pour un tri entièrement personnalisé via Comparator<String>.
+     * Les options/critères sont ignorés dans ce mode (sauf headerLine qui est
      * néanmoins respectée).
      */
-    public SortView(List<String> lines, CustomComparator comparator) {
+    public SortView(List<String> lines, Comparator<String> comparator) {
         this.lines = lines != null ? new ArrayList<>(lines) : new ArrayList<>();
         this.options = new Options();
-        this.criteres = new ArrayList<>();
+        this.criteria = new ArrayList<>();
         this.customComparator = comparator;
     }
 
@@ -302,85 +308,42 @@ public class SortView extends HView {
     public Result sort() {
         // Respect de la ligne d'en-tête : on la met de côté
         String header = null;
-        List<String> toSort = lines;
+        List<String> toSort;
         int headerOffset = 0;
-        if (options.isLigneEnTete() && toSort.size() > 0) {
-            header = toSort.get(0);
-            toSort = new ArrayList<>(toSort.subList(1, toSort.size()));
-            headerOffset = 1; // indices in original list are shifted by +1
+        if (options.isHeaderLine() && !lines.isEmpty()) {
+            header = lines.get(0);
+            toSort = new ArrayList<>(lines.subList(1, lines.size()));
+            headerOffset = 1; // les indices de la liste d'origine sont décalés de +1
         } else {
-            toSort = new ArrayList<>(toSort);
+            toSort = new ArrayList<>(lines);
         }
 
         int n = toSort.size();
         if (n == 0) {
-            // nothing to sort — return original with permutation identity
-            List<String> resultLines = new ArrayList<>();
-            if (header != null) {
-                resultLines.add(header);
-            }
-            resultLines.addAll(toSort);
-            int[] perm = new int[resultLines.size()];
-            for (int i = 0; i < perm.length; i++) {
-                perm[i] = i; // trivial
-            }
-            return new Result(resultLines, perm);
+            // rien à trier — indices vides, buildResult gère le cas de l'en-tête seul
+            return buildResult(header, new ArrayList<>());
         }
 
         // Mode custom comparator : on l'utilise directement
         if (customComparator != null) {
-            // Build index list then sort using comparator on the original strings
-            List<Integer> indices = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                indices.add(i + headerOffset);
-            }
-
-            indices.sort((ia, ib) -> {
-                String a = lines.get(ia);
-                String b = lines.get(ib);
-                return customComparator.compare(a, b);
-            });
-
-            // Reconstitute sortedLines and permutation
-            List<String> sorted = new ArrayList<>();
-            if (header != null) {
-                sorted.add(header);
-            }
-            int[] permutation = new int[indices.size() + (header == null ? 0 : 1)];
-            int pos = (header == null) ? 0 : 1;
-            for (int idx : indices) {
-                sorted.add(lines.get(idx));
-                permutation[pos++] = idx;
-            }
-            return new Result(sorted, permutation);
+            List<Integer> indices = absoluteIndices(n, headerOffset);
+            indices.sort((ia, ib) -> customComparator.compare(lines.get(ia), lines.get(ib)));
+            return buildResult(header, indices);
         }
 
         // Préparer la liste des critères actifs
-        List<Criterion> active = new ArrayList<>();
-        for (Criterion c : criteres) {
-            if (c != null && c.isActif()) {
+        List<Criteria> active = new ArrayList<>();
+        for (Criteria c : criteria) {
+            if (c != null && c.isActive()) {
                 active.add(c);
             }
         }
 
         // Si aucun critère actif, tri naturel sur le texte
         if (active.isEmpty()) {
-            List<Integer> indices = new ArrayList<>();
-            for (int i = 0; i < n; i++) {
-                indices.add(i + headerOffset);
-            }
+            List<Integer> indices = absoluteIndices(n, headerOffset);
             indices.sort((ia, ib) -> lines.get(ia).compareTo(lines.get(ib)));
-            List<String> sorted = new ArrayList<>();
-            if (header != null) {
-                sorted.add(header);
-            }
-            int[] permutation = new int[indices.size() + (header == null ? 0 : 1)];
-            int pos = (header == null) ? 0 : 1;
-            for (int idx : indices) {
-                sorted.add(lines.get(idx));
-                permutation[pos++] = idx;
-            }
-            return new Result(sorted, permutation);
+            return buildResult(header, indices);
         }
 
         // Pré-calculer les clés pour chaque ligne et chaque critère
@@ -388,10 +351,10 @@ public class SortView extends HView {
         Object[][] keys = new Object[n][criteriaCount];
         Collator[] collators = new Collator[criteriaCount];
         for (int c = 0; c < criteriaCount; c++) {
-            Criterion cr = active.get(c);
-            if (cr.getType() == Criterion.Type.TEXTE) {
+            Criteria cr = active.get(c);
+            if (cr.getType() == Criteria.Type.TEXT) {
                 Collator coll = Collator.getInstance(options.getLocale());
-                coll.setStrength(options.isRespecterCasse() ? Collator.TERTIARY : Collator.SECONDARY);
+                coll.setStrength(options.isRespectCase() ? Collator.TERTIARY : Collator.SECONDARY);
                 collators[c] = coll;
             } else {
                 collators[c] = null;
@@ -399,34 +362,34 @@ public class SortView extends HView {
         }
 
         for (int i = 0; i < n; i++) {
-            String ligne = toSort.get(i);
+            String line = toSort.get(i);
             for (int c = 0; c < criteriaCount; c++) {
-                Criterion cr = active.get(c);
-                String val = extraireValeur(ligne, cr.getChamp(), options);
+                Criteria cr = active.get(c);
+                String val = extractValue(line, cr.getField(), options);
                 switch (cr.getType()) {
-                    case NOMBRE ->
-                        keys[i][c] = parseNombre(val);
+                    case NUMBER ->
+                        keys[i][c] = parseNumber(val);
                     case DATE ->
                         keys[i][c] = parseDate(val);
                     default ->
-                        keys[i][c] = val; // TEXTE
+                        keys[i][c] = val; // TEXT
                 }
             }
         }
 
         // Indices relatifs (0..n-1) que nous trierons
-        List<Integer> indices = new ArrayList<>();
+        List<Integer> relativeIndices = new ArrayList<>();
         for (int i = 0; i < n; i++) {
-            indices.add(i);
+            relativeIndices.add(i);
         }
 
         // Construire le comparator en utilisant les clés pré-calculées
         Comparator<Integer> indexComparator = (ia, ib) -> {
             for (int c = 0; c < criteriaCount; c++) {
-                Criterion cr = active.get(c);
-                int res = 0;
+                Criteria cr = active.get(c);
+                int res;
                 switch (cr.getType()) {
-                    case NOMBRE -> {
+                    case NUMBER -> {
                         double da = (double) keys[ia][c];
                         double db = (double) keys[ib][c];
                         res = Double.compare(da, db);
@@ -439,40 +402,28 @@ public class SortView extends HView {
                     default -> {
                         String sa = (String) keys[ia][c];
                         String sb = (String) keys[ib][c];
-                        Collator coll = collators[c];
-                        res = coll.compare(sa, sb);
+                        res = collators[c].compare(sa, sb);
                     }
                 }
 
                 if (res != 0) {
                     // Sens décroissant -> inverser le résultat
-                    if (cr.getSens() == Criterion.Sens.DECROISSANT) {
-                        return -res;
-                    }
-                    return res;
+                    return cr.getDirection() == Criteria.Direction.DESCENDING ? -res : res;
                 }
             }
             return 0; // tous les critères égaux
         };
 
-        // Si on veut la stabilité explicite et Java sort est stable (TimSort)
-        // l'appel à sort() gardera la stabilité. Nous utilisons donc Collections.sort.
-        indices.sort(indexComparator);
+        // indices.sort() (TimSort) garantit la stabilité
+        relativeIndices.sort(indexComparator);
 
-        // Construire la liste finale et la permutation (indices relatifs -> indices origine)
-        List<String> sorted = new ArrayList<>();
-        if (header != null) {
-            sorted.add(header);
-        }
-        int[] permutation = new int[indices.size() + (header == null ? 0 : 1)];
-        int pos = (header == null) ? 0 : 1;
-        for (int relIdx : indices) {
-            int origIdx = relIdx + headerOffset; // replacer dans l'index global
-            sorted.add(lines.get(origIdx));
-            permutation[pos++] = origIdx;
+        // Reconvertir les indices relatifs en indices absolus (position dans `lines`)
+        List<Integer> absolute = new ArrayList<>(relativeIndices.size());
+        for (int relIdx : relativeIndices) {
+            absolute.add(relIdx + headerOffset);
         }
 
-        return new Result(sorted, permutation);
+        return buildResult(header, absolute);
     }
 
     /**
@@ -484,33 +435,102 @@ public class SortView extends HView {
         return CompletableFuture.supplyAsync(this::sort, exec);
     }
 
+    /**
+     * Dessine la liste triée. Méthode publique et optionnelle : l'utilisateur
+     * de l'API peut l'ignorer complètement et se contenter de sort().
+     *
+     * Comportement : - Calcule le résultat trié en appelant sort(). - Dessine
+     * chaque ligne triée en partant de la position (x,y) fournie. - Utilise la
+     * police/metrics courante du Graphics passé en paramètre.
+     *
+     * Remarque importante : - Cette méthode appelle sort() et exécute donc la
+     * logique de tri sur le thread courant. Évite d'appeler Paint sur de très
+     * grandes listes depuis l'EDT si le tri est lourd ; dans ce cas, préfère
+     * pré-calculer le Result hors-EDT et stocker le résultat pour la peinture.
+     */
+    public void Paint(Graphics g, int x, int y) {
+        if (g == null) {
+            return;
+        }
+
+        Result result = sort();
+
+        FontMetrics fm = g.getFontMetrics();
+        int lineHeight = fm.getHeight();
+        int ascent = fm.getAscent();
+
+        // Baseline de départ : y correspond au coin supérieur ; on dessine à la baseline
+        int baseline = y + ascent;
+
+        for (String line : result.getSortedLines()) {
+            g.drawString(line != null ? line : "", x, baseline);
+            baseline += lineHeight;
+        }
+    }
+
     // ---------------------------------------------------------------------
-    // Fonctions utilitaires (reprises de HSortMoteur)
+    // Fonctions utilitaires internes
     // ---------------------------------------------------------------------
+    /**
+     * Construit la liste des indices absolus [headerOffset .. headerOffset+n-1],
+     * utilisée comme point de départ avant tri par les branches simples
+     * (comparator personnalisé, tri naturel sans critère).
+     */
+    private List<Integer> absoluteIndices(int n, int headerOffset) {
+        List<Integer> indices = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            indices.add(i + headerOffset);
+        }
+        return indices;
+    }
+
+    /**
+     * Factorise la reconstruction du Result à partir de l'en-tête (optionnel)
+     * et de la liste des indices absolus déjà triés (positions dans `lines`).
+     * Centralise ce qui était auparavant dupliqué dans chaque branche de sort().
+     */
+    private Result buildResult(String header, List<Integer> sortedAbsoluteIndices) {
+        List<String> sorted = new ArrayList<>();
+        if (header != null) {
+            sorted.add(header);
+        }
+
+        int[] permutation = new int[sortedAbsoluteIndices.size() + (header == null ? 0 : 1)];
+        int pos = (header == null) ? 0 : 1;
+        // permutation[0] reste à 0 par défaut quand il y a un en-tête,
+        // ce qui correspond bien à son indice d'origine (0 -> 0).
+        for (int idx : sortedAbsoluteIndices) {
+            sorted.add(lines.get(idx));
+            permutation[pos++] = idx;
+        }
+
+        return new Result(sorted, permutation);
+    }
+
     // Extrait la valeur à comparer : soit le texte entier, soit la colonne N
-    private static String extraireValeur(String texte, String champ, Options options) {
-        if (texte == null) {
+    private static String extractValue(String text, String field, Options options) {
+        if (text == null) {
             return "";
         }
-        if (!options.aUnSeparateur() || champ == null || champ.equalsIgnoreCase("Paragraphes")) {
-            return texte.trim();
+        if (!options.hasSeparator() || field == null || field.equalsIgnoreCase("Paragraphs")) {
+            return text.trim();
         }
-        int numColonne = extraireNumeroColonne(champ);
-        if (numColonne < 1) {
-            return texte.trim();
+        int columnNumber = extractColumnNumber(field);
+        if (columnNumber < 1) {
+            return text.trim();
         }
-        String sep = String.valueOf(options.getCaractereSeparateur());
-        String[] parts = texte.split(sep, -1);
-        int index = numColonne - 1;
+        String sep = String.valueOf(options.getSeparatorChar());
+        String[] parts = text.split(sep, -1);
+        int index = columnNumber - 1;
         return (index < parts.length) ? parts[index].trim() : "";
     }
 
-    private static int extraireNumeroColonne(String champ) {
-        if (champ == null) {
+    private static int extractColumnNumber(String field) {
+        if (field == null) {
             return -1;
         }
         try {
-            String[] parts = champ.trim().split("\\s+");
+            String[] parts = field.trim().split("\\s+");
             return (parts.length >= 2) ? Integer.parseInt(parts[1]) : -1;
         } catch (NumberFormatException e) {
             return -1;
@@ -518,11 +538,11 @@ public class SortView extends HView {
     }
 
     // Parse nombre : retourne Double.MAX_VALUE si aucun nombre trouvé
-    private static double parseNombre(String valeur) {
-        if (valeur == null || valeur.isBlank()) {
+    private static double parseNumber(String value) {
+        if (value == null || value.isBlank()) {
             return Double.MAX_VALUE;
         }
-        Matcher m = NUMBER_PATTERN.matcher(valeur);
+        Matcher m = NUMBER_PATTERN.matcher(value);
         if (m.find()) {
             try {
                 return Double.parseDouble(m.group().replace(',', '.'));
@@ -534,15 +554,15 @@ public class SortView extends HView {
     }
 
     // Parse date : retourne Long.MAX_VALUE si aucune date reconnue
-    private static long parseDate(String valeur) {
-        if (valeur == null || valeur.isBlank()) {
+    private static long parseDate(String value) {
+        if (value == null || value.isBlank()) {
             return Long.MAX_VALUE;
         }
         // Chercher la première séquence ressemblant à une date
-        Matcher m = Pattern.compile("\\d{1,4}([/\\- ]\\d{1,4})+").matcher(valeur);
+        Matcher m = Pattern.compile("\\d{1,4}([/\\- ]\\d{1,4})+").matcher(value);
         if (m.find()) {
             String candidate = m.group();
-            for (String fmt : FORMATS_DATE) {
+            for (String fmt : DATE_FORMATS) {
                 try {
                     SimpleDateFormat sdf = new SimpleDateFormat(fmt);
                     sdf.setLenient(false);
@@ -554,45 +574,4 @@ public class SortView extends HView {
         }
         return Long.MAX_VALUE;
     }
-
-    /**
-     * Dessine la liste triée.
-     *
-     * Comportement : - Calcule (s'il n'existe pas encore) le résultat trié en
-     * appelant sort(). - Dessine chaque ligne triée en partant de la position
-     * (x,y) fournie. - Utilise la police/metrics courante du Graphics passé en
-     * paramètre.
-     *
-     * Remarque importante : - Cette méthode appelle sort() et exécute donc la
-     * logique de tri sur le thread courant. Évite d'appeler Paint sur de très
-     * grandes listes depuis l'EDT si le tri est lourd ; dans ce cas, préfère
-     * pré-calculer le Result hors-EDT et stocker le résultat pour la peinture.
-     */
-    @Override
-    public void Paint(Graphics g, int x, int y) {
-        if (g == null) {
-            return;
-        }
-
-        // Obtenir le résultat trié (synchronement) — sort() ne modifie pas la liste source
-        Result result = sort();
-
-        // Obtenir metrics pour calculer l'élévation de chaque ligne
-        FontMetrics fm = g.getFontMetrics();
-        int lineHeight = fm.getHeight();
-        int ascent = fm.getAscent();
-
-        // Baseline de départ : y correspond au coin supérieur ; on dessine à la baseline
-        int baseline = y + ascent;
-
-        // Parcourir les lignes triées et dessiner chacune
-        for (String line : result.sortedLines) {
-            if (line == null) {
-                line = "";
-            }
-            g.drawString(line, x, baseline);
-            baseline += lineHeight;
-        }
-    }
-
 }
