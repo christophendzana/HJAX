@@ -1,78 +1,107 @@
 package illustrations;
 
 import java.awt.*;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 import java.awt.geom.*;
+import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JPanel;
 
+/**
+ * Bibliothèque de formes graphiques (catalogue Word) avec édition interactive.
+ *
+ * Pipeline : une forme est un ShapeBuilder (le catalogue ShapeType, ou une
+ * forme personnalisée) qui construit une ShapeGeometry (contour à tracer + zone
+ * à remplir) à partir de x, y, width, height et d'ajustements optionnels. Une
+ * instance Shapes porte l'état (position, taille, rotation, couleurs,
+ * ajustements) et délègue la géométrie à son ShapeBuilder pour se dessiner via
+ * Graphics2D.
+ *
+ * Édition : Canvas capte les événements souris et bascule entre trois modes
+ * mutuellement exclusifs par glissement — redimensionnement (HandleType),
+ * ajustement de paramètre (poignée jaune, via ShapeBuilder) et déplacement
+ * (delta). La rotation introduit un référentiel local (non pivoté) distinct de
+ * l'écran, réconcilié par toLocal()/toWorld().
+ *
+ * @author FIDELE
+ * @version 1.0
+ */
 public class Shapes {
 
+    //Paramètre du Lot 2 rectanglePath2D
+    private static final double DEFAULT_CORNER_RATIO = 0.25;
+    private static final double MIN_CORNER_RATIO = 0.02;
+    private static final double MAX_CORNER_RATIO = 0.5;
+
     // Taille par défaut des pointes de flèche
-    private static final double ARROW_LENGTH = 12.0;
-    private static final double ARROW_WIDTH = 8.0;
+    private static double ARROW_LENGTH = 12.0;
+    private static double ARROW_WIDTH = 8.0;
 
     // --- Paramètres  du Lot 3b ( futures poignées jaunes) ---
-    private static final double RING_THICKNESS_RATIO = 0.3;
-    private static final double DEPTH_RATIO = 0.25;
+    private static double RING_THICKNESS_RATIO = 0.3;
+    private static double DEPTH_RATIO = 0.25;
 
     // --- Paramètres du Lot 3c ( futures poignées jaunes) ---
-    private static final double SUN_CORE_RATIO = 0.35;
-    private static final int SUN_RAY_COUNT = 8;
-    private static final double SUN_RAY_WIDTH_RATIO = 0.5;
-    private static final double MOON_OFFSET_RATIO = 0.35;
-    private static final double SMILEY_EYE_RATIO = 0.08;
-    private static final double BRACE_POINT_RATIO = 0.35;
+    private static double SUN_CORE_RATIO = 0.35;
+    private static int SUN_RAY_COUNT = 8;
+    private static double SUN_RAY_WIDTH_RATIO = 0.5;
+    private static double MOON_OFFSET_RATIO = 0.35;
+    private static double SMILEY_EYE_RATIO = 0.08;
+    private static double BRACE_POINT_RATIO = 0.35;
 
     // --- Paramètre du Lot 4b ( futures poignées jaunes) ---
-    private static final double CURVED_ARROW_THICKNESS_RATIO = 0.35;
+    private static double CURVED_ARROW_THICKNESS_RATIO = 0.35;
 
     // --- Paramètres nommés du Lot 4a (futures poignées jaunes) ---
-    private static final double ARROW_HEAD_LENGTH_RATIO = 0.35;     // proportion de la longueur occupée par la pointe
-    private static final double ARROW_SHAFT_THICKNESS_RATIO = 0.5;  // épaisseur de la hampe / épaisseur totale    
+    private static double ARROW_HEAD_LENGTH_RATIO = 0.35;     // proportion de la longueur occupée par la pointe
+    private static double ARROW_SHAFT_THICKNESS_RATIO = 0.5;  // épaisseur de la hampe / épaisseur totale    
 
     // --- Paramètres du Lot 4c (candidats aux futures poignées jaunes) ---
-    private static final double CHEVRON_TIP_RATIO = 0.3;
-    private static final double CHEVRON_NOTCH_RATIO = 0.3;
-    private static final int STACKED_CHEVRON_COUNT = 3;
-    private static final double STACKED_CHEVRON_GAP_RATIO = 0.08;
-    private static final double RIGHT_ANGLE_BAND_RATIO = 0.3;
-    private static final double ARROW_NOTCH_DEPTH_RATIO = 0.25;
-    private static final int STRIPE_COUNT = 3;
-    private static final double STRIPE_THICKNESS_RATIO = 0.2;
-    private static final double BULGE_RATIO = 0.25;
+    private static double CHEVRON_TIP_RATIO = 0.3;
+    private static double CHEVRON_NOTCH_RATIO = 0.3;
+    private static int STACKED_CHEVRON_COUNT = 3;
+    private static double STACKED_CHEVRON_GAP_RATIO = 0.08;
+    private static double RIGHT_ANGLE_BAND_RATIO = 0.3;
+    private static double ARROW_NOTCH_DEPTH_RATIO = 0.25;
+    private static int STRIPE_COUNT = 3;
+    private static double STRIPE_THICKNESS_RATIO = 0.2;
+    private static double BULGE_RATIO = 0.25;
 
     // --- Paramètres du Lot 5 ( futures poignées jaunes) ---
-    private static final double EQUATION_THICKNESS_RATIO = 0.18;
-    private static final double EQUATION_BAR_GAP_RATIO = 0.15;
-    private static final double EQUATION_DOT_RADIUS_RATIO = 0.06;
+    private static double EQUATION_THICKNESS_RATIO = 0.18;
+    private static double EQUATION_BAR_GAP_RATIO = 0.15;
+    private static double EQUATION_DOT_RADIUS_RATIO = 0.06;
 
     // --- Paramètres du Lot 6 ( futures poignées jaunes) ---
-    private static final double PREPARATION_SLANT_RATIO = 0.15;
-    private static final double MANUAL_INPUT_SLANT_RATIO = 0.25;
-    private static final double MANUAL_OPERATION_INSET_RATIO = 0.15;
-    private static final double OFF_PAGE_POINT_RATIO = 0.3;
-    private static final double INTERNAL_STORAGE_OFFSET_RATIO = 0.15;
-    private static final double DIRECT_ACCESS_NOTCH_RATIO = 0.15;
-    private static final double DOCUMENT_WAVE_RATIO = 0.08;
-    private static final double DOCUMENT_STACK_OFFSET_RATIO = 0.08;
+    private static double PREPARATION_SLANT_RATIO = 0.15;
+    private static double MANUAL_INPUT_SLANT_RATIO = 0.25;
+    private static double MANUAL_OPERATION_INSET_RATIO = 0.15;
+    private static double OFF_PAGE_POINT_RATIO = 0.3;
+    private static double INTERNAL_STORAGE_OFFSET_RATIO = 0.15;
+    private static double DIRECT_ACCESS_NOTCH_RATIO = 0.15;
+    private static double DOCUMENT_WAVE_RATIO = 0.08;
+    private static double DOCUMENT_STACK_OFFSET_RATIO = 0.08;
 
     // --- Paramètres du Lot 7 (futures poignées jaunes) ---
-    private static final double STAR_INNER_RADIUS_RATIO = 0.45;
-    private static final int EXPLOSION_POINT_COUNT = 14;
-    private static final double EXPLOSION_JITTER_RATIO = 0.35;
-    private static final long EXPLOSION_SEED = 42L;
-    private static final double SCROLL_ROLL_RATIO = 0.18;
-    private static final double BANNER_WAVE_COUNT = 4;
-    private static final double BANNER_WAVE_DEPTH_RATIO = 0.12;
-    private static final double BANNER_TAIL_NOTCH_RATIO = 0.12;
+    private static double STAR_INNER_RADIUS_RATIO = 0.45;
+    private static int EXPLOSION_POINT_COUNT = 14;
+    private static double EXPLOSION_JITTER_RATIO = 0.35;
+    private static long EXPLOSION_SEED = 42L;
+    private static double SCROLL_ROLL_RATIO = 0.18;
+    private static double BANNER_WAVE_COUNT = 4;
+    private static double BANNER_WAVE_DEPTH_RATIO = 0.12;
+    private static double BANNER_TAIL_NOTCH_RATIO = 0.12;
 
     // --- Paramètres du Lot 8 (futures poignées jaunes) ---
-    private static final double TAIL_POSITION_RATIO = 0.25;   // position horizontale de la base de la queue
-    private static final double TAIL_LENGTH_RATIO = 0.35;     // longueur de la queue, en proportion de h
-    private static final double TAIL_BASE_RATIO = 0.15;       // largeur de la base de la queue, en proportion de w
-    private static final int THOUGHT_TRAIL_COUNT = 3;
-    private static final double THOUGHT_TRAIL_SPACING_RATIO = 0.12;
-    private static final double LINE_CALLOUT_TEXT_LENGTH_RATIO = 0.6;
-    private static final double LINE_CALLOUT_LEADER_RATIO = 0.3;
+    private static double TAIL_POSITION_RATIO = 0.25;   // position horizontale de la base de la queue
+    private static double TAIL_LENGTH_RATIO = 0.35;     // longueur de la queue, en proportion de h
+    private static double TAIL_BASE_RATIO = 0.15;       // largeur de la base de la queue, en proportion de w
+    private static int THOUGHT_TRAIL_COUNT = 3;
+    private static double THOUGHT_TRAIL_SPACING_RATIO = 0.12;
+    private static double LINE_CALLOUT_TEXT_LENGTH_RATIO = 0.6;
+    private static double LINE_CALLOUT_LEADER_RATIO = 0.3;
 
     // Résultat de construction d'une forme : ce qui est tracé (contour)
     // et ce qui est rempli (peut être null si rien à remplir)
@@ -80,7 +109,7 @@ public class Shapes {
 
     }
 
-    public enum ShapeType {
+    public enum ShapeType implements ShapeBuilder {
 
         SIMPLE_LINE {
             public ShapeGeometry build(int x, int y, int w, int h) {
@@ -150,6 +179,34 @@ public class Shapes {
         ROUNDED_RECTANGLE {
             public ShapeGeometry build(int x, int y, int w, int h) {
                 return closedShape(rectanglePath(x, y, w, h, CornerStyle.ROUND, CornerStyle.ROUND, CornerStyle.ROUND, CornerStyle.ROUND));
+            }
+
+            @Override
+            public int adjustmentCount() {
+                return 1;
+            }
+
+            @Override
+            public double[] defaultAdjustments() {
+                return new double[]{DEFAULT_CORNER_RATIO};
+            }
+
+            @Override
+            public ShapeGeometry build(int x, int y, int w, int h, double[] adjustments) {
+                return closedShape(rectanglePath(x, y, w, h,
+                        CornerStyle.ROUND, CornerStyle.ROUND, CornerStyle.ROUND, CornerStyle.ROUND, adjustments[0]));
+            }
+
+            @Override
+            public Point2D adjustmentHandlePosition(int x, int y, int w, int h, double[] adjustments, int index) {
+                double inset = Math.min(w, h) * adjustments[0];
+                return new Point2D.Double(x + inset, y);
+            }
+
+            @Override
+            public void applyAdjustmentDrag(int x, int y, int w, int h, double[] adjustments, int index, int localMx, int localMy) {
+                double raw = (localMx - x) / (double) Math.min(w, h);
+                adjustments[0] = clamp(raw, MIN_CORNER_RATIO, MAX_CORNER_RATIO);
             }
         },
         RECTANGLE_ONE_CORNER_CUT {
@@ -854,8 +911,6 @@ public class Shapes {
             }
         };
 
-        public abstract ShapeGeometry build(int x, int y, int w, int h);
-
         // --- Helpers partagés, utilisés par plusieurs constantes ---
         // Segment droit, avec pointe(s) de flèche optionnelle(s) aux extrémités
         private static ShapeGeometry lineWithArrows(int x, int y, int w, int h,
@@ -1005,6 +1060,33 @@ public class Shapes {
             addCorner(path, topLeft, x, y, x + tl, y);
             path.closePath();
             return path;
+        }
+
+        private static Path2D rectanglePath(int x, int y, int w, int h,
+                CornerStyle topLeft, CornerStyle topRight, CornerStyle bottomRight, CornerStyle bottomLeft,
+                double insetRatio) {
+            double inset = Math.min(w, h) * insetRatio;
+            double tl = topLeft == CornerStyle.NONE ? 0 : inset;
+            double tr = topRight == CornerStyle.NONE ? 0 : inset;
+            double br = bottomRight == CornerStyle.NONE ? 0 : inset;
+            double bl = bottomLeft == CornerStyle.NONE ? 0 : inset;
+
+            Path2D.Double path = new Path2D.Double();
+            path.moveTo(x + tl, y);
+            path.lineTo(x + w - tr, y);
+            addCorner(path, topRight, x + w, y, x + w, y + tr);
+            path.lineTo(x + w, y + h - br);
+            addCorner(path, bottomRight, x + w, y + h, x + w - br, y + h);
+            path.lineTo(x + bl, y + h);
+            addCorner(path, bottomLeft, x, y + h, x, y + h - bl);
+            path.lineTo(x, y + tl);
+            addCorner(path, topLeft, x, y, x + tl, y);
+            path.closePath();
+            return path;
+        }
+
+        private static double clamp(double value, double min, double max) {
+            return Math.max(min, Math.min(max, value));
         }
 
         private static double cornerInset(CornerStyle style, double inset) {
@@ -1640,12 +1722,177 @@ public class Shapes {
         }
     }
 
+    // Contrat que doit remplir toute forme, catalogue interne (ShapeType) ou personnalisée par l'utilisateur
+    public interface ShapeBuilder {
+
+        // Construit la géométrie de base de la forme, sans ajustement particulier
+        ShapeGeometry build(int x, int y, int w, int h);
+
+        // Nombre de poignées jaunes que cette forme expose (0 par défaut : aucune)
+        default int adjustmentCount() {
+            return 0;
+        }
+
+        // Valeurs par défaut des ajustements, dans l'ordre de leurs index (vide par défaut)
+        default double[] defaultAdjustments() {
+            return new double[0];
+        }
+
+        // Construit la géométrie en tenant compte des ajustements ; ignore adjustments par défaut
+        default ShapeGeometry build(int x, int y, int w, int h, double[] adjustments) {
+            return build(x, y, w, h);
+        }
+
+        // Position locale (non pivotée) de la poignée jaune d'index donné ; null si aucune poignée
+        default Point2D adjustmentHandlePosition(int x, int y, int w, int h, double[] adjustments, int index) {
+            return null;
+        }
+
+        // Recalcule adjustments[index] en fonction d'un point de glissement local ; ne fait rien par défaut
+        default void applyAdjustmentDrag(int x, int y, int w, int h, double[] adjustments, int index, int localMx, int localMy) {
+        }
+    }
+
+    public enum HandleType {
+        TOP_LEFT {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x, s.y);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                int newWidth = s.x + s.width - worldMx;
+                int newHeight = s.y + s.height - worldMy;
+                s.x = worldMx;
+                s.y = worldMy;
+                s.width = newWidth;
+                s.height = newHeight;
+            }
+        },
+        TOP_CENTER {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x + s.width / 2.0, s.y);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                int newHeight = s.y + s.height - worldMy;
+                s.y = worldMy;
+                s.height = newHeight;
+            }
+        },
+        TOP_RIGHT {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x + s.width, s.y);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                int newHeight = s.y + s.height - worldMy;
+                s.width = worldMx - s.x;
+                s.y = worldMy;
+                s.height = newHeight;
+            }
+        },
+        MIDDLE_LEFT {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x, s.y + s.height / 2.0);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                int newWidth = s.x + s.width - worldMx;
+                s.x = worldMx;
+                s.width = newWidth;
+            }
+        },
+        MIDDLE_RIGHT {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x + s.width, s.y + s.height / 2.0);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                s.width = worldMx - s.x;
+            }
+        },
+        BOTTOM_LEFT {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x, s.y + s.height);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                int newWidth = s.x + s.width - worldMx;
+                s.x = worldMx;
+                s.width = newWidth;
+                s.height = worldMy - s.y;
+            }
+        },
+        BOTTOM_CENTER {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x + s.width / 2.0, s.y + s.height);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                s.height = worldMy - s.y;
+            }
+
+        },
+        BOTTOM_RIGHT {
+            public Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x + s.width, s.y + s.height);
+            }
+
+            public void applyDrag(Shapes s, int worldMx, int worldMy) {
+                Point2D l = s.toLocal(worldMx, worldMy);
+                s.width = worldMx - s.x;
+                s.height = worldMy - s.y;
+            }
+        },
+        ROTATE {
+            Point2D localPosition(Shapes s) {
+                return new Point2D.Double(s.x + s.width / 2.0, s.y - ROTATE_HANDLE_DISTANCE);
+            }
+
+            void applyDrag(Shapes s, int worldMx, int worldMy) {
+                double cx = s.x + s.width / 2.0, cy = s.y + s.height / 2.0;
+                double angle = Math.toDegrees(Math.atan2(worldMy - cy, worldMx - cx));
+                s.rotationDegrees = angle + 90; // +90 car la poignée part du haut (angle -90°) et non de la droite (angle 0°)
+            }
+        };
+
+        abstract Point2D localPosition(Shapes s);
+
+        abstract void applyDrag(Shapes s, int worldMx, int worldMy);
+
+        private static final int HANDLE_SIZE = 8;
+
+        boolean contains(Shapes s, int worldMx, int worldMy) {
+            Point2D world = s.toWorld(localPosition(s).getX(), localPosition(s).getY());
+            double half = HANDLE_SIZE / 2.0 + 2; // +2 : marge de tolérance au clic
+            return Math.abs(world.getX() - worldMx) <= half && Math.abs(world.getY() - worldMy) <= half;
+        }
+    }
+
     // --- Instance : une forme concrète à dessiner ---
-    private final ShapeType type;
-    private final int x, y, width, height;
+    private ShapeType type;
+
+    private ShapeBuilder customType;
+
+    private int x, y, width, height;
+
+    private double rotationDegrees = 0;
+
+    private static final double ROTATE_HANDLE_DISTANCE = 24;
+
+    private boolean selected = false;
     private Color fillColor = Color.WHITE;
     private Color strokeColor = Color.BLACK;
     private float strokeWidth = 1f;
+
+    private double[] adjustments;
 
     public Shapes(ShapeType type, int x, int y, int width, int height) {
         this.type = type;
@@ -1653,6 +1900,16 @@ public class Shapes {
         this.y = y;
         this.width = width;
         this.height = height;
+        this.adjustments = type.defaultAdjustments();
+    }
+
+    public Shapes(ShapeBuilder customType, int x, int y, int width, int height) {
+        this.customType = customType;
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.adjustments = customType.defaultAdjustments();
     }
 
     public void setFillColor(Color fillColor) {
@@ -1667,8 +1924,155 @@ public class Shapes {
         this.strokeWidth = strokeWidth;
     }
 
+    public void setSelected(boolean selected) {
+        this.selected = selected;
+    }
+
+    public boolean isSelected() {
+        return selected;
+    }
+
+    public static class Canvas extends JPanel implements MouseListener, MouseMotionListener {
+
+        private final List<Shapes> shapes = new ArrayList<>();
+        private Shapes selectedShape;
+        private HandleType activeHandle;
+
+        // Indique si l'utilisateur est en train de déplacer la forme sélectionnée
+        private boolean movingShape = false;
+
+        // Position de la souris et de la forme au moment où le déplacement a commencé (pour calculer le delta)
+        private int moveStartMouseX, moveStartMouseY, moveStartShapeX, moveStartShapeY;
+
+        public Canvas() {
+            setBackground(Color.WHITE);
+            addMouseListener(this);
+            addMouseMotionListener(this);
+        }
+
+        public void addShape(Shapes shape) {
+            shapes.add(shape);
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            for (Shapes shape : shapes) {
+                shape.paint(g2d);
+                shape.paintHandles(g2d);
+            }
+        }
+
+        private Integer activeAdjustmentIndex;
+
+        @Override
+        public void mousePressed(MouseEvent e) {
+            if (selectedShape != null) {
+                activeHandle = selectedShape.handleAt(e.getX(), e.getY());
+                if (activeHandle != null) {
+                    return;
+                }
+                activeAdjustmentIndex = selectedShape.adjustmentHandleAt(e.getX(), e.getY());
+                if (activeAdjustmentIndex != null) {
+                    return;
+                }
+            }
+            // Aucune poignée touchée : on cherche une forme sous le clic (redimensionnement/ajustement exclus)
+            Shapes clicked = findShapeAt(e.getX(), e.getY());
+            if (selectedShape != null) {
+                selectedShape.setSelected(false);
+            }
+            selectedShape = clicked;
+            if (selectedShape != null) {
+                selectedShape.setSelected(true);
+                // On mémorise le point de départ pour pouvoir calculer un delta pendant le glissement
+                movingShape = true;
+                moveStartMouseX = e.getX();
+                moveStartMouseY = e.getY();
+                moveStartShapeX = selectedShape.x;
+                moveStartShapeY = selectedShape.y;
+            }
+            repaint();
+        }
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            // Fin de toute interaction en cours, quelle qu'elle soit
+            activeHandle = null;
+            activeAdjustmentIndex = null;
+            movingShape = false;
+        }
+
+        @Override
+        public void mouseDragged(MouseEvent e) {
+            if (selectedShape != null && activeHandle != null) {
+                activeHandle.applyDrag(selectedShape, e.getX(), e.getY());
+            } else if (selectedShape != null && activeAdjustmentIndex != null) {
+                selectedShape.applyAdjustmentDrag(activeAdjustmentIndex, e.getX(), e.getY());
+            } else if (movingShape && selectedShape != null) {
+                // Translation pure : le delta souris s'applique tel quel, peu importe la rotation de la forme
+                int dx = e.getX() - moveStartMouseX;
+                int dy = e.getY() - moveStartMouseY;
+                selectedShape.x = moveStartShapeX + dx;
+                selectedShape.y = moveStartShapeY + dy;
+            }
+            repaint();
+        }
+
+        @Override
+        public void mouseClicked(MouseEvent e) {
+        }
+
+        @Override
+        public void mouseEntered(MouseEvent e) {
+        }
+
+        @Override
+        public void mouseExited(MouseEvent e) {
+        }
+
+        @Override
+        public void mouseMoved(MouseEvent e) {
+        }
+
+        private Shapes findShapeAt(int mx, int my) {
+            for (int i = shapes.size() - 1; i >= 0; i--) {
+                if (shapes.get(i).containsPoint(mx, my)) {
+                    return shapes.get(i);
+                }
+            }
+            return null;
+        }
+    }
+
+    // Convertit un point du référentiel local (non pivoté) vers l'écran (pivoté)
+    private Point2D toWorld(double lx, double ly) {
+        double cx = x + width / 2.0, cy = y + height / 2.0;
+        double rad = Math.toRadians(rotationDegrees);
+        double dx = lx - cx, dy = ly - cy;
+        return new Point2D.Double(
+                cx + dx * Math.cos(rad) - dy * Math.sin(rad),
+                cy + dx * Math.sin(rad) + dy * Math.cos(rad));
+    }
+
+// Convertit un point de l'écran (pivoté) vers le référentiel local (non pivoté)
+    private Point2D toLocal(double wx, double wy) {
+        double cx = x + width / 2.0, cy = y + height / 2.0;
+        double rad = Math.toRadians(-rotationDegrees);
+        double dx = wx - cx, dy = wy - cy;
+        return new Point2D.Double(
+                cx + dx * Math.cos(rad) - dy * Math.sin(rad),
+                cy + dx * Math.sin(rad) + dy * Math.cos(rad));
+    }
+
     public void paint(Graphics2D g) {
-        ShapeGeometry geometry = type.build(x, y, width, height);
+        AffineTransform saved = g.getTransform();
+        g.rotate(Math.toRadians(rotationDegrees), x + width / 2.0, y + height / 2.0);
+
+        ShapeGeometry geometry = type.build(x, y, width, height, adjustments);
         if (geometry.fill() != null) {
             g.setColor(fillColor);
             g.fill(geometry.fill());
@@ -1676,5 +2080,86 @@ public class Shapes {
         g.setColor(strokeColor);
         g.setStroke(new BasicStroke(strokeWidth));
         g.draw(geometry.stroke());
+
+        g.setTransform(saved);
+    }
+
+    public void paintHandles(Graphics2D g) {
+        if (!selected) {
+            return;
+        }
+        AffineTransform saved = g.getTransform();
+        g.rotate(Math.toRadians(rotationDegrees), x + width / 2.0, y + height / 2.0);
+
+        g.setColor(Color.GRAY);
+        g.draw(new Line2D.Double(x + width / 2.0, y, x + width / 2.0, y - ROTATE_HANDLE_DISTANCE));
+
+        for (HandleType handle : HandleType.values()) {
+            Point2D p = handle.localPosition(this);
+            if (handle == HandleType.ROTATE) {
+                g.setColor(Color.WHITE);
+                Ellipse2D circle = new Ellipse2D.Double(p.getX() - 5, p.getY() - 5, 10, 10);
+                g.fill(circle);
+                g.setColor(Color.BLACK);
+                g.draw(circle);
+            } else {
+                g.setColor(Color.WHITE);
+                Rectangle2D square = new Rectangle2D.Double(p.getX() - 4, p.getY() - 4, 8, 8);
+                g.fill(square);
+                g.setColor(Color.BLACK);
+                g.draw(square);
+            }
+        }
+
+        // Poignées jaunes
+        for (int i = 0; i < type.adjustmentCount(); i++) {
+            Point2D p = type.adjustmentHandlePosition(x, y, width, height, adjustments, i);
+            if (p == null) {
+                continue;
+            }
+            g.setColor(Color.YELLOW);
+            Ellipse2D dot = new Ellipse2D.Double(p.getX() - 4, p.getY() - 4, 8, 8);
+            g.fill(dot);
+            g.setColor(Color.BLACK);
+            g.draw(dot);
+        }
+
+        g.setTransform(saved);
+    }
+
+    // Détection d'un clic sur une poignée jaune (retourne son index, ou null)
+    public Integer adjustmentHandleAt(int worldMx, int worldMy) {
+        for (int i = 0; i < type.adjustmentCount(); i++) {
+            Point2D local = type.adjustmentHandlePosition(x, y, width, height, adjustments, i);
+            if (local == null) {
+                continue;
+            }
+            Point2D world = toWorld(local.getX(), local.getY());
+            if (Math.abs(world.getX() - worldMx) <= 6 && Math.abs(world.getY() - worldMy) <= 6) {
+                return i;
+            }
+        }
+        return null;
+    }
+
+// mx, my sont maintenant des coordonnées écran (world) — la conversion se fait ici
+    public HandleType handleAt(int worldMx, int worldMy) {
+        for (HandleType handle : HandleType.values()) {
+            if (handle.contains(this, worldMx, worldMy)) {
+                return handle;
+            }
+        }
+        return null;
+    }
+
+    public void applyAdjustmentDrag(int index, int worldMx, int worldMy) {
+        Point2D local = toLocal(worldMx, worldMy);
+        type.applyAdjustmentDrag(x, y, width, height, adjustments, index, (int) local.getX(), (int) local.getY());
+    }
+
+    public boolean containsPoint(int worldMx, int worldMy) {
+        Point2D local = toLocal(worldMx, worldMy);
+        ShapeGeometry geometry = type.build(x, y, width, height, adjustments);
+        return geometry.stroke().contains(local) || (geometry.fill() != null && geometry.fill().contains(local));
     }
 }
