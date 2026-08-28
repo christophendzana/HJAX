@@ -1,4 +1,4 @@
-package illustrations.shapes;
+package IllustrationShape;
 
 import java.awt.Shape;
 

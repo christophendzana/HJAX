@@ -2,7 +2,7 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Enum.java to edit this template
  */
-package illustrations.shapes;
+package IllustrationShape;
 
 import java.awt.geom.Arc2D;
 import java.awt.geom.Area;
@@ -10,8 +10,6 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
-
-import illustrations.shapes.geometry.*;
 import java.awt.Shape;
 import java.awt.geom.Line2D;
 import java.awt.geom.QuadCurve2D;
@@ -20,920 +18,1287 @@ import java.awt.geom.QuadCurve2D;
  *
  * @author FIDELE
  */
-public enum ShapeType implements ShapeBuilder {
+public enum ShapeType {
 
     SIMPLE_LINE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return lineWithArrows(x, y, w, h, false, false);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return lineWithArrows(x, y, width, height, false, false);
+                }
+            };
         }
+
     },
     LINE_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return lineWithArrows(x, y, w, h, false, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return lineWithArrows(x, y, pw, ph, false, true);
+                }
+            };
         }
     },
+    // Bloc à coller dans IllustrationShape.ShapeType, à la place des anciennes constantes
+    // équivalentes (DOUBLE_ARROW jusqu'à CLOUD_CALLOUT). Aucun helper privé (rectanglePath,
+    // regularPolygon, closedShape, etc.) ne change : ils restent identiques dans ton fichier.
+
     DOUBLE_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return lineWithArrows(x, y, w, h, true, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return lineWithArrows(x, y, width, height, true, true);
+                }
+            };
         }
     },
     STRAIGHT_CONNECTOR {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return lineWithArrows(x, y, w, h, false, false);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return lineWithArrows(x, y, width, height, false, false);
+                }
+            };
         }
     },
     STRAIGHT_CONNECTOR_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return lineWithArrows(x, y, w, h, false, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return lineWithArrows(x, y, width, height, false, true);
+                }
+            };
         }
     },
     STRAIGHT_CONNECTOR_DOUBLE_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return lineWithArrows(x, y, w, h, true, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return lineWithArrows(x, y, width, height, true, true);
+                }
+            };
         }
     },
     CURVED_CONNECTOR {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return curveWithArrows(x, y, w, h, false, false);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return curveWithArrows(x, y, width, height, false, false);
+                }
+            };
         }
     },
     CURVED_CONNECTOR_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return curveWithArrows(x, y, w, h, false, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return curveWithArrows(x, y, width, height, false, true);
+                }
+            };
         }
     },
     CURVED_CONNECTOR_DOUBLE_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return curveWithArrows(x, y, w, h, true, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return curveWithArrows(x, y, width, height, true, true);
+                }
+            };
         }
     },
     ELBOW_CONNECTOR {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return elbowWithArrows(x, y, w, h, false, false);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return elbowWithArrows(x, y, width, height, false, false);
+                }
+            };
         }
     },
     ELBOW_CONNECTOR_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return elbowWithArrows(x, y, w, h, false, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return elbowWithArrows(x, y, width, height, false, true);
+                }
+            };
         }
     },
     ELBOW_CONNECTOR_DOUBLE_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return elbowWithArrows(x, y, w, h, true, true);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return elbowWithArrows(x, y, width, height, true, true);
+                }
+            };
         }
     },
     RECTANGLE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+                }
+            };
         }
     },
     ROUNDED_RECTANGLE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND));
-        }
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                {
+                    adjustments = new double[]{DEFAULT_CORNER_RATIO};
+                }
 
-        @Override
-        public int adjustmentCount() {
-            return 1;
-        }
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, adjustments[0]));
+                }
 
-        @Override
-        public double[] defaultAdjustments() {
-            return new double[]{DEFAULT_CORNER_RATIO};
-        }
+                @Override
+                public Point2D adjustmentHandlePosition(int index) {
+                    double inset = Math.min(width, height) * adjustments[0];
+                    return new Point2D.Double(x + inset, y);
+                }
 
-        @Override
-        public ShapeGeometry build(int x, int y, int w, int h, double[] adjustments) {
-            return closedShape(rectanglePath(x, y, w, h,
-                    ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, adjustments[0]));
-        }
-
-        @Override
-        public Point2D adjustmentHandlePosition(int x, int y, int w, int h, double[] adjustments, int index) {
-            double inset = Math.min(w, h) * adjustments[0];
-            return new Point2D.Double(x + inset, y);
-        }
-
-        @Override
-        public void applyAdjustmentDrag(int x, int y, int w, int h, double[] adjustments, int index, int localMx, int localMy) {
-            double raw = (localMx - x) / (double) Math.min(w, h);
-            adjustments[0] = clamp(raw, MIN_CORNER_RATIO, MAX_CORNER_RATIO);
+                @Override
+                public void applyAdjustmentDrag(int index, int worldMx, int worldMy) {
+                    Point2D local = toLocal(worldMx, worldMy);
+                    double raw = (local.getX() - x) / (double) Math.min(width, height);
+                    adjustments[0] = clamp(raw, MIN_CORNER_RATIO, MAX_CORNER_RATIO);
+                }
+            };
         }
     },
     RECTANGLE_ONE_CORNER_CUT {
-        // Construction de base, sans ajustement (comportement existant, inchangé)
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
-        }
-        // Une seule poignée jaune : la taille du coin coupé
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                {
+                    adjustments = new double[]{DEFAULT_CORNER_RATIO};
+                }
 
-        @Override
-        public int adjustmentCount() {
-            return 1;
-        }
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, adjustments[0]));
+                }
 
-        @Override
-        public double[] defaultAdjustments() {
-            return new double[]{DEFAULT_CORNER_RATIO};
-        }
-        // Construction tenant compte du ratio ajustable
+                @Override
+                public Point2D adjustmentHandlePosition(int index) {
+                    double inset = Math.min(width, height) * adjustments[0];
+                    return new Point2D.Double(x + inset / 2.0, y + inset / 2.0);
+                }
 
-        @Override
-        public ShapeGeometry build(int x, int y, int w, int h, double[] adjustments) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, adjustments[0]));
-        }
-        // Position de la poignée : sur le trait diagonal du coin coupé, à mi-chemin
-
-        @Override
-        public Point2D adjustmentHandlePosition(int x, int y, int w, int h, double[] adjustments, int index) {
-            double inset = Math.min(w, h) * adjustments[0];
-            return new Point2D.Double(x + inset / 2.0, y + inset / 2.0);
-        }
-        // Glissement : recalcule le ratio à partir de la distance au coin d'origine
-
-        @Override
-        public void applyAdjustmentDrag(int x, int y, int w, int h, double[] adjustments, int index, int localMx, int localMy) {
-            double raw = ((localMx - x) + (localMy - y)) / (double) Math.min(w, h);
-            adjustments[0] = clamp(raw, MIN_CORNER_RATIO, MAX_CORNER_RATIO);
+                @Override
+                public void applyAdjustmentDrag(int index, int worldMx, int worldMy) {
+                    Point2D local = toLocal(worldMx, worldMy);
+                    double raw = ((local.getX() - x) + (local.getY() - y)) / (double) Math.min(width, height);
+                    adjustments[0] = clamp(raw, MIN_CORNER_RATIO, MAX_CORNER_RATIO);
+                }
+            };
         }
     },
     RECTANGLE_OPPOSITE_CORNERS_CUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE));
+                }
+            };
         }
     },
     RECTANGLE_ADJACENT_CORNERS_CUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+                }
+            };
         }
     },
     RECTANGLE_ONE_CORNER_ROUND {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+                }
+            };
         }
     },
     RECTANGLE_OPPOSITE_CORNERS_ROUND {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE));
+                }
+            };
         }
     },
     RECTANGLE_ADJACENT_CORNERS_ROUND {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE));
+                }
+            };
         }
     },
     TRIANGLE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 3, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 3, -90));
+                }
+            };
         }
     },
     ROOF {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return TRIANGLE.build(x, y, w, h);
+        // Se comporte exactement comme TRIANGLE : on délègue entièrement à sa create()
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return TRIANGLE.create(px, py, pw, ph);
         }
     },
     PENTAGON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 5, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 5, -90));
+                }
+            };
         }
     },
     HEXAGON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 6, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 6, -90));
+                }
+            };
         }
     },
     HEPTAGON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 7, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 7, -90));
+                }
+            };
         }
     },
     OCTOGON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 8, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 8, -90));
+                }
+            };
         }
     },
     DECAGON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 10, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 10, -90));
+                }
+            };
         }
     },
     DODECAGON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 12, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 12, -90));
+                }
+            };
         }
     },
     DIAMOND {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 4, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 4, -90));
+                }
+            };
         }
     },
     RIGHT_TRIANGLE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, y);
-            path.lineTo(x, y + h);
-            path.lineTo(x + w, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, y);
+                    path.lineTo(x, y + height);
+                    path.lineTo(x + width, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     PARALLELOGRAM {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double slant = w * 0.2;
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x + slant, y);
-            path.lineTo(x + w, y);
-            path.lineTo(x + w - slant, y + h);
-            path.lineTo(x, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double slant = width * 0.2;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x + slant, y);
+                    path.lineTo(x + width, y);
+                    path.lineTo(x + width - slant, y + height);
+                    path.lineTo(x, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     TRAPEZOID {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double inset = w * 0.2;
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x + inset, y);
-            path.lineTo(x + w - inset, y);
-            path.lineTo(x + w, y + h);
-            path.lineTo(x, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double inset = width * 0.2;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x + inset, y);
+                    path.lineTo(x + width - inset, y);
+                    path.lineTo(x + width, y + height);
+                    path.lineTo(x, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     PLATE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rectanglePath(x, y, w, h,
-                    ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT, ShapeType.CornerStyle.CUT));
+                }
+            };
         }
     },
     L_SHAPE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double vw = w * 0.4, hh = h * 0.4;
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, y);
-            path.lineTo(x + vw, y);
-            path.lineTo(x + vw, y + h - hh);
-            path.lineTo(x + w, y + h - hh);
-            path.lineTo(x + w, y + h);
-            path.lineTo(x, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double vw = width * 0.4, hh = height * 0.4;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, y);
+                    path.lineTo(x + vw, y);
+                    path.lineTo(x + vw, y + height - hh);
+                    path.lineTo(x + width, y + height - hh);
+                    path.lineTo(x + width, y + height);
+                    path.lineTo(x, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     T_SHAPE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double barH = h * 0.4, stemW = w * 0.2;
-            double stemLeft = x + w * 0.4, stemRight = x + w * 0.6;
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, y);
-            path.lineTo(x + w, y);
-            path.lineTo(x + w, y + barH);
-            path.lineTo(stemRight, y + barH);
-            path.lineTo(stemRight, y + h);
-            path.lineTo(stemLeft, y + h);
-            path.lineTo(stemLeft, y + barH);
-            path.lineTo(x, y + barH);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double barH = height * 0.4, stemW = width * 0.2;
+                    double stemLeft = x + width * 0.4, stemRight = x + width * 0.6;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, y);
+                    path.lineTo(x + width, y);
+                    path.lineTo(x + width, y + barH);
+                    path.lineTo(stemRight, y + barH);
+                    path.lineTo(stemRight, y + height);
+                    path.lineTo(stemLeft, y + height);
+                    path.lineTo(stemLeft, y + barH);
+                    path.lineTo(x, y + barH);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     OVAL {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(new Ellipse2D.Double(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(new Ellipse2D.Double(x, y, width, height));
+                }
+            };
         }
     },
     TEXT_BOX {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return RECTANGLE.build(x, y, w, h);
+        // Se comporte exactement comme RECTANGLE
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return RECTANGLE.create(px, py, pw, ph);
         }
     },
     RING {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(ringPath(x, y, w, h, RING_THICKNESS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(ringPath(x, y, width, height, RING_THICKNESS_RATIO));
+                }
+            };
         }
     },
     HALF_RING {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(halfRingPath(x, y, w, h, RING_THICKNESS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(halfRingPath(x, y, width, height, RING_THICKNESS_RATIO));
+                }
+            };
         }
     },
     ARC {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Arc2D arc = new Arc2D.Double(x, y, w, h, 200, 140, Arc2D.OPEN);
-            return new ShapeGeometry(arc, null);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Arc2D arc = new Arc2D.Double(x, y, width, height, 200, 140, Arc2D.OPEN);
+                    return new ShapeGeometry(arc, null);
+                }
+            };
         }
     },
     NO_SYMBOL {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D ring = ringPath(x, y, w, h, RING_THICKNESS_RATIO);
-            double barWidth = Math.min(w, h) * RING_THICKNESS_RATIO;
-            Path2D.Double bar = diagonalBar(x, y, w, h, barWidth);
-            Path2D full = new Path2D.Double(Path2D.WIND_NON_ZERO);
-            full.append(ring, false);
-            full.append(bar, false);
-            return closedShape(full);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D ring = ringPath(x, y, width, height, RING_THICKNESS_RATIO);
+                    double barWidth = Math.min(width, height) * RING_THICKNESS_RATIO;
+                    Path2D.Double bar = diagonalBar(x, y, width, height, barWidth);
+                    Path2D full = new Path2D.Double(Path2D.WIND_NON_ZERO);
+                    full.append(ring, false);
+                    full.append(bar, false);
+                    return closedShape(full);
+                }
+            };
         }
     },
     CUBE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double depth = Math.min(w, h) * DEPTH_RATIO;
-            Path2D.Double outline = new Path2D.Double();
-            // face avant
-            outline.moveTo(x, y + depth);
-            outline.lineTo(x + w - depth, y + depth);
-            outline.lineTo(x + w - depth, y + h);
-            outline.lineTo(x, y + h);
-            outline.closePath();
-            // face du dessus
-            outline.moveTo(x, y + depth);
-            outline.lineTo(x + depth, y);
-            outline.lineTo(x + w, y);
-            outline.lineTo(x + w - depth, y + depth);
-            outline.closePath();
-            // face de côté
-            outline.moveTo(x + w - depth, y + depth);
-            outline.lineTo(x + w, y);
-            outline.lineTo(x + w, y + h - depth);
-            outline.lineTo(x + w - depth, y + h);
-            outline.closePath();
-            return closedShape(outline);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double depth = Math.min(width, height) * DEPTH_RATIO;
+                    Path2D.Double outline = new Path2D.Double();
+                    outline.moveTo(x, y + depth);
+                    outline.lineTo(x + width - depth, y + depth);
+                    outline.lineTo(x + width - depth, y + height);
+                    outline.lineTo(x, y + height);
+                    outline.closePath();
+                    outline.moveTo(x, y + depth);
+                    outline.lineTo(x + depth, y);
+                    outline.lineTo(x + width, y);
+                    outline.lineTo(x + width - depth, y + depth);
+                    outline.closePath();
+                    outline.moveTo(x + width - depth, y + depth);
+                    outline.lineTo(x + width, y);
+                    outline.lineTo(x + width, y + height - depth);
+                    outline.lineTo(x + width - depth, y + height);
+                    outline.closePath();
+                    return closedShape(outline);
+                }
+            };
         }
     },
     CYLINDER {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double capHeight = h * DEPTH_RATIO;
-            Path2D.Double outline = new Path2D.Double();
-            outline.append(new Ellipse2D.Double(x, y, w, capHeight), false);
-            outline.moveTo(x, y + capHeight / 2);
-            outline.lineTo(x, y + h - capHeight / 2);
-            outline.append(new Arc2D.Double(x, y + h - capHeight, w, capHeight, 180, 180, Arc2D.OPEN), true);
-            outline.moveTo(x + w, y + capHeight / 2);
-            outline.lineTo(x + w, y + h - capHeight / 2);
-            return closedShape(outline);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double capHeight = height * DEPTH_RATIO;
+                    Path2D.Double outline = new Path2D.Double();
+                    outline.append(new Ellipse2D.Double(x, y, width, capHeight), false);
+                    outline.moveTo(x, y + capHeight / 2);
+                    outline.lineTo(x, y + height - capHeight / 2);
+                    outline.append(new Arc2D.Double(x, y + height - capHeight, width, capHeight, 180, 180, Arc2D.OPEN), true);
+                    outline.moveTo(x + width, y + capHeight / 2);
+                    outline.lineTo(x + width, y + height - capHeight / 2);
+                    return closedShape(outline);
+                }
+            };
         }
     },
     CLOUD {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Area area = unionOf(
-                    new Ellipse2D.Double(x + w * 0.05, y + h * 0.35, w * 0.35, h * 0.55),
-                    new Ellipse2D.Double(x + w * 0.25, y + h * 0.10, w * 0.45, h * 0.65),
-                    new Ellipse2D.Double(x + w * 0.50, y + h * 0.30, w * 0.40, h * 0.55),
-                    new Ellipse2D.Double(x + w * 0.15, y + h * 0.45, w * 0.70, h * 0.45)
-            );
-            return closedShape(area);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Area area = unionOf(
+                            new Ellipse2D.Double(x + width * 0.05, y + height * 0.35, width * 0.35, height * 0.55),
+                            new Ellipse2D.Double(x + width * 0.25, y + height * 0.10, width * 0.45, height * 0.65),
+                            new Ellipse2D.Double(x + width * 0.50, y + height * 0.30, width * 0.40, height * 0.55),
+                            new Ellipse2D.Double(x + width * 0.15, y + height * 0.45, width * 0.70, height * 0.45)
+                    );
+                    return closedShape(area);
+                }
+            };
         }
     },
     SUN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double cx = x + w / 2.0, cy = y + h / 2.0;
-            double coreRadius = Math.min(w, h) * SUN_CORE_RATIO;
-            double rayLength = Math.min(w, h) / 2.0 - coreRadius;
-            double rayBaseWidth = coreRadius * SUN_RAY_WIDTH_RATIO;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double cx = x + width / 2.0, cy = y + height / 2.0;
+                    double coreRadius = Math.min(width, height) * SUN_CORE_RATIO;
+                    double rayLength = Math.min(width, height) / 2.0 - coreRadius;
+                    double rayBaseWidth = coreRadius * SUN_RAY_WIDTH_RATIO;
 
-            Path2D.Double shape = new Path2D.Double();
-            shape.append(new Ellipse2D.Double(cx - coreRadius, cy - coreRadius, coreRadius * 2, coreRadius * 2), false);
-            for (int i = 0; i < SUN_RAY_COUNT; i++) {
-                double angle = i * 2 * Math.PI / SUN_RAY_COUNT;
-                shape.append(rayTriangle(cx, cy, angle, coreRadius, rayLength, rayBaseWidth), false);
-            }
-            return closedShape(shape);
+                    Path2D.Double shape = new Path2D.Double();
+                    shape.append(new Ellipse2D.Double(cx - coreRadius, cy - coreRadius, coreRadius * 2, coreRadius * 2), false);
+                    for (int i = 0; i < SUN_RAY_COUNT; i++) {
+                        double angle = i * 2 * Math.PI / SUN_RAY_COUNT;
+                        shape.append(rayTriangle(cx, cy, angle, coreRadius, rayLength, rayBaseWidth), false);
+                    }
+                    return closedShape(shape);
+                }
+            };
         }
     },
     MOON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Area area = new Area(new Ellipse2D.Double(x, y, w, h));
-            double offsetX = w * MOON_OFFSET_RATIO;
-            area.subtract(new Area(new Ellipse2D.Double(x + offsetX, y, w, h)));
-            return closedShape(area);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Area area = new Area(new Ellipse2D.Double(x, y, width, height));
+                    double offsetX = width * MOON_OFFSET_RATIO;
+                    area.subtract(new Area(new Ellipse2D.Double(x + offsetX, y, width, height)));
+                    return closedShape(area);
+                }
+            };
         }
     },
     SMILEY {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double eyeR = Math.min(w, h) * SMILEY_EYE_RATIO;
-            double eyeY = y + h * 0.35;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double eyeR = Math.min(width, height) * SMILEY_EYE_RATIO;
+                    double eyeY = y + height * 0.35;
 
-            Area area = new Area(new Ellipse2D.Double(x, y, w, h));
-            area.subtract(new Area(new Ellipse2D.Double(x + w * 0.30 - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2)));
-            area.subtract(new Area(new Ellipse2D.Double(x + w * 0.70 - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2)));
-            area.subtract(new Area(new Arc2D.Double(x + w * 0.25, y + h * 0.30, w * 0.50, h * 0.50, 200, 140, Arc2D.PIE)));
-            return closedShape(area);
+                    Area area = new Area(new Ellipse2D.Double(x, y, width, height));
+                    area.subtract(new Area(new Ellipse2D.Double(x + width * 0.30 - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2)));
+                    area.subtract(new Area(new Ellipse2D.Double(x + width * 0.70 - eyeR, eyeY - eyeR, eyeR * 2, eyeR * 2)));
+                    area.subtract(new Area(new Arc2D.Double(x + width * 0.25, y + height * 0.30, width * 0.50, height * 0.50, 200, 140, Arc2D.PIE)));
+                    return closedShape(area);
+                }
+            };
         }
     },
     HEART {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x + w / 2.0, y + h);
-            path.curveTo(x - w * 0.1, y + h * 0.55, x + w * 0.05, y - h * 0.05, x + w / 2.0, y + h * 0.30);
-            path.curveTo(x + w * 0.95, y - h * 0.05, x + w * 1.1, y + h * 0.55, x + w / 2.0, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x + width / 2.0, y + height);
+                    path.curveTo(x - width * 0.1, y + height * 0.55, x + width * 0.05, y - height * 0.05, x + width / 2.0, y + height * 0.30);
+                    path.curveTo(x + width * 0.95, y - height * 0.05, x + width * 1.1, y + height * 0.55, x + width / 2.0, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     TEARDROP {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double r = Math.min(w, h) * 0.5;
-            double cx = x + w / 2.0, cy = y + h - r;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double r = Math.min(width, height) * 0.5;
+                    double cx = x + width / 2.0, cy = y + height - r;
 
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(cx, y);
-            path.curveTo(cx + w * 0.45, y + h * 0.35, x + w, cy - r * 0.2, x + w, cy);
-            path.append(new Arc2D.Double(cx - r, cy - r, r * 2, r * 2, 0, -270, Arc2D.OPEN), true);
-            path.curveTo(x, cy - r * 0.2, cx - w * 0.45, y + h * 0.35, cx, y);
-            path.closePath();
-            return closedShape(path);
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(cx, y);
+                    path.curveTo(cx + width * 0.45, y + height * 0.35, x + width, cy - r * 0.2, x + width, cy);
+                    path.append(new Arc2D.Double(cx - r, cy - r, r * 2, r * 2, 0, -270, Arc2D.OPEN), true);
+                    path.curveTo(x, cy - r * 0.2, cx - width * 0.45, y + height * 0.35, cx, y);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     LIGHTNING {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x + w * 0.55, y);
-            path.lineTo(x + w * 0.15, y + h * 0.55);
-            path.lineTo(x + w * 0.40, y + h * 0.55);
-            path.lineTo(x + w * 0.20, y + h);
-            path.lineTo(x + w * 0.85, y + h * 0.40);
-            path.lineTo(x + w * 0.55, y + h * 0.40);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x + width * 0.55, y);
+                    path.lineTo(x + width * 0.15, y + height * 0.55);
+                    path.lineTo(x + width * 0.40, y + height * 0.55);
+                    path.lineTo(x + width * 0.20, y + height);
+                    path.lineTo(x + width * 0.85, y + height * 0.40);
+                    path.lineTo(x + width * 0.55, y + height * 0.40);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     SUPPORT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return new ShapeGeometry(bracketPath(x, y, w, h, false), null);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return new ShapeGeometry(bracketPath(x, y, width, height, false), null);
+                }
+            };
         }
     },
     LEFT_BRACE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return new ShapeGeometry(bracePath(x, y, w, h, false), null);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return new ShapeGeometry(bracePath(x, y, width, height, false), null);
+                }
+            };
         }
     },
     RIGHT_BRACE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return new ShapeGeometry(bracePath(x, y, w, h, true), null);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return new ShapeGeometry(bracePath(x, y, width, height, true), null);
+                }
+            };
         }
     },
     DOUBLE_BRACE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double left = bracePath(x, y, w / 2, h, false);
-            Path2D.Double right = bracePath(x + w / 2, y, w / 2, h, true);
-            Path2D.Double combined = new Path2D.Double();
-            combined.append(left, false);
-            combined.append(right, false);
-            return new ShapeGeometry(combined, null);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double left = bracePath(x, y, width / 2, height, false);
+                    Path2D.Double right = bracePath(x + width / 2, y, width / 2, height, true);
+                    Path2D.Double combined = new Path2D.Double();
+                    combined.append(left, false);
+                    combined.append(right, false);
+                    return new ShapeGeometry(combined, null);
+                }
+            };
         }
     },
     RIGHT_ARROW {
-        // Construction de base, sans ajustement (inchangé)
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(horizontalArrow(x, y, w, h, true, ARROW_HEAD_LENGTH_RATIO, ARROW_SHAFT_THICKNESS_RATIO));
-        }
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                {
+                    adjustments = new double[]{ARROW_HEAD_LENGTH_RATIO, ARROW_SHAFT_THICKNESS_RATIO};
+                }
 
-        @Override
-        public int adjustmentCount() {
-            return 2;
-        } // 0 = longueur de la pointe, 1 = épaisseur de la hampe
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(horizontalArrow(x, y, width, height, true, adjustments[0], adjustments[1]));
+                }
 
-        @Override
-        public double[] defaultAdjustments() {
-            return new double[]{ARROW_HEAD_LENGTH_RATIO, ARROW_SHAFT_THICKNESS_RATIO};
-        }
+                @Override
+                public Point2D adjustmentHandlePosition(int index) {
+                    double headLength = width * adjustments[0];
+                    double shaftThickness = height * adjustments[1];
+                    double neckX = x + width - headLength;
+                    if (index == 0) {
+                        return new Point2D.Double(neckX, y);
+                    } else {
+                        double shaftTop = y + (height - shaftThickness) / 2.0;
+                        return new Point2D.Double(x + (neckX - x) / 2.0, shaftTop);
+                    }
+                }
 
-        @Override
-        public ShapeGeometry build(int x, int y, int w, int h, double[] adjustments) {
-            return closedShape(horizontalArrow(x, y, w, h, true, adjustments[0], adjustments[1]));
-        }
-        // Deux poignées distinctes selon l'index demandé
-
-        @Override
-        public Point2D adjustmentHandlePosition(int x, int y, int w, int h, double[] adjustments, int index) {
-            double headLength = w * adjustments[0];
-            double shaftThickness = h * adjustments[1];
-            double neckX = x + w - headLength;
-            if (index == 0) {
-                // Poignée de longueur de pointe : sur le bord supérieur de la pointe, au niveau du "cou"
-                return new Point2D.Double(neckX, y);
-            } else {
-                // Poignée d'épaisseur de hampe : sur le bord supérieur de la hampe, à mi-longueur
-                double shaftTop = y + (h - shaftThickness) / 2.0;
-                return new Point2D.Double(x + (neckX - x) / 2.0, shaftTop);
-            }
-        }
-        // Chaque index recalcule son propre ratio, indépendamment de l'autre
-
-        @Override
-        public void applyAdjustmentDrag(int x, int y, int w, int h, double[] adjustments, int index, int localMx, int localMy) {
-            if (index == 0) {
-                double raw = (x + w - localMx) / (double) w;
-                adjustments[0] = clamp(raw, ARROW_HEAD_LENGTH_MIN, ARROW_HEAD_LENGTH_MAX);
-            } else {
-                double raw = 1 - 2 * (localMy - y) / (double) h;
-                adjustments[1] = clamp(raw, ARROW_SHAFT_THICKNESS_MIN, ARROW_SHAFT_THICKNESS_MAX);
-            }
+                @Override
+                public void applyAdjustmentDrag(int index, int worldMx, int worldMy) {
+                    Point2D local = toLocal(worldMx, worldMy);
+                    if (index == 0) {
+                        double raw = (x + width - local.getX()) / (double) width;
+                        adjustments[0] = clamp(raw, ARROW_HEAD_LENGTH_MIN, ARROW_HEAD_LENGTH_MAX);
+                    } else {
+                        double raw = 1 - 2 * (local.getY() - y) / (double) height;
+                        adjustments[1] = clamp(raw, ARROW_SHAFT_THICKNESS_MIN, ARROW_SHAFT_THICKNESS_MAX);
+                    }
+                }
+            };
         }
     },
     LEFT_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(horizontalArrow(x, y, w, h, false, ARROW_HEAD_LENGTH_RATIO, ARROW_SHAFT_THICKNESS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(horizontalArrow(x, y, width, height, false, ARROW_HEAD_LENGTH_RATIO, ARROW_SHAFT_THICKNESS_RATIO));
+                }
+            };
         }
     },
     UP_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(verticalArrow(x, y, w, h, false));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(verticalArrow(x, y, width, height, false));
+                }
+            };
         }
     },
     DOWN_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(verticalArrow(x, y, w, h, true));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(verticalArrow(x, y, width, height, true));
+                }
+            };
         }
     },
     LEFT_RIGHT_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(horizontalDoubleArrow(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(horizontalDoubleArrow(x, y, width, height));
+                }
+            };
         }
     },
     UP_DOWN_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(verticalDoubleArrow(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(verticalDoubleArrow(x, y, width, height));
+                }
+            };
         }
     },
     QUAD_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Area area = new Area(horizontalDoubleArrow(x, y, w, h));
-            area.add(new Area(verticalDoubleArrow(x, y, w, h)));
-            return closedShape(area);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Area area = new Area(horizontalDoubleArrow(x, y, width, height));
+                    area.add(new Area(verticalDoubleArrow(x, y, width, height)));
+                    return closedShape(area);
+                }
+            };
         }
     },
     U_TURN_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(curvedArrowPath(x, y, w, h, 180, 180));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(curvedArrowPath(x, y, width, height, 180, 180));
+                }
+            };
         }
     },
     CURVED_UP_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(curvedArrowPath(x, y, w, h, 180, -90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(curvedArrowPath(x, y, width, height, 180, -90));
+                }
+            };
         }
     },
     CURVED_DOWN_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(curvedArrowPath(x, y, w, h, 180, 90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(curvedArrowPath(x, y, width, height, 180, 90));
+                }
+            };
         }
     },
     CHEVRON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(chevronPath(x, y, w, h, CHEVRON_TIP_RATIO, CHEVRON_NOTCH_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(chevronPath(x, y, width, height, CHEVRON_TIP_RATIO, CHEVRON_NOTCH_RATIO));
+                }
+            };
         }
     },
     STACKED_CHEVRON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(stackedChevronPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(stackedChevronPath(x, y, width, height));
+                }
+            };
         }
     },
     RIGHT_ANGLE_CHEVRON {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(rightAngleChevronPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(rightAngleChevronPath(x, y, width, height));
+                }
+            };
         }
     },
     NOTCHED_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(notchedArrowPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(notchedArrowPath(x, y, width, height));
+                }
+            };
         }
     },
     STRIPED_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(stripedArrowPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(stripedArrowPath(x, y, width, height));
+                }
+            };
         }
     },
     BULGED_ARROW {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(bulgedArrowPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(bulgedArrowPath(x, y, width, height));
+                }
+            };
         }
     },
     PLUS_SIGN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double thickness = Math.min(w, h) * EQUATION_THICKNESS_RATIO;
-            double cx = x + w / 2.0, cy = y + h / 2.0;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double thickness = Math.min(width, height) * EQUATION_THICKNESS_RATIO;
+                    double cx = x + width / 2.0, cy = y + height / 2.0;
 
-            Path2D.Double path = new Path2D.Double();
-            path.append(thickLine(x, cy, x + w, cy, thickness), false);
-            path.append(thickLine(cx, y, cx, y + h, thickness), false);
-            return closedShape(path);
+                    Path2D.Double path = new Path2D.Double();
+                    path.append(thickLine(x, cy, x + width, cy, thickness), false);
+                    path.append(thickLine(cx, y, cx, y + height, thickness), false);
+                    return closedShape(path);
+                }
+            };
         }
     },
     MINUS_SIGN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double thickness = Math.min(w, h) * EQUATION_THICKNESS_RATIO;
-            double cy = y + h / 2.0;
-            return closedShape(thickLine(x, cy, x + w, cy, thickness));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double thickness = Math.min(width, height) * EQUATION_THICKNESS_RATIO;
+                    double cy = y + height / 2.0;
+                    return closedShape(thickLine(x, cy, x + width, cy, thickness));
+                }
+            };
         }
     },
     MULTIPLY_SIGN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double thickness = Math.min(w, h) * EQUATION_THICKNESS_RATIO;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double thickness = Math.min(width, height) * EQUATION_THICKNESS_RATIO;
 
-            Path2D.Double path = new Path2D.Double();
-            path.append(thickLine(x, y, x + w, y + h, thickness), false);
-            path.append(thickLine(x + w, y, x, y + h, thickness), false);
-            return closedShape(path);
+                    Path2D.Double path = new Path2D.Double();
+                    path.append(thickLine(x, y, x + width, y + height, thickness), false);
+                    path.append(thickLine(x + width, y, x, y + height, thickness), false);
+                    return closedShape(path);
+                }
+            };
         }
     },
     DIVIDE_SIGN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double thickness = Math.min(w, h) * EQUATION_THICKNESS_RATIO;
-            double cy = y + h / 2.0;
-            double dotRadius = Math.min(w, h) * EQUATION_DOT_RADIUS_RATIO;
-            double dotGap = h * EQUATION_BAR_GAP_RATIO;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double thickness = Math.min(width, height) * EQUATION_THICKNESS_RATIO;
+                    double cy = y + height / 2.0;
+                    double dotRadius = Math.min(width, height) * EQUATION_DOT_RADIUS_RATIO;
+                    double dotGap = height * EQUATION_BAR_GAP_RATIO;
 
-            Path2D.Double path = new Path2D.Double();
-            path.append(thickLine(x, cy, x + w, cy, thickness), false);
-            path.append(new Ellipse2D.Double(x + w / 2.0 - dotRadius, cy - dotGap - dotRadius, dotRadius * 2, dotRadius * 2), false);
-            path.append(new Ellipse2D.Double(x + w / 2.0 - dotRadius, cy + dotGap - dotRadius, dotRadius * 2, dotRadius * 2), false);
-            return closedShape(path);
+                    Path2D.Double path = new Path2D.Double();
+                    path.append(thickLine(x, cy, x + width, cy, thickness), false);
+                    path.append(new Ellipse2D.Double(x + width / 2.0 - dotRadius, cy - dotGap - dotRadius, dotRadius * 2, dotRadius * 2), false);
+                    path.append(new Ellipse2D.Double(x + width / 2.0 - dotRadius, cy + dotGap - dotRadius, dotRadius * 2, dotRadius * 2), false);
+                    return closedShape(path);
+                }
+            };
         }
     },
     EQUAL_SIGN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(equalBars(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(equalBars(x, y, width, height));
+                }
+            };
         }
     },
     NOT_EQUAL_SIGN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double thickness = Math.min(w, h) * EQUATION_THICKNESS_RATIO;
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double thickness = Math.min(width, height) * EQUATION_THICKNESS_RATIO;
 
-            Path2D.Double path = new Path2D.Double();
-            path.append(equalBars(x, y, w, h), false);
-            path.append(thickLine(x + w * 0.15, y + h, x + w * 0.85, y, thickness), false);
-            return closedShape(path);
+                    Path2D.Double path = new Path2D.Double();
+                    path.append(equalBars(x, y, width, height), false);
+                    path.append(thickLine(x + width * 0.15, y + height, x + width * 0.85, y, thickness), false);
+                    return closedShape(path);
+                }
+            };
         }
     },
     PROCESS {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return RECTANGLE.build(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return RECTANGLE.create(px, py, pw, ph);
         }
     },
     DECISION {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return DIAMOND.build(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return DIAMOND.create(px, py, pw, ph);
         }
     },
     DATA {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return PARALLELOGRAM.build(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return PARALLELOGRAM.create(px, py, pw, ph);
         }
     },
     EXTRACT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return TRIANGLE.build(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return TRIANGLE.create(px, py, pw, ph);
         }
     },
     ON_PAGE_CONNECTOR {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return OVAL.build(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return OVAL.create(px, py, pw, ph);
         }
     },
     PREPARATION {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(stretchedHexagonPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(stretchedHexagonPath(x, y, width, height));
+                }
+            };
         }
     },
     MANUAL_INPUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, y + h * MANUAL_INPUT_SLANT_RATIO);
-            path.lineTo(x + w, y);
-            path.lineTo(x + w, y + h);
-            path.lineTo(x, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, y + height * MANUAL_INPUT_SLANT_RATIO);
+                    path.lineTo(x + width, y);
+                    path.lineTo(x + width, y + height);
+                    path.lineTo(x, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     MANUAL_OPERATION {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double inset = w * MANUAL_OPERATION_INSET_RATIO;
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, y);
-            path.lineTo(x + w, y);
-            path.lineTo(x + w - inset, y + h);
-            path.lineTo(x + inset, y + h);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double inset = width * MANUAL_OPERATION_INSET_RATIO;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, y);
+                    path.lineTo(x + width, y);
+                    path.lineTo(x + width - inset, y + height);
+                    path.lineTo(x + inset, y + height);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     MERGE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(regularPolygon(x, y, w, h, 3, 90));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(regularPolygon(x, y, width, height, 3, 90));
+                }
+            };
         }
     },
     OFF_PAGE_CONNECTOR {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double flatBottom = h * OFF_PAGE_POINT_RATIO;
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, y);
-            path.lineTo(x + w, y);
-            path.lineTo(x + w, y + h - flatBottom);
-            path.lineTo(x + w / 2.0, y + h);
-            path.lineTo(x, y + h - flatBottom);
-            path.closePath();
-            return closedShape(path);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double flatBottom = height * OFF_PAGE_POINT_RATIO;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, y);
+                    path.lineTo(x + width, y);
+                    path.lineTo(x + width, y + height - flatBottom);
+                    path.lineTo(x + width / 2.0, y + height);
+                    path.lineTo(x, y + height - flatBottom);
+                    path.closePath();
+                    return closedShape(path);
+                }
+            };
         }
     },
     INTERNAL_STORAGE {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double offsetX = w * INTERNAL_STORAGE_OFFSET_RATIO;
-            double offsetY = h * INTERNAL_STORAGE_OFFSET_RATIO;
-            Rectangle2D.Double body = new Rectangle2D.Double(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double offsetX = width * INTERNAL_STORAGE_OFFSET_RATIO;
+                    double offsetY = height * INTERNAL_STORAGE_OFFSET_RATIO;
+                    Rectangle2D.Double body = new Rectangle2D.Double(x, y, width, height);
 
-            Path2D.Double stroke = new Path2D.Double();
-            stroke.append(body, false);
-            stroke.moveTo(x + offsetX, y);
-            stroke.lineTo(x + offsetX, y + h);
-            stroke.moveTo(x, y + offsetY);
-            stroke.lineTo(x + w, y + offsetY);
+                    Path2D.Double stroke = new Path2D.Double();
+                    stroke.append(body, false);
+                    stroke.moveTo(x + offsetX, y);
+                    stroke.lineTo(x + offsetX, y + height);
+                    stroke.moveTo(x, y + offsetY);
+                    stroke.lineTo(x + width, y + offsetY);
 
-            return new ShapeGeometry(stroke, body);
+                    return new ShapeGeometry(stroke, body);
+                }
+            };
         }
     },
     DIRECT_ACCESS {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double notch = w * DIRECT_ACCESS_NOTCH_RATIO;
-            Rectangle2D.Double body = new Rectangle2D.Double(x, y, w, h);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double notch = width * DIRECT_ACCESS_NOTCH_RATIO;
+                    Rectangle2D.Double body = new Rectangle2D.Double(x, y, width, height);
 
-            Path2D.Double stroke = new Path2D.Double();
-            stroke.append(body, false);
-            stroke.moveTo(x + notch, y);
-            stroke.lineTo(x + notch, y + h);
+                    Path2D.Double stroke = new Path2D.Double();
+                    stroke.append(body, false);
+                    stroke.moveTo(x + notch, y);
+                    stroke.lineTo(x + notch, y + height);
 
-            return new ShapeGeometry(stroke, body);
+                    return new ShapeGeometry(stroke, body);
+                }
+            };
         }
     },
     TERMINATOR {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(stadiumPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(stadiumPath(x, y, width, height));
+                }
+            };
         }
     },
     SINGLE_DOCUMENT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(documentPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(documentPath(x, y, width, height));
+                }
+            };
         }
     },
     MULTIPLE_DOCUMENTS {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double offset = Math.min(w, h) * DOCUMENT_STACK_OFFSET_RATIO;
-            Path2D combined = new Path2D.Double();
-            combined.append(documentPath((int) (x + 2 * offset), (int) (y - 2 * offset), (int) (w - 2 * offset), (int) (h - 2 * offset)), false);
-            combined.append(documentPath((int) (x + offset), (int) (y - offset), (int) (w - offset), (int) (h - offset)), false);
-            combined.append(documentPath(x, y, w, h), false);
-            return closedShape(combined);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double offset = Math.min(width, height) * DOCUMENT_STACK_OFFSET_RATIO;
+                    Path2D combined = new Path2D.Double();
+                    combined.append(documentPath((int) (x + 2 * offset), (int) (y - 2 * offset), (int) (width - 2 * offset), (int) (height - 2 * offset)), false);
+                    combined.append(documentPath((int) (x + offset), (int) (y - offset), (int) (width - offset), (int) (height - offset)), false);
+                    combined.append(documentPath(x, y, width, height), false);
+                    return closedShape(combined);
+                }
+            };
         }
     },
     STAR_4 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 4, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 4, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     STAR_5 {
-        // Construction de base, sans ajustement (inchangé)
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 5, STAR_INNER_RADIUS_RATIO));
-        }
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                {
+                    adjustments = new double[]{STAR_INNER_RADIUS_RATIO};
+                }
 
-        @Override
-        public int adjustmentCount() {
-            return 1;
-        } // le creux entre les pointes
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 5, adjustments[0]));
+                }
 
-        @Override
-        public double[] defaultAdjustments() {
-            return new double[]{STAR_INNER_RADIUS_RATIO};
-        }
+                @Override
+                public Point2D adjustmentHandlePosition(int index) {
+                    double cx = x + width / 2.0, cy = y + height / 2.0;
+                    double angle = -Math.PI / 2 + Math.PI / 5;
+                    double ratio = adjustments[0];
+                    return new Point2D.Double(cx + Math.cos(angle) * (width / 2.0) * ratio, cy + Math.sin(angle) * (height / 2.0) * ratio);
+                }
 
-        @Override
-        public ShapeGeometry build(int x, int y, int w, int h, double[] adjustments) {
-            return closedShape(starPolygon(x, y, w, h, 5, adjustments[0]));
-        }
-        // Poignée placée sur le premier sommet creux (entre les deux premières pointes)
-
-        @Override
-        public Point2D adjustmentHandlePosition(int x, int y, int w, int h, double[] adjustments, int index) {
-            double cx = x + w / 2.0, cy = y + h / 2.0;
-            double angle = -Math.PI / 2 + Math.PI / 5; // angle du 1er sommet creux, même formule que starPolygon
-            double ratio = adjustments[0];
-            return new Point2D.Double(cx + Math.cos(angle) * (w / 2.0) * ratio, cy + Math.sin(angle) * (h / 2.0) * ratio);
-        }
-        // Glissement : distance au centre normalisée par le rayon extérieur, peu importe la direction exacte du glissement
-
-        @Override
-        public void applyAdjustmentDrag(int x, int y, int w, int h, double[] adjustments, int index, int localMx, int localMy) {
-            double cx = x + w / 2.0, cy = y + h / 2.0;
-            double dx = (localMx - cx) / (w / 2.0);
-            double dy = (localMy - cy) / (h / 2.0);
-            double raw = Math.sqrt(dx * dx + dy * dy);
-            adjustments[0] = clamp(raw, STAR_INNER_RADIUS_MIN, STAR_INNER_RADIUS_MAX);
+                @Override
+                public void applyAdjustmentDrag(int index, int worldMx, int worldMy) {
+                    Point2D local = toLocal(worldMx, worldMy);
+                    double cx = x + width / 2.0, cy = y + height / 2.0;
+                    double dx = (local.getX() - cx) / (width / 2.0);
+                    double dy = (local.getY() - cy) / (height / 2.0);
+                    double raw = Math.sqrt(dx * dx + dy * dy);
+                    adjustments[0] = clamp(raw, STAR_INNER_RADIUS_MIN, STAR_INNER_RADIUS_MAX);
+                }
+            };
         }
     },
     STAR_8 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 8, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 8, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     STAR_10 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 10, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 10, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     STAR_12 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 12, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 12, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     STAR_16 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 16, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 16, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     STAR_24 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 24, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 24, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     STAR_32 {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(starPolygon(x, y, w, h, 32, STAR_INNER_RADIUS_RATIO));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(starPolygon(x, y, width, height, 32, STAR_INNER_RADIUS_RATIO));
+                }
+            };
         }
     },
     EXPLOSION {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(explosionPath(x, y, w, h));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(explosionPath(x, y, width, height));
+                }
+            };
         }
     },
     HORIZONTAL_SCROLL {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(scrollPath(x, y, w, h, true));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(scrollPath(x, y, width, height, true));
+                }
+            };
         }
     },
     VERTICAL_SCROLL {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(scrollPath(x, y, w, h, false));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(scrollPath(x, y, width, height, false));
+                }
+            };
         }
     },
     WAVY_BANNER_UP {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(wavyBannerPath(x, y, w, h, true));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(wavyBannerPath(x, y, width, height, true));
+                }
+            };
         }
     },
     WAVY_BANNER_DOWN {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            return closedShape(wavyBannerPath(x, y, w, h, false));
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    return closedShape(wavyBannerPath(x, y, width, height, false));
+                }
+            };
         }
     },
     RECTANGULAR_CALLOUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D body = rectanglePath(x, y, w, h, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE);
-            Path2D combined = new Path2D.Double();
-            combined.append(body, false);
-            combined.append(calloutTail(x, y, w, h), false);
-            return closedShape(combined);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D body = rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE, ShapeType.CornerStyle.NONE);
+                    Path2D combined = new Path2D.Double();
+                    combined.append(body, false);
+                    combined.append(calloutTail(x, y, width, height), false);
+                    return closedShape(combined);
+                }
+            };
         }
     },
     ROUNDED_RECTANGULAR_CALLOUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D body = rectanglePath(x, y, w, h, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND);
-            Path2D combined = new Path2D.Double();
-            combined.append(body, false);
-            combined.append(calloutTail(x, y, w, h), false);
-            return closedShape(combined);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D body = rectanglePath(x, y, width, height,
+                            ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND, ShapeType.CornerStyle.ROUND);
+                    Path2D combined = new Path2D.Double();
+                    combined.append(body, false);
+                    combined.append(calloutTail(x, y, width, height), false);
+                    return closedShape(combined);
+                }
+            };
         }
     },
     OVAL_CALLOUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double combined = new Path2D.Double();
-            combined.append(new Ellipse2D.Double(x, y, w, h), false);
-            combined.append(calloutTail(x, y, w, h), false);
-            return closedShape(combined);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double combined = new Path2D.Double();
+                    combined.append(new Ellipse2D.Double(x, y, width, height), false);
+                    combined.append(calloutTail(x, y, width, height), false);
+                    return closedShape(combined);
+                }
+            };
         }
     },
     CLOUD_CALLOUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            Path2D.Double combined = new Path2D.Double();
-            combined.append(cloudPath(x, y, w, h), false);
-            combined.append(thoughtTrail(x, y, w, h), false);
-            return closedShape(combined);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    Path2D.Double combined = new Path2D.Double();
+                    combined.append(cloudPath(x, y, width, height), false);
+                    combined.append(thoughtTrail(x, y, width, height), false);
+                    return closedShape(combined);
+                }
+            };
         }
     },
     LINE_CALLOUT {
-        public ShapeGeometry build(int x, int y, int w, int h) {
-            double textLineY = y;
-            double textLineLength = w * LINE_CALLOUT_TEXT_LENGTH_RATIO;
-
-            Path2D.Double path = new Path2D.Double();
-            path.moveTo(x, textLineY);
-            path.lineTo(x + textLineLength, textLineY);
-            path.moveTo(x, textLineY);
-            path.lineTo(x - w * LINE_CALLOUT_LEADER_RATIO, y + h);
-            return new ShapeGeometry(path, null);
+        public HViewShape create(int px, int py, int pw, int ph) {
+            return new HViewShape(px, py, pw, ph) {
+                protected ShapeGeometry buildGeometry() {
+                    double textLineY = y;
+                    double textLineLength = width * LINE_CALLOUT_TEXT_LENGTH_RATIO;
+                    Path2D.Double path = new Path2D.Double();
+                    path.moveTo(x, textLineY);
+                    path.lineTo(x + textLineLength, textLineY);
+                    path.moveTo(x, textLineY);
+                    path.lineTo(x - width * LINE_CALLOUT_LEADER_RATIO, y + height);
+                    return new ShapeGeometry(path, null);
+                }
+            };
         }
     };
 
-    public abstract ShapeGeometry build(int x, int y, int w, int h);
+    public abstract HViewShape create(int x, int y, int w, int h);
 
     //Paramètre du Lot 2 rectanglePath2D
     private static final double DEFAULT_CORNER_RATIO = 0.25;
