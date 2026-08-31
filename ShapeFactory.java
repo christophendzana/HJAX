@@ -5,11 +5,7 @@ import IllustrationShape.Shapes.*;
 public final class ShapeFactory {
 
     private ShapeFactory() {
-    }
-
-    public static HShape create(ShapeType type, int x, int y, int width, int height) {
-        return type.create(x, y, width, height);
-    }
+    }    
 
     public static HShape createShapeRectangle(int x, int y, int width, int height) {
         return new ShapeRectangle(x, y, width, height);
