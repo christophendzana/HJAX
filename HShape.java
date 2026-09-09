@@ -4,6 +4,7 @@ import IllustrationShape.border.ViewBorder;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import javax.swing.JTable;
 
 public abstract class HShape extends HView {
 
@@ -18,14 +19,14 @@ public abstract class HShape extends HView {
     private boolean selected = false;
     private ViewBorder border;
 
-    public HShape(){        
+    public HShape() {       
     }
-    
+
     protected HShape(int x, int y, int width, int height) {
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
+        this.x = getX();
+        this.y = getY();
+        this.width = getWidth();
+        this.height = getHeight();
     }
 
     // Volontairement vide : chaque forme concrète décide entièrement comment se dessiner
@@ -159,7 +160,4 @@ public abstract class HShape extends HView {
     public void applyAdjustmentDrag(int index, int worldMx, int worldMy) {
     }
 
-    public ResizeBorder.HandleType handleAt(int worldMx, int worldMy) {
-        return ResizeBorder.HandleType.at(this, worldMx, worldMy);
-    }
 }

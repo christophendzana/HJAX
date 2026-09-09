@@ -11,11 +11,17 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import javax.swing.text.StyledDocument;
+import IllustrationShape.HShape;
+import IllustrationShape.HShapeResizer.HandleType;
+import IllustrationShape.model.ViewEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
 
 /**
- * UI delegate moderne pour {@link HTextArea}. 
+ * UI delegate moderne pour {@link HTextArea}.
+ *
  * @author FIDELE
- * @version 3.0
+ *
  */
 public class HBasicTextAreaUI extends BasicTextPaneUI {
 
@@ -24,7 +30,18 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
     private boolean focus = false;
 
     // Référence au composant (casté en HTextArea)
-    private HTextArea textArea;
+    private HTextAreaShape textArea;
+
+    private final ShapeMouseHandler shapeMouseHandler = new ShapeMouseHandler();
+    private final Timer hoverTimer = new Timer(400, e -> onHoverTimeout());
+
+    private HandleType activeHandle;
+    private Integer activeAdjustmentIndex;
+    private boolean movingShape;
+    private HShape draggedShape;
+    private ViewEvent.Type draggedEventType;
+    private int moveStartMouseX, moveStartMouseY, moveStartShapeX, moveStartShapeY;
+    private HShape hoveredShape;
 
     // Listeners pour détecter les changements d'état
     private final MouseAdapter mouseListener = new MouseAdapter() {
@@ -64,12 +81,15 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         if (!(c instanceof HTextArea)) {
             return;
         }
-        this.textArea = (HTextArea) c;
+        this.textArea = (HTextAreaShape) c;
         textArea.setOpaque(false);      // nécessaire pour la transparence des coins
 
         // Ajout des listeners
         textArea.addMouseListener(mouseListener);
         textArea.addFocusListener(focusListener);
+        textArea.addMouseListener(shapeMouseHandler);
+        textArea.addMouseMotionListener(shapeMouseHandler);
+        hoverTimer.setRepeats(false);
     }
 
     @Override
@@ -77,13 +97,16 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         if (textArea != null) {
             textArea.removeMouseListener(mouseListener);
             textArea.removeFocusListener(focusListener);
+            textArea.removeMouseListener(shapeMouseHandler);
+            textArea.removeMouseMotionListener(shapeMouseHandler);
+            hoverTimer.stop();
         }
         super.uninstallUI(c);
     }
 
     /**
-     * Point d'entrée du rendu.     
-     *     
+     * Point d'entrée du rendu.
+     *
      */
     @Override
     protected void paintSafely(Graphics g) {
@@ -96,8 +119,8 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
             g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                     RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
-            int w      = textArea.getWidth();
-            int h      = textArea.getHeight();
+            int w = textArea.getWidth();
+            int h = textArea.getHeight();
             int radius = textArea.getCornerRadius();
 
             // 1. Ombre portée
@@ -158,11 +181,17 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
             g2.translate(-insets.left, -insets.top);
             g2.setClip(oldClip);
 
+            // 8. Formes IllustrationShape + poignées de la forme sélectionnée
+            for (HShape shape : textArea.getViewModel().getShapes()) {
+                shape.Paint(g2, 0, 0);
+            }
+            textArea.getShapeResizer().Paint(g2, 0, 0);
+
         } finally {
             g2.dispose();
         }
-    }
 
+    }
 
     /**
      * Peint l'ombre portée du composant. Simule un flou en dessinant plusieurs
@@ -257,4 +286,124 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
     protected void paintBackground(Graphics g) {
         // Rien – on évite le fond rectangulaire par défaut
     }
+
+    private HShape getSelectedShape() {
+        return (textArea.getSelectionModel().getViewSelected() instanceof HShape s) ? s : null;
+    }
+
+    private void updateHoveredShape(HShape shape) {
+        if (shape == hoveredShape) {
+            return;
+        }
+        if (hoveredShape != null) {
+            textArea.getViewModel().viewHoverExited(hoveredShape);
+        }
+        hoveredShape = shape;
+        hoverTimer.stop();
+        if (hoveredShape != null) {
+            textArea.getViewModel().viewHoverEntered(hoveredShape);
+            if (textArea.getSelectionModel().isSelectionEmpty()) {
+                hoverTimer.start();
+            }
+        }
+    }
+
+    private void onHoverTimeout() {
+        if (textArea.getSelectionModel().isSelectionEmpty() && hoveredShape != null) {
+            textArea.getSelectionModel().addViewSelected(hoveredShape);
+        }
+    }
+
+    private class ShapeMouseHandler implements MouseListener, MouseMotionListener {
+
+        @Override
+        public void mousePressed(MouseEvent e) {
+            HShape selected = getSelectedShape();
+
+            if (selected != null) {
+                activeHandle = textArea.getShapeResizer().handleAt(e.getX(), e.getY());
+                if (activeHandle != null) {
+                    draggedShape = selected;
+                    return;
+                }
+                activeAdjustmentIndex = textArea.getViewModel().adjustmentHandleAt(selected, e.getX(), e.getY());
+                if (activeAdjustmentIndex != null) {
+                    draggedShape = selected;
+                    return;
+                }
+            }
+
+            HShape clicked = textArea.getViewModel().findShapeAt(e.getX(), e.getY());
+            if (clicked != null) {
+                textArea.getSelectionModel().addViewSelected(clicked);
+            } else {
+                textArea.getSelectionModel().clearSelection();
+            }
+
+            HShape nowSelected = getSelectedShape();
+            if (nowSelected != null) {
+                movingShape = true;
+                draggedShape = nowSelected;
+                moveStartMouseX = e.getX();
+                moveStartMouseY = e.getY();
+                moveStartShapeX = nowSelected.getX();
+                moveStartShapeY = nowSelected.getY();
+            }
+        }
+
+        @Override
+        public void mouseDragged(MouseEvent e) {
+            if (draggedShape != null && activeHandle != null) {
+                activeHandle.drag(draggedShape, e.getX(), e.getY());
+                draggedEventType = activeHandle.getActionEventType();
+                textArea.getViewModel().notifyViewEvent(draggedShape, draggedEventType, true);
+
+            } else if (draggedShape != null && activeAdjustmentIndex != null) {
+                draggedShape.applyAdjustmentDrag(activeAdjustmentIndex, e.getX(), e.getY());
+                draggedEventType = ViewEvent.Type.VIEW_ADJUSTED;
+                textArea.getViewModel().viewAdjusted(draggedShape, true);
+
+            } else if (movingShape && draggedShape != null) {
+                int dx = e.getX() - moveStartMouseX;
+                int dy = e.getY() - moveStartMouseY;
+                draggedShape.setX(moveStartShapeX + dx);
+                draggedShape.setY(moveStartShapeY + dy);
+                draggedEventType = ViewEvent.Type.VIEW_MOVED;
+                textArea.getViewModel().viewMoved(draggedShape, true);
+            }
+            textArea.repaint();
+        }
+
+        @Override
+        public void mouseReleased(MouseEvent e) {
+            if (draggedShape != null && draggedEventType != null) {
+                textArea.getViewModel().notifyViewEvent(draggedShape, draggedEventType, false);
+            }
+            activeHandle = null;
+            activeAdjustmentIndex = null;
+            movingShape = false;
+            draggedShape = null;
+            draggedEventType = null;
+        }
+
+        @Override
+        public void mouseMoved(MouseEvent e) {
+            updateHoveredShape(textArea.getViewModel().findShapeAt(e.getX(), e.getY()));
+        }
+
+        @Override
+        public void mouseExited(MouseEvent e) {
+            updateHoveredShape(null);
+            hoverTimer.stop();
+        }
+
+        @Override
+        public void mouseClicked(MouseEvent e) {
+        }
+
+        @Override
+        public void mouseEntered(MouseEvent e) {
+        }
+    }
+
 }
