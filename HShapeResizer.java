@@ -5,6 +5,7 @@ import IllustrationShape.model.ViewEvent;
 import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Line2D;
 import java.awt.geom.Point2D;
@@ -47,7 +48,11 @@ public class HShapeResizer extends HShape {
         }
 
         Graphics2D g2d = (Graphics2D) g;
+        AffineTransform saved = g2d.getTransform();
+
         g2d.translate(px, py);
+        g2d.rotate(Math.toRadians(targetShape.getRotationDegrees()),
+                targetShape.getCenterX(), targetShape.getCenterY());
 
         int x = targetShape.getX();
         int y = targetShape.getY();
@@ -89,7 +94,7 @@ public class HShapeResizer extends HShape {
             g2d.draw(dot);
         }
 
-        g2d.translate(-px, -py);
+        g2d.setTransform(saved);
     }
 
     /**
