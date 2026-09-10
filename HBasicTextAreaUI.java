@@ -12,14 +12,9 @@ import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import javax.swing.text.StyledDocument;
 import IllustrationShape.HShape;
+import IllustrationShape.HShapeInteractionController;
 import IllustrationShape.HShapeResizer;
-import IllustrationShape.HShapeResizer.HandleType;
-import IllustrationShape.HView;
 import IllustrationShape.model.HTextContent;
-import IllustrationShape.model.ViewEvent;
-import IllustrationShape.model.ViewModelSelection;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
 
 /**
  * UI delegate moderne pour {@link HTextArea}.
@@ -33,18 +28,13 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
     private boolean hover = false;
     private boolean focus = false;
 
+    private HShapeInteractionController shapeController;
+
     // Référence au composant (casté en HTextArea)
     private HTextAreaShape textArea;
 
-    private final ShapeMouseHandler shapeMouseHandler = new ShapeMouseHandler();
     private final Timer hoverTimer = new Timer(400, e -> onHoverTimeout());
 
-    private HandleType activeHandle;
-    private Integer activeAdjustmentIndex;
-    private boolean movingShape;
-    private HShape draggedShape;
-    private ViewEvent.Type draggedEventType;
-    private int lastMouseX, lastMouseY;
     private HShape hoveredShape;
 
     // Listeners pour détecter les changements d'état
@@ -91,8 +81,11 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         // Ajout des listeners
         textArea.addMouseListener(mouseListener);
         textArea.addFocusListener(focusListener);
-        textArea.addMouseListener(shapeMouseHandler);
-        textArea.addMouseMotionListener(shapeMouseHandler);
+
+        ensureShapeController();
+        
+        textArea.addMouseListener(shapeController);
+        textArea.addMouseMotionListener(shapeController);
         hoverTimer.setRepeats(false);
     }
 
@@ -101,12 +94,22 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         if (textArea != null) {
             textArea.removeMouseListener(mouseListener);
             textArea.removeFocusListener(focusListener);
-            textArea.removeMouseListener(shapeMouseHandler);
-            textArea.removeMouseMotionListener(shapeMouseHandler);
+            textArea.removeMouseListener(shapeController);
+            textArea.removeMouseMotionListener(shapeController);
             hoverTimer.stop();
         }
         super.uninstallUI(c);
     }
+    
+    private void ensureShapeController() {
+    if (shapeController == null && textArea != null
+            && textArea.getViewModel() != null && textArea.getSelectionModel() != null) {
+        shapeController = new HShapeInteractionController(
+                textArea, textArea.getViewModel(), textArea.getSelectionModel());
+        textArea.addMouseListener(shapeController);
+        textArea.addMouseMotionListener(shapeController);
+    }
+}
 
     /**
      * Point d'entrée du rendu.
@@ -185,19 +188,21 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
             g2.translate(-insets.left, -insets.top);
             g2.setClip(oldClip);
 
+            
+            ensureShapeController();
             // 8. Formes IllustrationShape + poignées de la forme sélectionnée
             for (HShape shape : textArea.getViewModel().getShapes()) {
                 shape.Paint(g2, 0, 0);
 
-                if (shape instanceof HTextContent content && shape != textArea.getShapeEditor().getEditingShape()) {
+                if (shape instanceof HTextContent content && shape != shapeController.getShapeEditor().getEditingShape()) {
                     Graphics2D textG = (Graphics2D) g2.create();
+                    textG.rotate(Math.toRadians(shape.getRotationDegrees()), shape.getCenterX(), shape.getCenterY());
                     textG.translate(shape.getX(), shape.getY());
                     textArea.getShapeRenderer().getRendererComponent(shape, content).paint(textG);
                     textG.dispose();
                 }
             }
-
-            for (HShapeResizer resizer : textArea.getShapeResizers()) {
+            for (HShapeResizer resizer : shapeController.getShapeResizers()) {
                 resizer.Paint(g2, 0, 0);
             }
 
@@ -276,6 +281,10 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
             borderColor = textArea.getBorderNormal();
         }
 
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2.setColor(borderColor);
         g2.setStroke(new BasicStroke(thickness));
         // On dessine un rectangle arrondi légèrement décalé pour que le trait soit centré sur le bord
@@ -325,154 +334,6 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
     private void onHoverTimeout() {
         if (textArea.getSelectionModel().isSelectionEmpty() && hoveredShape != null) {
             textArea.getSelectionModel().addViewSelected(hoveredShape);
-        }
-    }
-
-    private class ShapeMouseHandler implements MouseListener, MouseMotionListener {
-
-        @Override
-        public void mousePressed(MouseEvent e) {
-            for (HShapeResizer resizer : textArea.getShapeResizers()) {
-                HandleType handle = resizer.handleAt(e.getX(), e.getY());
-                if (handle != null) {
-                    activeHandle = handle;
-                    draggedShape = resizer.getTargetShape();
-                    return;
-                }
-            }
-
-            HShape primary = getSelectedShape();
-            if (primary != null) {
-                Integer index = textArea.getViewModel().adjustmentHandleAt(primary, e.getX(), e.getY());
-                if (index != null) {
-                    activeAdjustmentIndex = index;
-                    draggedShape = primary;
-                    return;
-                }
-            }
-
-            HShape clicked = textArea.getViewModel().findShapeAt(e.getX(), e.getY());
-            ViewModelSelection selection = textArea.getSelectionModel();
-
-            if (clicked == null) {
-                selection.setSelectionMode(ViewModelSelection.SINGLE_SELECTION);
-                selection.clearSelection();
-            } else if (e.isControlDown()) {
-                if (selection.getSelectionMode() == ViewModelSelection.SINGLE_SELECTION) {
-                    selection.setSelectionMode(ViewModelSelection.MULTIPLE_SELECTION);
-                }
-                if (selection.isSelectedView(clicked)) {
-                    selection.removeViewSelected(clicked);
-                } else {
-                    selection.addViewSelected(clicked);
-                }
-            } else {
-                if (!selection.isSelectedView(clicked)) {
-                    selection.setSelectionMode(ViewModelSelection.SINGLE_SELECTION);
-                    selection.clearSelection();
-                    selection.addViewSelected(clicked);
-                }
-            }
-
-            if (!selection.isSelectionEmpty()) {
-                movingShape = true;
-                lastMouseX = e.getX();
-                lastMouseY = e.getY();
-            }
-        }
-
-        @Override
-        public void mouseDragged(MouseEvent e) {
-            if (draggedShape != null && activeHandle != null) {
-                int beforeX = draggedShape.getX();
-                int beforeY = draggedShape.getY();
-                int beforeWidth = draggedShape.getWidth();
-                int beforeHeight = draggedShape.getHeight();
-                double beforeRotation = draggedShape.getRotationDegrees();
-
-                activeHandle.drag(draggedShape, e.getX(), e.getY());
-
-                int dx = draggedShape.getX() - beforeX;
-                int dy = draggedShape.getY() - beforeY;
-                int dWidth = draggedShape.getWidth() - beforeWidth;
-                int dHeight = draggedShape.getHeight() - beforeHeight;
-                double dRotation = draggedShape.getRotationDegrees() - beforeRotation;
-
-                for (HView view : textArea.getSelectionModel().getListViewSelected()) {
-                    if (view instanceof HShape shape && shape != draggedShape) {
-                        shape.setX(shape.getX() + dx);
-                        shape.setY(shape.getY() + dy);
-                        shape.setWidth(shape.getWidth() + dWidth);
-                        shape.setHeight(shape.getHeight() + dHeight);
-                        shape.setRotationDegrees(shape.getRotationDegrees() + dRotation);
-                    }
-                }
-
-                draggedEventType = activeHandle.getActionEventType();
-
-            } else if (draggedShape != null && activeAdjustmentIndex != null) {
-                draggedShape.applyAdjustmentDrag(activeAdjustmentIndex, e.getX(), e.getY());
-                draggedEventType = ViewEvent.Type.VIEW_ADJUSTED;
-
-            } else if (movingShape) {
-                int dx = e.getX() - lastMouseX;
-                int dy = e.getY() - lastMouseY;
-                lastMouseX = e.getX();
-                lastMouseY = e.getY();
-
-                for (HView view : textArea.getSelectionModel().getListViewSelected()) {
-                    if (view instanceof HShape shape) {
-                        shape.setX(shape.getX() + dx);
-                        shape.setY(shape.getY() + dy);
-                    }
-                }
-
-                draggedShape = getSelectedShape();
-                draggedEventType = ViewEvent.Type.VIEW_MOVED;
-            }
-
-            if (draggedShape != null && draggedEventType != null) {
-                textArea.getViewModel().notifyViewEvent(draggedShape, draggedEventType, true);
-            }
-            textArea.repaint();
-        }
-
-        @Override
-        public void mouseReleased(MouseEvent e) {
-            if (draggedShape != null && draggedEventType != null) {
-                textArea.getViewModel().notifyViewEvent(draggedShape, draggedEventType, false);
-            }
-            activeHandle = null;
-            activeAdjustmentIndex = null;
-            movingShape = false;
-            draggedShape = null;
-            draggedEventType = null;
-        }
-
-        @Override
-        public void mouseMoved(MouseEvent e) {
-            updateHoveredShape(textArea.getViewModel().findShapeAt(e.getX(), e.getY()));
-        }
-
-        @Override
-        public void mouseExited(MouseEvent e) {
-            updateHoveredShape(null);
-            hoverTimer.stop();
-        }
-
-        @Override
-        public void mouseClicked(MouseEvent e) {
-            if (e.getClickCount() != 2) {
-                return;
-            }
-            HShape shape = textArea.getViewModel().findShapeAt(e.getX(), e.getY());
-            if (shape instanceof HTextContent) {
-                textArea.getShapeEditor().startEditing(shape, textArea);
-            }
-        }
-
-        @Override
-        public void mouseEntered(MouseEvent e) {
         }
     }
 
