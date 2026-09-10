@@ -8,27 +8,22 @@ import IllustrationShape.model.ViewModelSelection;
 
 import javax.swing.JComponent;
 import javax.swing.Timer;
+import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Orchestre les interactions souris sur les HShape d'un DefaultViewModel :
- * hover, sélection (simple/Ctrl+clic), déplacement, redimensionnement,
- * rotation, édition de texte par double-clic.
+ * Orchestre les interactions souris sur les HShape d'un DefaultViewModel.
  *
- * Ne définit jamais elle-même comment une forme réagit à une poignée
- * précise — cette logique reste entièrement dans HShapeResizer/HandleType.
- * Cette classe se contente de détecter l'intention (quelle poignée, quelle
- * forme), déléguer le calcul, puis diffuser le résultat aux autres formes
- * sélectionnées en cas de sélection multiple.
- *
- * Réutilisable par n'importe quel JComponent hôte — ne connaît que
- * DefaultViewModel et ViewModelSelection, rien de spécifique à HTextArea.
+ * N'implémente volontairement PAS MouseListener/MouseMotionListener :
+ * ces interfaces exposeraient publiquement mousePressed/mouseDragged/...,
+ * permettant à n'importe quel code externe de les invoquer directement,
+ * sans passer par un vrai évènement souris. L'écoute réelle est portée par
+ * une classe anonyme interne, jamais exposée — seule cette classe peut
+ * appeler les méthodes privées onXxx qui contiennent la logique.
  */
-public class HShapeInteractionController implements MouseListener, MouseMotionListener {
+public final class HShapeInteractionController {
 
     private static final int HOVER_DELAY_MS = 400;
 
@@ -36,6 +31,7 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
     private final DefaultViewModel viewModel;
     private final ViewModelSelection selectionModel;
     private final HShapeEditor shapeEditor = new HShapeEditor();
+    private final MouseAdapter adapter;
 
     private final Timer hoverTimer;
     private HShape hoveredShape;
@@ -53,6 +49,24 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
         this.selectionModel = selectionModel;
         this.hoverTimer = new Timer(HOVER_DELAY_MS, e -> onHoverTimeout());
         this.hoverTimer.setRepeats(false);
+
+        this.adapter = new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { onPress(e); }
+            @Override public void mouseDragged(MouseEvent e) { onDrag(e); }
+            @Override public void mouseReleased(MouseEvent e) { onRelease(e); }
+            @Override public void mouseMoved(MouseEvent e) { onMove(e); }
+            @Override public void mouseExited(MouseEvent e) { onExit(e); }
+            @Override public void mouseClicked(MouseEvent e) { onClick(e); }
+        };
+        host.addMouseListener(adapter);
+        host.addMouseMotionListener(adapter);
+    }
+
+    /** À appeler par le UI delegate quand le contrôleur n'est plus utilisé. */
+    public void dispose() {
+        host.removeMouseListener(adapter);
+        host.removeMouseMotionListener(adapter);
+        hoverTimer.stop();
     }
 
     public HShapeEditor getShapeEditor() {
@@ -99,8 +113,7 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
         }
     }
 
-    @Override
-    public void mousePressed(MouseEvent e) {
+    private void onPress(MouseEvent e) {
         for (HShapeResizer resizer : getShapeResizers()) {
             HandleType handle = resizer.handleAt(e.getX(), e.getY());
             if (handle != null) {
@@ -147,8 +160,7 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
         }
     }
 
-    @Override
-    public void mouseDragged(MouseEvent e) {
+    private void onDrag(MouseEvent e) {
         if (draggedShape != null && activeHandle != null) {
             int beforeX = draggedShape.getX();
             int beforeY = draggedShape.getY();
@@ -203,8 +215,7 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
         host.repaint();
     }
 
-    @Override
-    public void mouseReleased(MouseEvent e) {
+    private void onRelease(MouseEvent e) {
         if (draggedShape != null && draggedEventType != null) {
             viewModel.notifyViewEvent(draggedShape, draggedEventType, false);
         }
@@ -215,19 +226,16 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
         draggedEventType = null;
     }
 
-    @Override
-    public void mouseMoved(MouseEvent e) {
+    private void onMove(MouseEvent e) {
         updateHoveredShape(viewModel.findShapeAt(e.getX(), e.getY()));
     }
 
-    @Override
-    public void mouseExited(MouseEvent e) {
+    private void onExit(MouseEvent e) {
         updateHoveredShape(null);
         hoverTimer.stop();
     }
 
-    @Override
-    public void mouseClicked(MouseEvent e) {
+    private void onClick(MouseEvent e) {
         if (e.getClickCount() != 2) {
             return;
         }
@@ -235,9 +243,5 @@ public class HShapeInteractionController implements MouseListener, MouseMotionLi
         if (shape instanceof HTextContent) {
             shapeEditor.startEditing(shape, host);
         }
-    }
-
-    @Override
-    public void mouseEntered(MouseEvent e) {
     }
 }

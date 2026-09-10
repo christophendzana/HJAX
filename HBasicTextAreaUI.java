@@ -81,12 +81,7 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         // Ajout des listeners
         textArea.addMouseListener(mouseListener);
         textArea.addFocusListener(focusListener);
-
         ensureShapeController();
-        
-        textArea.addMouseListener(shapeController);
-        textArea.addMouseMotionListener(shapeController);
-        hoverTimer.setRepeats(false);
     }
 
     @Override
@@ -94,22 +89,22 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
         if (textArea != null) {
             textArea.removeMouseListener(mouseListener);
             textArea.removeFocusListener(focusListener);
-            textArea.removeMouseListener(shapeController);
-            textArea.removeMouseMotionListener(shapeController);
+            if (shapeController != null) {
+                shapeController.dispose();
+            }
             hoverTimer.stop();
         }
         super.uninstallUI(c);
     }
-    
+
     private void ensureShapeController() {
-    if (shapeController == null && textArea != null
-            && textArea.getViewModel() != null && textArea.getSelectionModel() != null) {
-        shapeController = new HShapeInteractionController(
-                textArea, textArea.getViewModel(), textArea.getSelectionModel());
-        textArea.addMouseListener(shapeController);
-        textArea.addMouseMotionListener(shapeController);
+        if (shapeController == null && textArea != null
+                && textArea.getViewModel() != null && textArea.getSelectionModel() != null) {
+            shapeController = new HShapeInteractionController(
+                    textArea, textArea.getViewModel(), textArea.getSelectionModel());
+        }
+
     }
-}
 
     /**
      * Point d'entrée du rendu.
@@ -188,7 +183,6 @@ public class HBasicTextAreaUI extends BasicTextPaneUI {
             g2.translate(-insets.left, -insets.top);
             g2.setClip(oldClip);
 
-            
             ensureShapeController();
             // 8. Formes IllustrationShape + poignées de la forme sélectionnée
             for (HShape shape : textArea.getViewModel().getShapes()) {
