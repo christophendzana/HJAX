@@ -1,39 +1,35 @@
 package IllustrationShape;
 
 import IllustrationShape.HShapeResizer.HandleType;
-import IllustrationShape.model.DefaultViewModel;
-import IllustrationShape.model.HTextContent;
-import IllustrationShape.model.ViewEvent;
-import IllustrationShape.model.ViewModelSelection;
+import IllustrationShape.model.*;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 
 import javax.swing.JComponent;
 import javax.swing.Timer;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Point2D;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Orchestre les interactions souris sur les HShape d'un DefaultViewModel.
  *
- * N'implémente volontairement PAS MouseListener/MouseMotionListener :
- * ces interfaces exposeraient publiquement mousePressed/mouseDragged/...,
- * permettant à n'importe quel code externe de les invoquer directement,
- * sans passer par un vrai évènement souris. L'écoute réelle est portée par
- * une classe anonyme interne, jamais exposée — seule cette classe peut
- * appeler les méthodes privées onXxx qui contiennent la logique.
+ * @author FIDELE
  */
-public final class HShapeInteractionController {
+public final class HShapeInteractionController implements ViewModelListener, ListViewSelectionListener {
 
     private static final int HOVER_DELAY_MS = 400;
 
-    private final JComponent host;
-    private final DefaultViewModel viewModel;
-    private final ViewModelSelection selectionModel;
-    private final HShapeEditor shapeEditor = new HShapeEditor();
-    private final MouseAdapter adapter;
+    private JComponent host;
+    private ViewModel viewModel;
+    private ViewModelSelection selectionModel;
+    private final HShapeEditor shapeEditor = new HShapeEditor(); 
+    private final HShapeRenderer shapeRenderer = new HShapeRenderer();
+    private MouseAdapter adapter;
 
-    private final Timer hoverTimer;
+    private Timer hoverTimer;
     private HShape hoveredShape;
 
     private HandleType activeHandle;
@@ -43,37 +39,177 @@ public final class HShapeInteractionController {
     private ViewEvent.Type draggedEventType;
     private int lastMouseX, lastMouseY;
 
-    public HShapeInteractionController(JComponent host, DefaultViewModel viewModel, ViewModelSelection selectionModel) {
+    private int dragOriginalX, dragOriginalY, dragOriginalWidth, dragOriginalHeight;
+    private Point2D dragAnchorWorld;
+
+    public HShapeInteractionController(JComponent host) {
+        this(host, null, null);
+    }
+
+    public HShapeInteractionController(JComponent host, ViewModel model) {
+        this(host, model, null);
+    }
+
+    public HShapeInteractionController(JComponent host, ViewModel model, ViewModelSelection selectionModel) {
+        
+        if (host == null) {
+            throw new IllegalArgumentException("host cannot be null");
+        }
         this.host = host;
-        this.viewModel = viewModel;
-        this.selectionModel = selectionModel;
+       ;
+        this.viewModel = (model != null) ? model : new DefaultViewModel();
+        this.selectionModel = (selectionModel != null) ? selectionModel : new DefaultViewModelSelection();
+
         this.hoverTimer = new Timer(HOVER_DELAY_MS, e -> onHoverTimeout());
         this.hoverTimer.setRepeats(false);
 
         this.adapter = new MouseAdapter() {
-            @Override public void mousePressed(MouseEvent e) { onPress(e); }
-            @Override public void mouseDragged(MouseEvent e) { onDrag(e); }
-            @Override public void mouseReleased(MouseEvent e) { onRelease(e); }
-            @Override public void mouseMoved(MouseEvent e) { onMove(e); }
-            @Override public void mouseExited(MouseEvent e) { onExit(e); }
-            @Override public void mouseClicked(MouseEvent e) { onClick(e); }
+            @Override
+            public void mousePressed(MouseEvent e) {
+                onPress(e);
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                onDrag(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                onRelease(e);
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                onMove(e);
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                onExit(e);
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                onClick(e);
+            }
         };
         host.addMouseListener(adapter);
         host.addMouseMotionListener(adapter);
+        this.viewModel.addListener(this);
+        this.selectionModel.addListSelectionListener(this);
     }
 
-    /** À appeler par le UI delegate quand le contrôleur n'est plus utilisé. */
+    /**
+     * Remplace le ViewModel en cours d'utilisation.
+     *     
+     */
+    public void setViewModel(ViewModel model) {
+        if (model == null) {
+            throw new IllegalArgumentException("viewModel cannot be null");
+        }
+        if (model == this.viewModel) {
+            return;
+        }
+        this.viewModel.removeListener(this);
+        this.viewModel = model;
+        this.viewModel.addListener(this);
+        host.repaint();
+    }
+
+    public ViewModel getViewModel() {
+        return viewModel;
+    }
+
+    /**
+     * Remplace le ViewModelSelection en cours d'utilisation. 
+     */
+    public void setSelectionModel(ViewModelSelection model) {
+        if (model == null) {
+            throw new IllegalArgumentException("viewModelSelection cannot be null");
+        }
+        if (model == this.selectionModel) {
+            return;
+        }
+        this.selectionModel.removeListSelectionListener(this);
+        this.selectionModel = model;
+        this.selectionModel.addListSelectionListener(this);
+        host.repaint();
+    }
+
+    public ViewModelSelection getSelectionModel() {
+        return selectionModel;
+    }
+
+    public JComponent getHost() {
+        return host;
+    }
+
+    public void paint(Graphics g) {
+
+        Graphics2D g2 = (Graphics2D) g.create();
+
+        for (HShape shape : getViewModel().getShapes()) {
+            shape.Paint(g2, 0, 0);
+
+            if (shape instanceof HTextContent content && shape != getShapeEditor().getEditingShape()) {
+                Graphics2D textG = (Graphics2D) g2.create();
+                textG.rotate(Math.toRadians(shape.getRotationDegrees()), shape.getCenterX(), shape.getCenterY());
+                textG.translate(shape.getX(), shape.getY());
+                getShapeRenderer().getRendererComponent(shape, content).paint(textG);
+                textG.dispose();
+            }
+        }
+        for (HShapeResizer resizer : getShapeResizers()) {
+            resizer.Paint(g2, 0, 0);
+        }
+
+        g2.dispose();
+    }
+
+    public void addView(HView view) {
+        if (view == null) {
+            throw new IllegalArgumentException("view cannot be null");
+        }
+        viewModel.addView(view);
+    }
+
+    @Override
+    public void viewChanged(ViewEvent e) {
+        host.repaint();
+    }
+
+    @Override
+    public void valueChanged(ListViewSelectionEvent e) {
+        for (HShape shape : viewModel.getShapes()) {
+            shape.setSelected(selectionModel.isSelectedView(shape));
+        }
+        host.repaint();
+    }
+
+    /**
+     * À appeler par le UI delegate quand le contrôleur n'est plus utilisé.
+     *     
+     */
     public void dispose() {
         host.removeMouseListener(adapter);
         host.removeMouseMotionListener(adapter);
         hoverTimer.stop();
+        viewModel.removeListener(this);
+        selectionModel.removeListSelectionListener(this);
     }
 
     public HShapeEditor getShapeEditor() {
         return shapeEditor;
     }
 
-    /** Reconstruite à la demande depuis la sélection — rien n'est mis en cache. */
+    public HShapeRenderer getShapeRenderer() {
+        return shapeRenderer;
+    }
+
+    /**
+     * Reconstruite à la demande depuis la sélection — rien n'est mis en cache.
+     */
     public List<HShapeResizer> getShapeResizers() {
         List<HShapeResizer> resizers = new ArrayList<>();
         for (HView view : selectionModel.getListViewSelected()) {
@@ -119,6 +255,7 @@ public final class HShapeInteractionController {
             if (handle != null) {
                 activeHandle = handle;
                 draggedShape = resizer.getTargetShape();
+                captureResizeStart(draggedShape, handle);
                 return;
             }
         }
@@ -168,7 +305,8 @@ public final class HShapeInteractionController {
             int beforeHeight = draggedShape.getHeight();
             double beforeRotation = draggedShape.getRotationDegrees();
 
-            activeHandle.drag(draggedShape, e.getX(), e.getY());
+            activeHandle.drag(draggedShape, dragOriginalX, dragOriginalY, dragOriginalWidth, dragOriginalHeight,
+                    dragAnchorWorld, e.getX(), e.getY());
 
             int dx = draggedShape.getX() - beforeX;
             int dy = draggedShape.getY() - beforeY;
@@ -242,6 +380,18 @@ public final class HShapeInteractionController {
         HShape shape = viewModel.findShapeAt(e.getX(), e.getY());
         if (shape instanceof HTextContent) {
             shapeEditor.startEditing(shape, host);
+        }
+    }
+
+    private void captureResizeStart(HShape shape, HandleType handle) {
+        dragOriginalX = shape.getX();
+        dragOriginalY = shape.getY();
+        dragOriginalWidth = shape.getWidth();
+        dragOriginalHeight = shape.getHeight();
+        if (handle != HandleType.ROTATE) {
+            HandleType anchor = handle.opposite();
+            Point2D anchorLocal = anchor.localPosition(dragOriginalX, dragOriginalY, dragOriginalWidth, dragOriginalHeight);
+            dragAnchorWorld = shape.toWorld(anchorLocal.getX(), anchorLocal.getY());
         }
     }
 }
