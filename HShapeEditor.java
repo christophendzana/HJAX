@@ -2,23 +2,23 @@ package IllustrationShape;
 
 import IllustrationShape.model.HTextContent;
 import javax.swing.JComponent;
+import javax.swing.JLayeredPane;
+import javax.swing.JRootPane;
 import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
+import java.awt.Point;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 
-/**
- * Éditeur de texte réutilisable pour les HShape implémentant HTextContent.
- * Un seul composant, temporairement ajouté à l'hôte pendant l'édition —
- * une seule édition possible à la fois, comme dans JTable.
- */
 public class HShapeEditor {
 
     private final JTextArea component = new JTextArea();
 
     private HShape editingShape;
     private HTextContent editingContent;
+    private JLayeredPane layeredPane;
     private JComponent host;
     private double savedRotationDegrees;
 
@@ -55,6 +55,10 @@ public class HShapeEditor {
         if (!(shape instanceof HTextContent content)) {
             return;
         }
+        JRootPane rootPane = SwingUtilities.getRootPane(host);
+        if (rootPane == null) {
+            return; // host pas encore affiché dans une fenêtre réalisée
+        }
         if (isEditing()) {
             stopEditing();
         }
@@ -62,15 +66,23 @@ public class HShapeEditor {
         this.editingShape = shape;
         this.editingContent = content;
         this.host = host;
+        this.layeredPane = rootPane.getLayeredPane();
         this.savedRotationDegrees = shape.getRotationDegrees();
         shape.setRotationDegrees(0);
 
         component.setText(content.getText());
-        component.setBounds(shape.getX(), shape.getY(), shape.getWidth(), shape.getHeight());
 
-        host.add(component);
-        host.revalidate();
-        host.repaint();
+        // Bornes calculées en coordonnées de la JLayeredPane, pas de host —
+        // c'est ce qui rend le positionnement indépendant du LayoutManager
+        // de host : setBounds() ici fait autorité, sans concurrence.
+        Point positionInLayeredPane = SwingUtilities.convertPoint(
+                host, shape.getX(), shape.getY(), layeredPane);
+        component.setBounds(positionInLayeredPane.x, positionInLayeredPane.y,
+                shape.getWidth(), shape.getHeight());
+
+        layeredPane.add(component, JLayeredPane.POPUP_LAYER);
+        layeredPane.revalidate();
+        layeredPane.repaint();
         component.requestFocusInWindow();
     }
 
@@ -91,11 +103,13 @@ public class HShapeEditor {
 
     private void finishEditing() {
         editingShape.setRotationDegrees(savedRotationDegrees);
-        host.remove(component);
-        host.revalidate();
+        layeredPane.remove(component);
+        layeredPane.revalidate();
+        layeredPane.repaint();
         host.repaint();
         editingShape = null;
         editingContent = null;
         host = null;
+        layeredPane = null;
     }
 }

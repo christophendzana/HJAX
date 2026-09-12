@@ -25,6 +25,9 @@ public class HShapeResizer extends HShape {
 
     private HShape targetShape;
 
+    public HShapeResizer() {
+    }
+
     public void setTargetShape(HShape targetShape) {
         this.targetShape = targetShape;
     }
@@ -106,13 +109,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x, y);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                int newWidth = s.getX() + s.getWidth() - mx;
-                int newHeight = s.getY() + s.getHeight() - my;
-                s.setX(mx);
-                s.setY(my);
-                s.setWidth(newWidth);
-                s.setHeight(newHeight);
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(mx, my, ox + ow - mx, oy + oh - my);
             }
         },
         TOP_CENTER {
@@ -120,10 +118,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x + w / 2.0, y);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                int newHeight = s.getY() + s.getHeight() - my;
-                s.setY(my);
-                s.setHeight(newHeight);
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(ox, my, ow, oy + oh - my);
             }
         },
         TOP_RIGHT {
@@ -131,11 +127,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x + w, y);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                int newHeight = s.getY() + s.getHeight() - my;
-                s.setWidth(mx - s.getX());
-                s.setY(my);
-                s.setHeight(newHeight);
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(ox, my, mx - ox, oy + oh - my);
             }
         },
         MIDDLE_LEFT {
@@ -143,10 +136,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x, y + h / 2.0);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                int newWidth = s.getX() + s.getWidth() - mx;
-                s.setX(mx);
-                s.setWidth(newWidth);
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(mx, oy, ox + ow - mx, oh);
             }
         },
         MIDDLE_RIGHT {
@@ -154,8 +145,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x + w, y + h / 2.0);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                s.setWidth(mx - s.getX());
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(ox, oy, mx - ox, oh);
             }
         },
         BOTTOM_LEFT {
@@ -163,11 +154,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x, y + h);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                int newWidth = s.getX() + s.getWidth() - mx;
-                s.setX(mx);
-                s.setWidth(newWidth);
-                s.setHeight(my - s.getY());
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(mx, oy, ox + ow - mx, my - oy);
             }
         },
         BOTTOM_CENTER {
@@ -175,8 +163,8 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x + w / 2.0, y + h);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                s.setHeight(my - s.getY());
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(ox, oy, ow, my - oy);
             }
         },
         BOTTOM_RIGHT {
@@ -184,14 +172,17 @@ public class HShapeResizer extends HShape {
                 return new Point2D.Double(x + w, y + h);
             }
 
-            void applyDrag(HShape s, int mx, int my) {
-                s.setWidth(mx - s.getX());
-                s.setHeight(my - s.getY());
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                return new Rectangle2D.Double(ox, oy, mx - ox, my - oy);
             }
         },
         ROTATE {
             Point2D localPosition(int x, int y, int w, int h) {
                 return new Point2D.Double(x + w / 2.0, y - ROTATE_HANDLE_DISTANCE);
+            }
+
+            Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+                throw new UnsupportedOperationException("ROTATE ne redimensionne pas");
             }
 
             void applyDrag(HShape s, int worldMx, int worldMy) {
@@ -204,7 +195,17 @@ public class HShapeResizer extends HShape {
 
         abstract Point2D localPosition(int x, int y, int w, int h);
 
-        abstract void applyDrag(HShape shape, int mx, int my);
+        /**
+         * Calcule la géométrie brute (largeur/hauteur possiblement négatives) à
+         * partir de l'origine du drag.
+         */
+        Rectangle2D.Double computeRawBounds(int ox, int oy, int ow, int oh, double mx, double my) {
+            throw new UnsupportedOperationException();
+        }
+
+        void applyDrag(HShape shape, int worldMx, int worldMy) {
+            throw new UnsupportedOperationException();
+        }
 
         private static final int HANDLE_SIZE = 8;
 
@@ -216,18 +217,172 @@ public class HShapeResizer extends HShape {
         }
 
         /**
-         * Calcule et applique le déplacement à la forme cible, à partir de
-         * coordonnées souris en repère monde. L'hôte appelle cette méthode
-         * après avoir identifié la poignée active (hit-test), puis notifie
-         * lui-même le DefaultViewModel du type d'événement correspondant.
+         * Redimensionne à partir de la géométrie D'ORIGINE (capturée une seule
+         * fois au mousePressed) — jamais à partir de l'état courant, qui peut
+         * déjà être corrompu par un débordement précédent.Bascule (flip)
+         * proprement quand la souris dépasse le côté opposé.
+         *
+         * @param shape la forme à redimmensionnée
+         * @param origX coordonée x au début du drag
+         * @param origY
+         * @param origWidth
+         * @param origHeight
+         * @param anchorWorldOriginal point qui doit rester fixe pendant le
+         * redimensionnement.
+         * @param worldMx coordonnée x actuelle de la souris dans le système
+         * world.
+         * @param worldMy
          */
-        public void drag(HShape shape, int worldMx, int worldMy) {
+        public void drag(HShape shape,
+                int origX,
+                int origY,
+                int origWidth,
+                int origHeight,
+                Point2D anchorWorldOriginal,
+                int worldMx,
+                int worldMy) {
+
+            // Si rotation on applique la logique de rotation
             if (this == ROTATE) {
                 applyDrag(shape, worldMx, worldMy);
-            } else {
-                Point2D local = shape.toLocal(worldMx, worldMy);
-                applyDrag(shape, (int) local.getX(), (int) local.getY());
+                return;
             }
+
+            // TRES IMPORTANT: Position de la souris dans le système local de la shape.
+            // Parce que si la forme est tournée de 45°
+            // les coordonnées écran de la souris ne correspondent plus
+            //directement aux coordonnées x/y de la forme.
+            //toLocal() nous permet donc de raisonner comme si la forme n'était pas tournée.
+            Point2D local = shape.toLocal(worldMx, worldMy);
+
+            //À partir de la géométrie originale et de la position actuelle de la 
+            // souris, quelle serait la nouvelle géométrie ?  
+            //Géométrie brute ie peut contenir des valeurs négative par ex: si
+            // poignée midde-top drag au delà de son côté opposé -> bug constaté: la shape disparaît
+            Rectangle2D.Double raw = computeRawBounds(
+                    origX,
+                    origY,
+                    origWidth,
+                    origHeight,
+                    local.getX(),
+                    local.getY()
+            );
+
+            double x = raw.x;
+            double y = raw.y;
+            double w = raw.width;
+            double h = raw.height;
+
+            /*
+        * On mémorise si la souris a dépassé le côté opposé.     
+        * Donc si la nouvelle géométrie ressort du déppasement du côté opposé
+        * L'ancre géométrique change donc de côté.
+             */
+            boolean flippedX = w < 0; //true la souris a dépassé côté opposée de la forme
+            boolean flippedY = h < 0; // inversement
+
+            // Normalisation horizontale.
+            if (flippedX) {
+                x += w;
+                w = -w;
+            }
+
+            // Normalisation verticale.
+            if (flippedY) {
+                y += h;
+                h = -h;
+            }
+
+            // Taille minimale, mais aucune limite sur la position de la souris.
+            //Eviter que la forme disparaisse avec un w ou h = 0
+            w = Math.max(1, w);
+            h = Math.max(1, h);
+
+            shape.setX((int) Math.round(x));
+            shape.setY((int) Math.round(y));
+            shape.setWidth((int) Math.round(w));
+            shape.setHeight((int) Math.round(h));
+
+            /*
+        * Détermination de l'ancre APRÈS le flip.
+        *
+        * Si aucun flip n'a eu lieu :
+        * l'ancre = côté opposé à la poignée active.
+        *
+        * Si un flip horizontal a eu lieu :
+        * l'ancre horizontale se retrouve du côté de la poignée active.
+        *
+        * Même principe verticalement.
+             */
+            Point2D anchorLocalNow = getAnchorAfterFlip(
+                    shape,
+                    flippedX,
+                    flippedY
+            );
+
+            Point2D anchorWorldNow = shape.toWorld(
+                    anchorLocalNow.getX(),
+                    anchorLocalNow.getY()
+            );
+
+            // Déplace la shape horizontalement de la différence entre la position 
+            //où l'ancre devrait être et celle où elle est actuellement.
+            shape.setX(shape.getX() + (int) Math.round(anchorWorldOriginal.getX() - anchorWorldNow.getX()));
+
+            shape.setY(shape.getY() + (int) Math.round(anchorWorldOriginal.getY() - anchorWorldNow.getY()));
+        }
+
+        
+
+        private Point2D getAnchorAfterFlip(HShape shape, boolean flippedX, boolean flippedY) {
+            double left = shape.getX();
+            double right = shape.getX() + shape.getWidth();
+            double top = shape.getY();
+            double bottom = shape.getY() + shape.getHeight();
+            double centerX = shape.getX() + shape.getWidth() / 2.0;
+            double centerY = shape.getY() + shape.getHeight() / 2.0;
+
+            double anchorX;
+            double anchorY;
+
+            switch (this) {
+                case TOP_LEFT -> {
+                    anchorX = flippedX ? left : right;
+                    anchorY = flippedY ? top : bottom;
+                }
+                case TOP_CENTER -> {
+                    anchorX = centerX;
+                    anchorY = flippedY ? top : bottom;
+                }
+                case TOP_RIGHT -> {
+                    anchorX = flippedX ? right : left;
+                    anchorY = flippedY ? top : bottom;
+                }
+                case MIDDLE_LEFT -> {
+                    anchorX = flippedX ? left : right;
+                    anchorY = centerY;
+                }
+                case MIDDLE_RIGHT -> {
+                    anchorX = flippedX ? right : left;
+                    anchorY = centerY;
+                }
+                case BOTTOM_LEFT -> {
+                    anchorX = flippedX ? left : right;
+                    anchorY = flippedY ? bottom : top;
+                }
+                case BOTTOM_CENTER -> {
+                    anchorX = centerX;
+                    anchorY = flippedY ? bottom : top;
+                }
+                case BOTTOM_RIGHT -> {
+                    anchorX = flippedX ? right : left;
+                    anchorY = flippedY ? bottom : top;
+                }
+                default ->
+                    throw new IllegalStateException("ROTATE ne redimensionne pas.");
+            }
+
+            return new Point2D.Double(anchorX, anchorY);
         }
 
         public static HandleType at(HShape shape, int worldMx, int worldMy) {
@@ -239,10 +394,29 @@ public class HShapeResizer extends HShape {
             return null;
         }
 
-        /**
-         * Indique à l'hôte quelle méthode appeler sur DefaultViewModel après un
-         * drag.
-         */
+        public HandleType opposite() {
+            return switch (this) {
+                case TOP_LEFT ->
+                    BOTTOM_RIGHT;
+                case TOP_CENTER ->
+                    BOTTOM_CENTER;
+                case TOP_RIGHT ->
+                    BOTTOM_LEFT;
+                case MIDDLE_LEFT ->
+                    MIDDLE_RIGHT;
+                case MIDDLE_RIGHT ->
+                    MIDDLE_LEFT;
+                case BOTTOM_LEFT ->
+                    TOP_RIGHT;
+                case BOTTOM_CENTER ->
+                    TOP_CENTER;
+                case BOTTOM_RIGHT ->
+                    TOP_LEFT;
+                case ROTATE ->
+                    ROTATE;
+            };
+        }
+        
         public ViewEvent.Type getActionEventType() {
             return this == ROTATE ? ViewEvent.Type.VIEW_ROTATED : ViewEvent.Type.VIEW_RESIZED;
         }
