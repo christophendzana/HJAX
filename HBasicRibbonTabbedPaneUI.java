@@ -16,16 +16,22 @@
  * Si aucun thème n'est défini, des couleurs neutres claires sont utilisées
  * pour garantir un rendu correct même sans HRibbonTabs parent.
  */
-package rubban;
+package HRIbbonTabs.view;
 
+import HRIbbonTabs.HRibbonTabbedPane;
+import HRIbbonTabs.model.RibbonThemeModel;
+
+import javax.swing.*;
+import javax.swing.event.ChangeListener;
+import javax.swing.plaf.basic.BasicTabbedPaneUI;
 import java.awt.*;
-import java.awt.event.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.util.HashMap;
 import java.util.Map;
-import javax.swing.*;
-import javax.swing.Timer;
-import javax.swing.plaf.basic.BasicTabbedPaneUI;
 
 /**
  * HBasicRibbonTabbedPaneUI — UI delegate moderne pour HRibbonTabbedPane.
@@ -58,6 +64,8 @@ public class HBasicRibbonTabbedPaneUI extends BasicTabbedPaneUI {
      */
     private int hoveredTab = -1;
 
+    private ChangeListener themeChangeListener;
+
     // =========================================================================
     // CONSTANTES D'ANIMATION
     // =========================================================================
@@ -88,8 +96,10 @@ public class HBasicRibbonTabbedPaneUI extends BasicTabbedPaneUI {
     // INSTALLATION
     // =========================================================================
     /**
-     * Installe l'UI delegate sur le composant. Enregistre les listeners de
+     * Installe l'UI delegate sur le composant.Enregistre les listeners de
      * souris pour les animations de survol.
+     *
+     * @param c
      */
     @Override
     public void installUI(JComponent c) {
@@ -113,6 +123,12 @@ public class HBasicRibbonTabbedPaneUI extends BasicTabbedPaneUI {
                 }
             }
         });
+
+        if (c instanceof HRibbonTabbedPane) {
+            themeChangeListener = e -> c.repaint();
+            ((HRibbonTabbedPane) c).getThemeModel().addChangeListener(themeChangeListener);
+        }
+
     }
 
     // =========================================================================
@@ -203,48 +219,29 @@ public class HBasicRibbonTabbedPaneUI extends BasicTabbedPaneUI {
         timer.start();
     }
 
-    // =========================================================================
-    // ACCÈS AU THÈME ACTIF
-    // =========================================================================
-    /**
-     * Retourne le thème global depuis HRibbonTabs. Utilisé pour les éléments
-     * qui ne dépendent pas d'un onglet spécifique comme le fond de la barre
-     * d'onglets ou la zone de contenu.
-     */
-    private HRibbonTabsTheme getActiveTheme() {
-        if (tabPane == null) {
-            return null;
-        }
-        Container parent = tabPane.getParent();
-        while (parent != null) {
-            if (parent instanceof HRibbonTabs) {
-                return ((HRibbonTabs) parent).getTheme();
-            }
-            parent = parent.getParent();
-        }
-        return null;
+    private RibbonThemeModel themeModel() {
+        return (tabPane instanceof HRibbonTabbedPane)
+                ? ((HRibbonTabbedPane) tabPane).getThemeModel()
+                : null;
     }
 
     /**
-     * Retourne le thème effectif d'un onglet donné. Remonte jusqu'au
-     * HRibbonTabs et appelle getEffectiveTabTheme(tabIndex). Si HRibbonTabs
-     * n'est pas trouvé, retourne le thème global comme fallback.
+     * Retourne le thème global.
+     */
+    private HRibbonTabsTheme getActiveTheme() {
+        RibbonThemeModel model = themeModel();
+        return (model != null) ? model.getGlobalTheme() : null;
+    }
+
+    /**
+     * Retourne le thème effectif d'un onglet donné.
      *
      * @param tabIndex index de l'onglet dont on veut le thème
      * @return le thème effectif, ou null
      */
     private HRibbonTabsTheme getEffectiveTabTheme(int tabIndex) {
-        if (tabPane == null) {
-            return null;
-        }
-        Container parent = tabPane.getParent();
-        while (parent != null) {
-            if (parent instanceof HRibbonTabs) {
-                return ((HRibbonTabs) parent).getEffectiveTabTheme(tabIndex);
-            }
-            parent = parent.getParent();
-        }
-        return null;
+        RibbonThemeModel model = themeModel();
+        return (model != null) ? model.getEffectiveTheme(tabIndex) : null;
     }
 
     /**
@@ -259,42 +256,45 @@ public class HBasicRibbonTabbedPaneUI extends BasicTabbedPaneUI {
         }
         return 6;
     }
+   
+    public int getTabAreaHeight() {
+        return calculateTabAreaHeight(tabPane.getTabPlacement(), runCount, maxTabHeight);
+    }
 
     // =========================================================================
     // RENDU — FOND DES ONGLETS
     // =========================================================================
     /**
      * Dessine le fond de chaque onglet avec coins arrondis et effet de survol.
-     *
      * Couleurs lues depuis le thème actif — fallback neutres si absent. L'effet
      * de survol est une interpolation animée entre tabBackground et
      * tabHoverBackground.
      */
-   @Override
-protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
-                                  int x, int y, int w, int h, boolean isSelected) {
-    Graphics2D g2 = (Graphics2D) g.create();
-    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    @Override
+    protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
+            int x, int y, int w, int h, boolean isSelected) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    HRibbonTabsTheme theme  = getEffectiveTabTheme(tabIndex);
-    int              radius = getCornerRadius();
+        HRibbonTabsTheme theme = getEffectiveTabTheme(tabIndex);
+        int radius = getCornerRadius();
 
-    Color bgColor;
-    if (isSelected) {
-        bgColor = (theme != null)
-            ? theme.getTabSelectedBackground()
-            : FALLBACK_TAB_SELECTED_BG;
-    } else {
-        Color normalBg = (theme != null) ? theme.getTabBackground()      : FALLBACK_TAB_BG;
-        Color hoverBg  = (theme != null) ? theme.getTabHoverBackground()  : FALLBACK_TAB_HOVER_BG;
-        float progress = hoverProgressMap.getOrDefault(tabIndex, 0f);
-        bgColor = interpolateColor(normalBg, hoverBg, progress);
+        Color bgColor;
+        if (isSelected) {
+            bgColor = (theme != null)
+                    ? theme.getTabSelectedBackground()
+                    : FALLBACK_TAB_SELECTED_BG;
+        } else {
+            Color normalBg = (theme != null) ? theme.getTabBackground() : FALLBACK_TAB_BG;
+            Color hoverBg = (theme != null) ? theme.getTabHoverBackground() : FALLBACK_TAB_HOVER_BG;
+            float progress = hoverProgressMap.getOrDefault(tabIndex, 0f);
+            bgColor = interpolateColor(normalBg, hoverBg, progress);
+        }
+
+        g2.setColor(bgColor);
+        g2.fill(new RoundRectangle2D.Float(x + 2, y + 2, w - 4, h - 2, radius, radius));
+        g2.dispose();
     }
-
-    g2.setColor(bgColor);
-    g2.fill(new RoundRectangle2D.Float(x + 2, y + 2, w - 4, h - 2, radius, radius));
-    g2.dispose();
-}
 
     // =========================================================================
     // RENDU — BORDURE DES ONGLETS
@@ -319,44 +319,43 @@ protected void paintTabBackground(Graphics g, int tabPlacement, int tabIndex,
      * pour créer une continuité visuelle avec l'onglet sélectionné.
      */
     @Override
-protected void paintContentBorder(Graphics g, int tabPlacement, int selectedIndex) {
-    Graphics2D g2 = (Graphics2D) g.create();
-    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    protected void paintContentBorder(Graphics g, int tabPlacement, int selectedIndex) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-    HRibbonTabsTheme theme  = getActiveTheme();
-    int              radius = getCornerRadius();
-    int              width  = tabPane.getWidth();
-    int              height = tabPane.getHeight();
+        HRibbonTabsTheme theme = getActiveTheme();
+        int radius = getCornerRadius();
+        int width = tabPane.getWidth();
+        int height = tabPane.getHeight();
 
-    Insets insets = tabPane.getInsets();
-    int x = insets.left;
-    int y = insets.top;
-    int w = width  - insets.left - insets.right;
-    int h = height - insets.top  - insets.bottom;
+        Insets insets = tabPane.getInsets();
+        int x = insets.left;
+        int y = insets.top;
+        int w = width - insets.left - insets.right;
+        int h = height - insets.top - insets.bottom;
 
-    // Les onglets sont toujours en haut — le contenu commence sous la barre d'onglets
-    int tabAreaHeight = calculateTabAreaHeight(tabPlacement, runCount, maxTabHeight);
-    y += tabAreaHeight;
-    h -= tabAreaHeight;
+        // Les onglets sont toujours en haut — le contenu commence sous la barre d'onglets
+        int tabAreaHeight = calculateTabAreaHeight(tabPlacement, runCount, maxTabHeight);
+        y += tabAreaHeight;
+        h -= tabAreaHeight;
 
-    // Fond du contenu
-    Color contentBg = (theme != null)
-        ? theme.getContentBackground()
-        : FALLBACK_CONTENT_BG;
-    g2.setColor(contentBg);
-    RoundRectangle2D contentRect = new RoundRectangle2D.Float(x, y, w, h, radius, radius);
-    g2.fill(contentRect);
+        // Fond du contenu
+        Color contentBg = (theme != null)
+                ? theme.getContentBackground()
+                : FALLBACK_CONTENT_BG;
+        g2.setColor(contentBg);
+        RoundRectangle2D contentRect = new RoundRectangle2D.Float(x, y, w, h, radius, radius);
+        g2.fill(contentRect);
 
-    // Bordure subtile autour du contenu
+        // Bordure subtile autour du contenu
 //    Color borderColor = (theme != null)
 //        ? theme.getContentBorderColor()
 //        : FALLBACK_CONTENT_BORDER;
 //    g2.setColor(borderColor);
 //    g2.setStroke(new BasicStroke(1f));
 //    g2.draw(contentRect);
-
-    g2.dispose();
-}
+        g2.dispose();
+    }
 
     // =========================================================================
     // RENDU — TEXTE DES ONGLETS
@@ -366,27 +365,27 @@ protected void paintContentBorder(Graphics g, int tabPlacement, int selectedInde
      * l'onglet sélectionné. Couleurs lues depuis le thème actif.
      */
     @Override
-protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
-                         int tabIndex, String title, Rectangle textRect, boolean isSelected) {
-    Graphics2D g2 = (Graphics2D) g.create();
-    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
-                        RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+    protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics metrics,
+            int tabIndex, String title, Rectangle textRect, boolean isSelected) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-    // Lire le thème de cet onglet spécifiquement
-    HRibbonTabsTheme theme = getEffectiveTabTheme(tabIndex);
+        // Lire le thème de cet onglet spécifiquement
+        HRibbonTabsTheme theme = getEffectiveTabTheme(tabIndex);
 
-    Color textColor = isSelected
-        ? (theme != null ? theme.getTabSelectedTextColor() : FALLBACK_TEXT_SELECTED)
-        : (theme != null ? theme.getTabTextColor()         : FALLBACK_TEXT_COLOR);
+        Color textColor = isSelected
+                ? (theme != null ? theme.getTabSelectedTextColor() : FALLBACK_TEXT_SELECTED)
+                : (theme != null ? theme.getTabTextColor() : FALLBACK_TEXT_COLOR);
 
-    g2.setColor(textColor);
-    Font tabFont = isSelected ? font.deriveFont(Font.BOLD) : font;
-    g2.setFont(tabFont);
+        g2.setColor(textColor);
+        Font tabFont = isSelected ? font.deriveFont(Font.BOLD) : font;
+        g2.setFont(tabFont);
 
-    FontMetrics fm = g2.getFontMetrics();
-    g2.drawString(title, textRect.x, textRect.y + fm.getAscent());
-    g2.dispose();
-}
+        FontMetrics fm = g2.getFontMetrics();
+        g2.drawString(title, textRect.x, textRect.y + fm.getAscent());
+        g2.dispose();
+    }
 
     // =========================================================================
     // RENDU — INDICATEUR DE FOCUS
@@ -471,6 +470,9 @@ protected void paintText(Graphics g, int tabPlacement, Font font, FontMetrics me
         hoverTimerMap.clear();
         hoverProgressMap.clear();
 
+        if (c instanceof HRibbonTabbedPane && themeChangeListener != null) {
+            ((HRibbonTabbedPane) c).getThemeModel().removeChangeListener(themeChangeListener);
+        }
         super.uninstallUI(c);
     }
 

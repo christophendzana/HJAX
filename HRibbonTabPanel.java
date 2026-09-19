@@ -1,9 +1,12 @@
-package rubban;
+package HRIbbonTabs;
 
+import HRIbbonTabs.model.RibbonTabListener;
+import HRIbbonTabs.model.RibbonThemeModel;
+import hcomponents.HScrollPane;
+import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
-import javax.swing.*;
 
 /**
  * @author FIDELE
@@ -42,17 +45,12 @@ public class HRibbonTabPanel extends JComponent {
     private final List<Component> actionComponents = new ArrayList<>();
 
     /**
-     * Référence vers HRibbonTabs parent.
-     */
-    private HRibbonTabs ribbonTabs;
-
-    /**
      * Largeur manuelle de l'ActionsPanel en pixels. -1 = mode auto (calculé
      * depuis les preferredSize des composants).
      */
-    private int manualActionsWidth = -1;
+    private int ActionsPanelWidth = -1;
 
-    private int tabBarHeight = 35;
+    private int tabBarHeight = 40;
 
     // =========================================================================
     // CONSTRUCTEUR
@@ -72,10 +70,15 @@ public class HRibbonTabPanel extends JComponent {
         // --- ActionsPanel ---
         // Fond transparent pour se fondre visuellement avec le tabbedPane
         this.actionsPanel = new JPanel();
-        this.actionsPanel.setLayout(null); // Layout manuel pour positionner chaque composant
+        this.actionsPanel.setLayout(null);
         this.actionsPanel.setOpaque(true);
-        this.actionsPanel.setBackground(Color.RED);
+        this.actionsPanel.add(new HScrollPane());
         add(this.actionsPanel);
+
+        // Nécessaire car tabbedPane occupe désormais toute la surface, y compris
+        // sous actionsPanel — sans ça, tabbedPane (ajouté en premier, donc au
+        // premier plan par défaut) masquerait actionsPanel
+        setComponentZOrder(actionsPanel, 0);
 
     }
 
@@ -93,31 +96,48 @@ public class HRibbonTabPanel extends JComponent {
         int totalWidth = getWidth();
         int totalHeight = getHeight();
 
-        // Calculer la largeur effective de l'ActionsPanel
+        // tabbedPane occupe toute la largeur — actionsPanel n'est jamais soustrait
+        // de son espace, elle se superpose en overlay (cf. correctif du bug de largeur)
+        tabbedPane.setBounds(0, 0, totalWidth, totalHeight);
+
+        // Force le recalcul immédiat des bounds internes (runCount, bounds par onglet)
+        // AVANT qu'on les lise — sans ça, getBoundsAt() renverrait l'état du
+        // cycle de layout précédent, potentiellement obsolète après un resize
+        tabbedPane.doLayout();
+
+        int tabAreaHeight = tabbedPane.getTabAreaHeight();
         int actionsWidth = computeActionsWidth();
+        int actionsX = totalWidth - actionsWidth;
 
-        // HRibbonTabbedPane prend tout l'espace à gauche de l'ActionsPanel
-        int tabbedWidth = totalWidth - actionsWidth;
+        // actionsPanel disparaît complètement dès qu'elle empiéterait
+        // sur la zone où JTabbedPane a besoin de place pour ses propres onglets
+        boolean overlap = actionsWidth > 0 && actionsPanelOverlapsTabs(actionsX);
+        actionsPanel.setVisible(!overlap);
 
-        System.out.println("HRibbonTabPanel.doLayout | totalWidth=" + totalWidth
-                + " totalHeight=" + totalHeight
-                + " actionsWidth=" + actionsWidth
-                + " tabbedWidth=" + tabbedWidth
-                + " actionComponents.size=" + actionComponents.size());
+        if (!overlap) {
+            actionsPanel.setBounds(actionsX, 0, actionsWidth, tabAreaHeight);
+            layoutActionComponents();
+        }
+    }
 
-        tabbedPane.setBounds(0, 0, tabbedWidth, totalHeight);
-
-        // ActionsPanel collé à droite, même hauteur
-        actionsPanel.setBounds(tabbedWidth, 0, actionsWidth, totalHeight);
-
-        // Positionner chaque composant dans l'ActionsPanel, centré verticalement
-        layoutActionComponents();
-        System.out.println("HRibbonTabPanel.actionsPanel.bounds=" + actionsPanel.getBounds());
-        
-        System.out.println("HRibbonTabPanel.bounds=" + getBounds() 
-        + " parent=" + (getParent() != null ? getParent().getClass().getSimpleName() : "null")
-        + " parentSize=" + (getParent() != null ? getParent().getSize() : "null"));
-
+    /**
+     * Indique si actionsPanel, positionnée à actionsX, empiéterait sur la zone
+     * que JTabbedPane utilise réellement pour afficher ses onglets.
+     *
+     * getBoundsAt() reflète le layout RÉEL calculé par BasicTabbedPaneUI, y
+     * compris quand SCROLL_TAB_LAYOUT est actif — pas un recalcul approximatif
+     * de notre côté, donc pas de désynchronisation possible avec le vrai rendu.
+     *
+     * @param actionsX position x envisagée pour actionsPanel
+     * @return true si le dernier onglet atteint ou dépasse cette position
+     */
+    private boolean actionsPanelOverlapsTabs(int actionsX) {
+        int lastTabIndex = tabbedPane.getTabCount() - 1;
+        if (lastTabIndex < 0) {
+            return false; // aucun onglet — jamais d'empiètement
+        }
+        Rectangle lastTabBounds = tabbedPane.getBoundsAt(lastTabIndex);
+        return lastTabBounds.x + lastTabBounds.width >= actionsX;
     }
 
     /**
@@ -140,10 +160,9 @@ public class HRibbonTabPanel extends JComponent {
 
             comp.setBounds(x, y, compWidth, compHeight);
 
-            System.out.println("layoutActionComponents | comp=" + comp.getClass().getSimpleName()
-                    + " bounds=" + comp.getBounds()
-                    + " actionsPanel.size=" + actionsPanel.getSize());
-
+//            System.out.println("layoutActionComponents | comp=" + comp.getClass().getSimpleName()
+//                    + " bounds=" + comp.getBounds()
+//                    + " actionsPanel.size=" + actionsPanel.getSize());
             x += compWidth + ACTIONS_GAP;
         }
     }
@@ -159,8 +178,8 @@ public class HRibbonTabPanel extends JComponent {
      */
     private int computeActionsWidth() {
         // Mode manuel — largeur fixée par l'utilisateur
-        if (manualActionsWidth >= 0) {
-            return manualActionsWidth;
+        if (ActionsPanelWidth >= 0) {
+            return ActionsPanelWidth;
         }
 
         // Aucun composant — l'ActionsPanel n'occupe aucun espace
@@ -179,8 +198,8 @@ public class HRibbonTabPanel extends JComponent {
     }
 
     public void setTabBarHeight(int height) {
-    this.tabBarHeight = height;
-}
+        this.tabBarHeight = height;
+    }
 
     // =========================================================================
     // API PUBLIQUE — GESTION DES COMPOSANTS CUSTOM
@@ -199,11 +218,10 @@ public class HRibbonTabPanel extends JComponent {
         actionComponents.add(comp);
         actionsPanel.add(comp);
 
-        System.out.println("HRibbonTabPanel.addComponent | actionComponents.size="
-                + actionComponents.size()
-                + " comp=" + comp.getClass().getSimpleName()
-                + " preferredSize=" + comp.getPreferredSize());
-
+//        System.out.println("HRibbonTabPanel.addComponent | actionComponents.size="
+//                + actionComponents.size()
+//                + " comp=" + comp.getClass().getSimpleName()
+//                + " preferredSize=" + comp.getPreferredSize());
         revalidate();
         repaint();
     }
@@ -230,8 +248,8 @@ public class HRibbonTabPanel extends JComponent {
      *
      * @param width largeur en pixels (doit être positif)
      */
-    public void setComponentsPanelWidth(int width) {
-        this.manualActionsWidth = Math.max(0, width);
+    public void setActionPanelWidth(int width) {
+        this.ActionsPanelWidth = Math.max(0, width);
         revalidate();
         repaint();
     }
@@ -241,7 +259,7 @@ public class HRibbonTabPanel extends JComponent {
      * recalculée depuis les preferredSize des composants.
      */
     public void resetComponentsPanelWidth() {
-        this.manualActionsWidth = -1;
+        this.ActionsPanelWidth = -1;
         revalidate();
         repaint();
     }
@@ -441,42 +459,20 @@ public class HRibbonTabPanel extends JComponent {
         tabbedPane.setSelectedIndex(index);
     }
 
-    // =========================================================================
-    // THÈMES — interface pour HBasicRibbonTabbedPaneUI (Option A)
-    // =========================================================================
-    /**
-     * Injecte la référence vers HRibbonTabs. Appelé par HRibbonTabs juste après
-     * la création de HRibbonTabPanel. Permet à HBasicRibbonTabbedPaneUI de lire
-     * les thèmes via ce composant sans avoir à remonter jusqu'à HRibbonTabs
-     * lui-même.
-     *
-     * @param ribbonTabs l'instance parente HRibbonTabs
-     */
-    public void setRibbonTabs(HRibbonTabs ribbonTabs) {
-        this.ribbonTabs = ribbonTabs;
+    public RibbonThemeModel getThemeModel() {
+        return tabbedPane.getThemeModel();
     }
 
-    /**
-     * Retourne le thème global depuis HRibbonTabs. Appelé par
-     * HBasicRibbonTabbedPaneUI pour peindre le fond de la barre d'onglets et la
-     * zone de contenu.
-     *
-     * @return le thème global, ou null si aucun thème n'est défini
-     */
-    public HRibbonTabsTheme getTheme() {
-        return (ribbonTabs != null) ? ribbonTabs.getTheme() : null;
+    public void setThemeModel(RibbonThemeModel themeModel) {
+        tabbedPane.setThemeModel(themeModel);
     }
 
-    /**
-     * Retourne le thème effectif d'un onglet donné depuis HRibbonTabs. Appelé
-     * par HBasicRibbonTabbedPaneUI pour peindre chaque onglet avec les bonnes
-     * couleurs (thème propre → thème global → null).
-     *
-     * @param tabIndex index de l'onglet (0-based)
-     * @return le thème effectif, ou null
-     */
-    public HRibbonTabsTheme getEffectiveTabTheme(int tabIndex) {
-        return (ribbonTabs != null) ? ribbonTabs.getEffectiveTabTheme(tabIndex) : null;
+    public void addRibbonTabListener(RibbonTabListener listener) {
+        tabbedPane.addRibbonTabListener(listener);
+    }
+
+    public void removeRibbonTabListener(RibbonTabListener listener) {
+        tabbedPane.removeRibbonTabListener(listener);
     }
 
     // =========================================================================

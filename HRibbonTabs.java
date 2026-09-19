@@ -1,27 +1,22 @@
-/*
- * HRibbonTabs.java
+package HRIbbonTabs;
 
- * THÈME EN CASCADE :
- *   Le thème global s'applique à tous les onglets qui n'ont pas de thème propre.
- *   Un thème défini sur un onglet précis prend priorité sur le thème global.
- *
- * ÉTATS :
- *   EXPANDED   — hauteur normale, Ribbon visible
- *   COLLAPSED  — hauteur réduite à la barre d'onglets seule
- */
-package rubban;
-
+import HRIbbonTabs.model.DefaultRibbonTabsModel;
+import HRIbbonTabs.model.RibbonTabEvent;
+import HRIbbonTabs.model.RibbonTabListener;
+import HRIbbonTabs.model.RibbonTabsModel;
+import HRIbbonTabs.view.HRibbonTabsTheme;
 import hcomponents.ArrowIcon;
 import hcomponents.HButton;
-import hcomponents.vues.HButtonStyle;
 import hcomponents.vues.HTabbedPaneStyle;
+import rubban.Ribbon;
+
+import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.util.HashMap;
 import java.util.Map;
-import javax.swing.*;
 
 /**
  * HRibbonTabs — Ruban à onglets style Word.
@@ -57,7 +52,9 @@ public class HRibbonTabs extends JComponent {
 
     private HRibbonTabPanel tabbedPane;
 
-    // Le bouton qui déclenche le collapse/expand   
+    private final RibbonTabsModel tabsModel;
+
+    // Le bouton qui déclenche le collapse/expand
     private HButton collapseButton;
 
     /**
@@ -68,12 +65,6 @@ public class HRibbonTabs extends JComponent {
         EXPANDED,
         COLLAPSED
     }
-
-    // État courant — commence toujours en EXPANDED
-    private RibbonTabsState currentState = RibbonTabsState.EXPANDED;
-
-    // Hauteur souhaitée en mode EXPANDED — fixée via le constructeur ou setHeight()
-    private int totalHeight = DEFAULT_HEIGHT;
 
     // Hauteur du ruban en mode COLLAPSED — par défaut égale à la barre d'onglets
     // L'utilisateur peut la modifier via setCollapsedHeight()
@@ -154,20 +145,23 @@ public class HRibbonTabs extends JComponent {
      */
     public HRibbonTabs(int height, HTabbedPaneStyle style) {
         super();
-
-        // On force un minimum raisonnable pour éviter un ruban trop écrasé
-        this.totalHeight = Math.max(TAB_BAR_HEIGHT + 40, height);
-
-        // Pas de LayoutManager — on positionne tout manuellement dans doLayout()
         setLayout(null);
 
+        this.tabsModel = new DefaultRibbonTabsModel(height);
+        this.tabsModel.addPropertyChangeListener(this::onTabsModelChanged);
+
         this.tabbedPane = new HRibbonTabPanel();
-        this.tabbedPane.setRibbonTabs(this);
         add(this.tabbedPane);
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         this.tabbedPane.setTabBarHeight(TAB_BAR_HEIGHT);
 
-        // Quand le tabbedPane change de taille, on recalcule la hauteur des Ribbon
+        // Rediffuse les événements de structure d'onglets vers les
+        // RibbonTabListener externes — même schéma que componentResized ci-dessous
+        this.tabbedPane.addRibbonTabListener(this::fireRibbonTabEvent);
+
+        // Rediffuse les changements de thème (icône du bouton, fond de la barre)
+        this.tabbedPane.getThemeModel().addChangeListener(e -> syncChromeWithTheme());
+
         tabbedPane.addComponentListener(new ComponentAdapter() {
             @Override
             public void componentResized(ComponentEvent e) {
@@ -175,11 +169,10 @@ public class HRibbonTabs extends JComponent {
             }
         });
 
-        // --- Bouton collapse ---
         this.collapseButton = new HButton(
                 new ArrowIcon(iconColor, ArrowIcon.Direction.UP, 0.4f, 5)
         );
-        this.collapseButton.setButtonStyle(HButtonStyle.PRIMARY);
+        collapseButton.setBackgroundPainted(false);
         this.collapseButton.setToolTipText("Réduire le ruban");
         this.collapseButton.addActionListener(e -> toggleState());
         add(this.collapseButton);
@@ -204,7 +197,7 @@ public class HRibbonTabs extends JComponent {
             windowResizeListener = new ComponentAdapter() {
                 @Override
                 public void componentResized(ComponentEvent e) {
-                    if (!autoCollapseEnabled || isAdjustingState) {
+                    if (!tabsModel.isAutoCollapseEnabled() || isAdjustingState) {
                         return;
                     }
 
@@ -219,13 +212,13 @@ public class HRibbonTabs extends JComponent {
 
                     int windowHeight = window.getHeight();
                     // Le seuil = hauteur du ruban + espace minimum pour le contenu
-                    int threshold = totalHeight + minContentHeight;
+                    int threshold = tabsModel.getExpandedHeight() + tabsModel.getMinContentHeight();
 
                     isAdjustingState = true;
                     try {
-                        if (windowHeight < threshold && currentState == RibbonTabsState.EXPANDED) {
+                        if (windowHeight < threshold && tabsModel.getState() == RibbonTabsState.EXPANDED) {
                             setState(RibbonTabsState.COLLAPSED);
-                        } else if (windowHeight >= threshold && currentState == RibbonTabsState.COLLAPSED) {
+                        } else if (windowHeight >= threshold && tabsModel.getState() == RibbonTabsState.COLLAPSED) {
                             setState(RibbonTabsState.EXPANDED);
                         }
                     } finally {
@@ -284,7 +277,7 @@ public class HRibbonTabs extends JComponent {
         int posX = width - BUTTON_WIDTH - right;
 
         int posY;
-        if (currentState == RibbonTabsState.COLLAPSED) {
+        if (tabsModel.getState() == RibbonTabsState.COLLAPSED) {
             // En COLLAPSED le bouton est aligné avec le haut de la barre d'onglets
             posY = top;
         } else {
@@ -310,7 +303,7 @@ public class HRibbonTabs extends JComponent {
      * Bascule entre EXPANDED et COLLAPSED. Appelée par le bouton collapse.
      */
     private void toggleState() {
-        if (currentState == RibbonTabsState.EXPANDED) {
+        if (tabsModel.getState() == RibbonTabsState.EXPANDED) {
             setState(RibbonTabsState.COLLAPSED);
         } else {
             setState(RibbonTabsState.EXPANDED);
@@ -324,35 +317,11 @@ public class HRibbonTabs extends JComponent {
      * @param newState EXPANDED ou COLLAPSED
      */
     public void setState(RibbonTabsState newState) {
-        if (newState == null || newState == currentState) {
-            return;
-        }
-
-        RibbonTabsState oldState = currentState;
-        currentState = newState;
-
-        if (newState == RibbonTabsState.COLLAPSED) {
-            collapseButton.setIcon(new ArrowIcon(iconColor, ArrowIcon.Direction.DOWN, 0.4f, 5));
-            collapseButton.setToolTipText("Étendre le ruban");
-            animateTo(collapsedHeight);
-        } else {
-            collapseButton.setIcon(new ArrowIcon(iconColor, ArrowIcon.Direction.UP, 0.4f, 5));
-            collapseButton.setToolTipText("Réduire le ruban");
-            animateTo(totalHeight);
-        }
-
-        // Les listeners enregistrés via addPropertyChangeListener("ribbonTabsState", ...)
-        // seront automatiquement notifiés par ce firePropertyChange
-        firePropertyChange("ribbonTabsState", oldState, newState);
+        tabsModel.setState(newState);
     }
 
-    /**
-     * Retourne l'état actuel.
-     *
-     * @return EXPANDED ou COLLAPSED
-     */
     public RibbonTabsState getState() {
-        return currentState;
+        return tabsModel.getState();
     }
 
     // =========================================================================
@@ -400,11 +369,7 @@ public class HRibbonTabs extends JComponent {
      * @param height nouvelle hauteur en pixels
      */
     public void setHeight(int height) {
-        this.totalHeight = Math.max(TAB_BAR_HEIGHT + 40, height);
-        applyPreferredSize();
-        propagateHeightToRibbons();
-        revalidate();
-        repaint();
+        tabsModel.setExpandedHeight(height);
     }
 
     /**
@@ -413,7 +378,7 @@ public class HRibbonTabs extends JComponent {
      * @return hauteur en pixels
      */
     public int getConfiguredHeight() {
-        return totalHeight;
+        return tabsModel.getExpandedHeight();
     }
 
     /**
@@ -428,7 +393,7 @@ public class HRibbonTabs extends JComponent {
                 return Math.max(40, tabbedPane.getHeight());
             }
         }
-        return Math.max(40, totalHeight - TAB_BAR_HEIGHT - 10);
+        return Math.max(40, tabsModel.getExpandedHeight() - TAB_BAR_HEIGHT - 10);
     }
 
     /**
@@ -436,14 +401,15 @@ public class HRibbonTabs extends JComponent {
      * parent décide de la largeur (BorderLayout.NORTH).
      */
     private void applyPreferredSize() {
-        setPreferredSize(new Dimension(0, totalHeight));
-        setMinimumSize(new Dimension(0, totalHeight));
-        setMaximumSize(new Dimension(Short.MAX_VALUE, totalHeight));
+        setPreferredSize(new Dimension(0, tabsModel.getExpandedHeight()));
+        setMinimumSize(new Dimension(0, tabsModel.getExpandedHeight()));
+        setMaximumSize(new Dimension(Short.MAX_VALUE, tabsModel.getExpandedHeight()));
     }
 
     /**
      * Applique la hauteur correcte à tous les Ribbon déjà enregistrés. Appelée
-     * quand le tabbedPane change de taille ou quand totalHeight change.
+     * quand le tabbedPane change de taille ou quand
+     * tabsModel.getExpandedHeight() change.
      */
     private void propagateHeightToRibbons() {
         int h = calculateRibbonHeight();
@@ -479,8 +445,7 @@ public class HRibbonTabs extends JComponent {
      * @param theme le thème à appliquer, ou null pour tout réinitialiser
      */
     public void setTheme(HRibbonTabsTheme theme) {
-        this.globalTheme = theme;
-        propagateThemes();
+        tabbedPane.getThemeModel().setGlobalTheme(theme);
     }
 
     /**
@@ -489,7 +454,7 @@ public class HRibbonTabs extends JComponent {
      * @return le thème global, ou null si aucun
      */
     public HRibbonTabsTheme getTheme() {
-        return globalTheme;
+        return tabbedPane.getThemeModel().getGlobalTheme();
     }
 
     /**
@@ -502,10 +467,7 @@ public class HRibbonTabs extends JComponent {
      * @return le thème effectif, ou null si aucun thème n'est défini
      */
     public HRibbonTabsTheme getEffectiveTabTheme(int tabIndex) {
-        if (tabThemes.containsKey(tabIndex)) {
-            return tabThemes.get(tabIndex);
-        }
-        return globalTheme;
+        return tabbedPane.getThemeModel().getEffectiveTheme(tabIndex);
     }
 
     /**
@@ -519,12 +481,7 @@ public class HRibbonTabs extends JComponent {
         if (tabIndex < 0 || tabIndex >= tabbedPane.getTabCount()) {
             return;
         }
-        if (theme == null) {
-            tabThemes.remove(tabIndex);
-        } else {
-            tabThemes.put(tabIndex, theme);
-        }
-        propagateThemes();
+        tabbedPane.getThemeModel().setTabTheme(tabIndex, theme);
     }
 
     /**
@@ -535,7 +492,7 @@ public class HRibbonTabs extends JComponent {
      * @return le thème de l'onglet, ou null
      */
     public HRibbonTabsTheme getTabTheme(int tabIndex) {
-        return tabThemes.get(tabIndex);
+        return tabbedPane.getThemeModel().getTabTheme(tabIndex);
     }
 
     /**
@@ -545,8 +502,7 @@ public class HRibbonTabs extends JComponent {
      * @param tabIndex index de l'onglet (0-based)
      */
     public void removeTabTheme(int tabIndex) {
-        tabThemes.remove(tabIndex);
-        propagateThemes();
+        tabbedPane.getThemeModel().removeTabTheme(tabIndex);
     }
 
     /**
@@ -602,7 +558,7 @@ public class HRibbonTabs extends JComponent {
      * @param enabled true pour activer
      */
     public void setAutoCollapseEnabled(boolean enabled) {
-        this.autoCollapseEnabled = enabled;
+        tabsModel.setAutoCollapseEnabled(enabled);
     }
 
     /**
@@ -611,18 +567,19 @@ public class HRibbonTabs extends JComponent {
      * @return true si activé
      */
     public boolean isAutoCollapseEnabled() {
-        return autoCollapseEnabled;
+        return tabsModel.isAutoCollapseEnabled();
     }
 
     /**
      * Définit l'espace minimal à conserver sous le ruban pour le contenu. Cet
      * espace sert de seuil pour le collapse automatique : si windowHeight <
-     * totalHeight + minContentHeight → collapse. Valeur par défaut : 150px.
+     * tabsModel.getExpandedHeight() + minContentHeight → collapse. Valeur par
+     * défaut : 150px.
      *
      * @param height espace minimal en pixels
      */
     public void setMinContentHeight(int height) {
-        this.minContentHeight = Math.max(0, height);
+        tabsModel.setMinContentHeight(height);
     }
 
     /**
@@ -631,7 +588,7 @@ public class HRibbonTabs extends JComponent {
      * @return espace minimal en pixels
      */
     public int getMinContentHeight() {
-        return minContentHeight;
+        return tabsModel.getMinContentHeight();
     }
 
     // =========================================================================
@@ -662,8 +619,8 @@ public class HRibbonTabs extends JComponent {
      *
      * @param width largeur en pixels
      */
-    public void setComponentsPanelWidth(int width) {
-        tabbedPane.setComponentsPanelWidth(width);
+    public void setActionPanelWidth(int width) {
+        tabbedPane.setActionPanelWidth(width);
     }
 
     /**
@@ -700,7 +657,7 @@ public class HRibbonTabs extends JComponent {
      */
     public void setCollapseButtonIconColor(Color color) {
         this.iconColor = color;
-        if (currentState == RibbonTabsState.EXPANDED) {
+        if (tabsModel.getState() == RibbonTabsState.EXPANDED) {
             collapseButton.setIcon(new ArrowIcon(color, ArrowIcon.Direction.UP, 0.4f, 5));
         } else {
             collapseButton.setIcon(new ArrowIcon(color, ArrowIcon.Direction.DOWN, 0.4f, 5));
@@ -728,11 +685,7 @@ public class HRibbonTabs extends JComponent {
      * @param height hauteur en pixels
      */
     public void setCollapsedHeight(int height) {
-        this.collapsedHeight = Math.max(TAB_BAR_HEIGHT, height);
-        // Si on est déjà en COLLAPSED, appliquer immédiatement
-        if (currentState == RibbonTabsState.COLLAPSED) {
-            animateTo(this.collapsedHeight);
-        }
+        tabsModel.setCollapsedHeight(height);
     }
 
     /**
@@ -741,7 +694,7 @@ public class HRibbonTabs extends JComponent {
      * @return hauteur en pixels
      */
     public int getCollapsedHeight() {
-        return collapsedHeight;
+        return tabsModel.getCollapsedHeight();
     }
 
     // =========================================================================
@@ -793,19 +746,8 @@ public class HRibbonTabs extends JComponent {
         if (index < 0 || index >= tabbedPane.getTabCount()) {
             return;
         }
-
-        tabbedPane.removeTabAt(index);
-        tabThemes.remove(index);
-
-        // Réindexer les thèmes — tous les index > index sont décrémentés de 1
-        Map<Integer, HRibbonTabsTheme> reindexed = new HashMap<>();
-        for (Map.Entry<Integer, HRibbonTabsTheme> entry : tabThemes.entrySet()) {
-            int oldIndex = entry.getKey();
-            reindexed.put(oldIndex > index ? oldIndex - 1 : oldIndex, entry.getValue());
-        }
-        tabThemes.clear();
-        tabThemes.putAll(reindexed);
-
+        tabbedPane.removeTabAt(index); // déclenche RibbonTabEvent.REMOVED en interne
+        tabbedPane.getThemeModel().reindexAfterTabRemoval(index);
         tabbedPane.revalidate();
         tabbedPane.repaint();
     }
@@ -932,8 +874,7 @@ public class HRibbonTabs extends JComponent {
     public void addRibbon(String title, Ribbon ribbon) {
         int index = tabbedPane.indexOfTab(title);
         if (index == -1) {
-            System.err.println("HRibbonTabs.addRibbon : onglet introuvable \"" + title + "\"");
-            return;
+            throw new IllegalArgumentException("HRibbonTabs.addRibbon : onglet introuvable \"" + title + "\"");
         }
         addRibbon(index, ribbon);
     }
@@ -959,9 +900,7 @@ public class HRibbonTabs extends JComponent {
         applyHeightToRibbon(ribbon, calculateRibbonHeight());
 
         // Appliquer le thème effectif au Ribbon injecté
-        HRibbonTabsTheme effectiveTheme = tabThemes.containsKey(tabIndex)
-                ? tabThemes.get(tabIndex)
-                : globalTheme;
+        HRibbonTabsTheme effectiveTheme = tabbedPane.getThemeModel().getEffectiveTheme(tabIndex);
         if (effectiveTheme != null) {
             ribbon.setTheme(effectiveTheme);
         }
@@ -1028,6 +967,21 @@ public class HRibbonTabs extends JComponent {
         return tabbedPane.getComponentAt(tabIndex) instanceof Ribbon;
     }
 
+    // Point d'extension : notifie l'ajout/suppression d'un onglet
+    public void addRibbonTabListener(RibbonTabListener listener) {
+        listenerList.add(RibbonTabListener.class, listener);
+    }
+
+    public void removeRibbonTabListener(RibbonTabListener listener) {
+        listenerList.remove(RibbonTabListener.class, listener);
+    }
+
+    private void fireRibbonTabEvent(RibbonTabEvent e) {
+        for (RibbonTabListener l : listenerList.getListeners(RibbonTabListener.class)) {
+            l.tabChanged(e);
+        }
+    }
+
     // =========================================================================
     // API PUBLIQUE — ACCÈS AUX COMPOSANTS
     // =========================================================================
@@ -1072,10 +1026,6 @@ public class HRibbonTabs extends JComponent {
      */
     public HRibbonTabPanel getTabbedPane() {
         return tabbedPane;
-    }
-
-    public void setTabbedPane(HRibbonTabPanel tabPanel) {
-        this.tabbedPane = tabPanel;
     }
 
     /**
@@ -1140,7 +1090,77 @@ public class HRibbonTabs extends JComponent {
         }
         Container parent = getParent();
         int width = (parent != null) ? parent.getWidth() : 800;
-        return new Dimension(width, totalHeight);
+        return new Dimension(width, tabsModel.getExpandedHeight());
+    }
+
+    // Réagit aux changements du modèle : déclenche animation/layout selon
+// la propriété modifiée
+    private void onTabsModelChanged(java.beans.PropertyChangeEvent evt) {
+        String prop = evt.getPropertyName();
+        if (prop.equals("state")) {
+            onStateChanged((RibbonTabsState) evt.getOldValue(), (RibbonTabsState) evt.getNewValue());
+        } else if (prop.equals("expandedHeight")) {
+            applyPreferredSize();
+            propagateHeightToRibbons();
+            revalidate();
+            repaint();
+        } else if (prop.equals("collapsedHeight") && tabsModel.getState() == RibbonTabsState.COLLAPSED) {
+            animateTo(tabsModel.getCollapsedHeight());
+        }
+        // minContentHeight / autoCollapseEnabled : lus à la volée par le listener
+        // de resize de fenêtre, rien à propager ici
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        HRibbonTabsTheme theme = tabbedPane.getThemeModel().getGlobalTheme();
+        if (theme != null) {
+            int tabAreaHeight = tabbedPane.getTabbedPane().getTabAreaHeight();
+
+            g.setColor(theme.getTabBarBackground());
+            g.fillRect(0, 0, getWidth(), Math.min(tabAreaHeight, getHeight()));
+
+            g.setColor(theme.getContentBackground());
+            g.fillRect(0, tabAreaHeight, getWidth(), getHeight() - tabAreaHeight);
+        }
+        super.paintComponent(g);
+    }
+
+// Applique l'icône, le tooltip et l'animation correspondant au nouvel état
+    private void onStateChanged(RibbonTabsState oldState, RibbonTabsState newState) {
+        if (newState == RibbonTabsState.COLLAPSED) {
+            collapseButton.setIcon(new ArrowIcon(iconColor, ArrowIcon.Direction.DOWN, 0.4f, 5));
+            collapseButton.setToolTipText("Étendre le ruban");
+            animateTo(tabsModel.getCollapsedHeight());
+        } else {
+            collapseButton.setIcon(new ArrowIcon(iconColor, ArrowIcon.Direction.UP, 0.4f, 5));
+            collapseButton.setToolTipText("Réduire le ruban");
+            animateTo(tabsModel.getExpandedHeight());
+        }
+        firePropertyChange("ribbonTabsState", oldState, newState);
+    }
+
+    // Remplace propagateThemes() — pousse le thème effectif vers chaque Ribbon
+// (Ribbon ne s'abonne pas lui-même au modèle) et synchronise le chrome
+    private void syncChromeWithTheme() {
+        for (int i = 0; i < tabbedPane.getTabCount(); i++) {
+            Component content = tabbedPane.getComponentAt(i);
+            if (content instanceof Ribbon) {
+                HRibbonTabsTheme effective = tabbedPane.getThemeModel().getEffectiveTheme(i);
+                if (effective != null) {
+                    ((Ribbon) content).setTheme(effective);
+                }
+            }
+        }
+
+        HRibbonTabsTheme globalTheme = tabbedPane.getThemeModel().getGlobalTheme();
+        if (globalTheme != null) {            
+            collapseButton.setBackground(globalTheme.getCollapseButtonBackground());
+            collapseButton.setOpaque(false);
+            applyThemeToTabbedPane(globalTheme);
+        }
+
+        repaint();
     }
 
 }
