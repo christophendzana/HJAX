@@ -4,6 +4,7 @@ import IllustrationShape.HShapeResizer.HandleType;
 import IllustrationShape.model.*;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 
 import javax.swing.JComponent;
 import javax.swing.Timer;
@@ -102,6 +103,7 @@ public final class HShapeEngineHandler implements ViewModelListener, ListViewSel
     /**
      * Remplace le ViewModel en cours d'utilisation.
      *     
+     * @param model le model des view
      */
     public void setViewModel(ViewModel model) {
         if (model == null) {
@@ -121,7 +123,8 @@ public final class HShapeEngineHandler implements ViewModelListener, ListViewSel
     }
 
     /**
-     * Remplace le ViewModelSelection en cours d'utilisation. 
+     * Remplace le ViewModelSelection en cours d'utilisation.
+     * @param model le model de selection
      */
     public void setSelectionModel(ViewModelSelection model) {
         if (model == null) {
@@ -148,6 +151,13 @@ public final class HShapeEngineHandler implements ViewModelListener, ListViewSel
 
         Graphics2D g2 = (Graphics2D) g.create();
 
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_RENDERING,
+                    RenderingHints.VALUE_RENDER_QUALITY);
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                    RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+        
         for (HShape shape : getViewModel().getShapes()) {
             shape.Paint(g2, 0, 0);
 
@@ -208,6 +218,7 @@ public final class HShapeEngineHandler implements ViewModelListener, ListViewSel
 
     /**
      * Reconstruite à la demande depuis la sélection — rien n'est mis en cache.
+     * @return la liste des HShapeResizer de tous les HShape
      */
     public List<HShapeResizer> getShapeResizers() {
         List<HShapeResizer> resizers = new ArrayList<>();

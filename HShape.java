@@ -1,10 +1,9 @@
 package IllustrationShape;
 
-import IllustrationShape.border.ViewBorder;
+import IllustrationShape.vues.border.ViewBorder;
 import java.awt.*;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
-import javax.swing.JTable;
 
 public abstract class HShape extends HView {
 

@@ -57,7 +57,7 @@ public class HShapeEditor {
         }
         JRootPane rootPane = SwingUtilities.getRootPane(host);
         if (rootPane == null) {
-            return; // host pas encore affiché dans une fenêtre réalisée
+            return; 
         }
         if (isEditing()) {
             stopEditing();
@@ -71,10 +71,7 @@ public class HShapeEditor {
         shape.setRotationDegrees(0);
 
         component.setText(content.getText());
-
-        // Bornes calculées en coordonnées de la JLayeredPane, pas de host —
-        // c'est ce qui rend le positionnement indépendant du LayoutManager
-        // de host : setBounds() ici fait autorité, sans concurrence.
+       
         Point positionInLayeredPane = SwingUtilities.convertPoint(
                 host, shape.getX(), shape.getY(), layeredPane);
         component.setBounds(positionInLayeredPane.x, positionInLayeredPane.y,

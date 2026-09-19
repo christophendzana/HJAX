@@ -1,6 +1,20 @@
 package IllustrationShape;
 
-import IllustrationShape.Shapes.*;
+import IllustrationShape.vues.catalogue.ShapeCircle;
+import IllustrationShape.vues.catalogue.ShapeElbowConnector;
+import IllustrationShape.vues.catalogue.ShapeDoubleArrow;
+import IllustrationShape.vues.catalogue.ShapeLineArrow;
+import IllustrationShape.vues.catalogue.ShapeCurvedConnectorDoubleArrow;
+import IllustrationShape.vues.catalogue.ShapeCurvedConnectorArrow;
+import IllustrationShape.vues.catalogue.ShapeStraightConnectorArrow;
+import IllustrationShape.vues.catalogue.ShapeSimpleLine;
+import IllustrationShape.vues.catalogue.ShapeCurvedConnector;
+import IllustrationShape.vues.catalogue.ShapeStraightConnectorDoubleArrow;
+import IllustrationShape.vues.catalogue.ShapeElbowConnectorDoubleArrow;
+import IllustrationShape.vues.catalogue.ShapeElbowConnectorArrow;
+import IllustrationShape.vues.catalogue.ShapeStraightConnector;
+import IllustrationShape.vues.catalogue.ShapeRectangle;
+import IllustrationShape.vues.catalogue.ShapeRoundedRectangle;
 
 public final class ShapeFactory {
 
@@ -57,6 +71,14 @@ public final class ShapeFactory {
 
     public static HShape createShapeElbowConnectorDoubleArrow(int x, int y, int w, int h) {
         return new ShapeElbowConnectorDoubleArrow(x, y, w, h);
+    }
+    
+    public static HShape createShapeRoundedRectangle(int x, int y, int w, int h) {
+        return new ShapeRoundedRectangle(x, y, w, h);
+    }
+    
+    public static HShape createShapeCircle(int x, int y, int w, int h) {
+        return new ShapeCircle(x, y, w, h);
     }
 
 }

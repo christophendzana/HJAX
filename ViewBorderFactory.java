@@ -1,7 +1,10 @@
 package IllustrationShape;
 
-import IllustrationShape.border.ViewBorder;
-import IllustrationShape.border.*;
+import IllustrationShape.vues.border.DashedLineBorder;
+import IllustrationShape.vues.border.LineBorder;
+import IllustrationShape.vues.border.CompoundBorder;
+import IllustrationShape.vues.border.EmptyBorder;
+import IllustrationShape.vues.border.ViewBorder;
 import java.awt.Color;
 
 /**
@@ -26,9 +29,5 @@ public final class ViewBorderFactory {
     public static ViewBorder createCompoundBorder(ViewBorder outside, ViewBorder inside) {
         return new CompoundBorder(outside, inside);
     }
-
-    // La bordure spéciale des poignées : liée à une HViewShape précise, jamais partagée entre plusieurs formes
-    public static ViewBorder createResizeBorder(HViewShape shape) {
-        return new ResizeBorder(shape);
-    }
+    
 }
