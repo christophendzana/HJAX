@@ -1,115 +1,75 @@
 package hsplitpane;
 
 import hcomponents.HScrollPane;
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Dimension;
-import javax.swing.JPanel;
-import hsplitpane.HSplitPane.ZonePosition;
-import hsplitpane.HSplitPane.WrapDirection;
+
+import javax.swing.*;
+import java.awt.*;
 
 /**
- * Représente une zone d'ancrage dans un HSplitPane.
  *
- * Chaque zone occupe une position fixe (NORTH, SOUTH, EAST, WEST ou CENTER)
- * et peut accueillir plusieurs composants enfants positionnés par
- * HSplitWrapLayout.
- *
- * La zone supporte trois modes spéciaux :
- * - Collapsed  : réduite à la taille du header uniquement
- * - FullScreen : agrandie pour occuper tout l'espace du HSplitPane
- * - Floating   : détachée dans une fenêtre HDialog indépendante
- *
- * Structure interne :
- * <pre>
- *   HSplitZone (BorderLayout)
- *   ├── HSplitZoneHeader  [bord selon la position]
- *   └── HScrollPane       [CENTER]
- *         └── contentPanel (JPanel avec HSplitWrapLayout)
- * </pre>
  */
 public class HSplitZone extends JPanel {
 
-    // -------------------------------------------------------------------------
-    // Identité et position
-    // -------------------------------------------------------------------------
+    /**
+     * État exclusif d'une zone. Une zone est toujours dans exactement un de ces
+     * états.
+     */
+    public enum ZoneState {
+        NORMAL, COLLAPSED, FULLSCREEN, FLOATING
+    }
 
-    /** Position de cette zone dans le HSplitPane parent. */
     private final ZonePosition position;
 
-    /** Titre affiché dans la barre de contrôle. */
     private String titre;
 
-    // -------------------------------------------------------------------------
-    // Dimensions
-    // -------------------------------------------------------------------------
+    private Integer initialSize;
 
-    /** Taille initiale fournie par la configuration. Null = flexible. */
-    private Dimension initialSize;
-
-    /**
-     * Taille mémorisée avant un collapse, pour restauration.
-     * Utilisée aussi pour la réintégration depuis le mode flottant.
-     */
     private Dimension sizeBeforeCollapse;
 
-    // -------------------------------------------------------------------------
-    // États
-    // -------------------------------------------------------------------------
+    private Dimension currentAnimationSize;
 
-    /** true si la zone est actuellement réduite. */
-    private boolean collapsed;
+    private ZoneState state = ZoneState.NORMAL;
 
-    /** true si la zone est en mode fullscreen. */
-    private boolean fullScreen;
+    /**
+     * Mémorise l'état d'avant l'entrée en fullscreen, pour le restaurer
+     * fidèlement à la sortie (une zone COLLAPSED qui passe en FULLSCREEN doit
+     * redevenir COLLAPSED, pas NORMAL).
+     */
+    private ZoneState stateBeforeFullScreen;
 
-    /** true si la zone est détachée dans une fenêtre flottante. */
-    private boolean floating;
+    private boolean inAnimation;
 
-    // -------------------------------------------------------------------------
-    // Référence au HSplitPane parent
-    // Nécessaire pour déléguer les opérations fullscreen qui affectent
-    // toutes les zones simultanément.
-    // -------------------------------------------------------------------------
-
-    /** Référence au HSplitPane qui contient cette zone. */
     private HSplitPane splitPaneRef;
 
-    // -------------------------------------------------------------------------
-    // Composants internes
-    // -------------------------------------------------------------------------
-
-    /** Barre de contrôle avec titre et boutons d'action. */
     private HSplitZoneHeader header;
 
-    /** Panneau interne qui reçoit les composants de l'utilisateur. */
+    private Color headerBackgroundColor;
+
+    private JPanel headerContainer;
+
     private JPanel contentPanel;
 
-    /** Conteneur de défilement enveloppant le panneau de contenu. */
     private HScrollPane scrollPane;
 
-    /** Fenêtre flottante active, ou null si la zone n'est pas flottante. */
     private HSplitFloatDialog floatDialog;
 
-    // -------------------------------------------------------------------------
-    // Animation
-    // -------------------------------------------------------------------------
-
     private static final int ANIMATION_DURATION = 160;
-    private static final int STEP_COUNT         = 30;
+
+    private static final int STEP_COUNT = 30;
 
     private javax.swing.Timer animationTimer;
 
-    /**
-     * true pendant une animation — le layout respecte la taille courante
-     * de la zone plutôt que de la recalculer depuis ses valeurs stockées.
-     */
-    private boolean inAnimation = false;
+    private HSplitZoneHeader.HeaderPosition expandedHeaderPosition;
 
-    // =========================================================================
-    // Constructeurs
-    // =========================================================================
+    private HSplitZoneHeader.HeaderPosition defaultCollapsedPosition;
+
+    private Color headerTitleColor;
+
+    private Font headerTitleFont;
+
+    private static final int DEFAULT_SIZE_NORTH_SOUTH = 150;
+
+    private static final int DEFAULT_SIZE_WEST_EAST = 200;
 
     public HSplitZone(ZonePosition position) {
         this(position, null, null);
@@ -119,26 +79,82 @@ public class HSplitZone extends JPanel {
         this(position, titre, null);
     }
 
-    public HSplitZone(ZonePosition position, String titre, Dimension initialSize) {
-        this.position    = position;
-        this.titre       = titre;
-        this.initialSize = initialSize;
-        this.collapsed   = false;
-        this.fullScreen  = false;
-        this.floating    = false;
+    public HSplitZone(ZonePosition position, String titre, Integer initialSize) {
+        this.position = position;
+        this.titre = titre;
+        this.initialSize = resolveInitialSize(position, initialSize);
+
+        this.currentAnimationSize = null;
+
+        this.defaultCollapsedPosition = getDefaultCollapsedPosition(position);
+        this.expandedHeaderPosition = this.defaultCollapsedPosition;
+
+        this.headerBackgroundColor = new Color(60, 63, 65);
+        this.headerTitleColor = new Color(187, 187, 187);
+        this.headerTitleFont = new Font("Dialog", Font.PLAIN, 11);
 
         initializeComponents();
         assembleZone();
-        connectListeners();
+
+        connectListenersOnce();
     }
 
-    // =========================================================================
-    // Initialisation
-    // =========================================================================
+    private static Integer resolveInitialSize(ZonePosition position, Integer provided) {
+        if (provided != null) {
+            return provided;
+        }
+        return switch (position) {
+            case NORTH, SOUTH ->
+                DEFAULT_SIZE_NORTH_SOUTH;
+            case WEST, EAST ->
+                DEFAULT_SIZE_WEST_EAST;
+            case CENTER ->
+                null;
+        };
+    }
+
+    private HSplitZoneHeader.HeaderPosition getDefaultCollapsedPosition(ZonePosition pos) {
+        return switch (pos) {
+
+            case NORTH ->
+                HSplitZoneHeader.HeaderPosition.BOTTOM;
+
+            case SOUTH ->
+                HSplitZoneHeader.HeaderPosition.TOP;
+
+            case WEST ->
+                HSplitZoneHeader.HeaderPosition.RIGHT;
+
+            case EAST ->
+                HSplitZoneHeader.HeaderPosition.LEFT;
+
+            case CENTER ->
+                null;
+            default ->
+                null;
+        };
+    }
 
     private void initializeComponents() {
+
         if (position != ZonePosition.CENTER) {
-            header = new HSplitZoneHeader(position, titre);
+
+            HSplitZoneHeader.HeaderPosition initialPosition = (state == ZoneState.COLLAPSED)
+                    ? defaultCollapsedPosition
+                    : expandedHeaderPosition;
+
+            header = new HSplitZoneHeader(
+                    position,
+                    titre,
+                    headerBackgroundColor,
+                    headerTitleColor,
+                    22,
+                    initialPosition
+            );
+
+            if (headerTitleFont != null) {
+                header.setTitleFont(headerTitleFont);
+            }
         }
 
         contentPanel = new JPanel(new HSplitWrapLayout());
@@ -151,237 +167,242 @@ public class HSplitZone extends JPanel {
     }
 
     private void assembleZone() {
+
         setLayout(new BorderLayout());
         setOpaque(true);
         setBackground(new Color(43, 43, 43));
 
+        headerContainer = new JPanel(new BorderLayout());
+        headerContainer.setOpaque(false);
+
         if (header != null) {
-            switch (position) {
-                case NORTH: add(header, BorderLayout.SOUTH); break;
-                case SOUTH: add(header, BorderLayout.NORTH); break;
-                case WEST:  add(header, BorderLayout.EAST);  break;
-                case EAST:  add(header, BorderLayout.WEST);  break;
-                default:    break;
-            }
+
+            HSplitZoneHeader.HeaderPosition initialPosition = (state == ZoneState.COLLAPSED)
+                    ? defaultCollapsedPosition
+                    : expandedHeaderPosition;
+            String constraint = headerPositionToBorderLayoutConstraint(initialPosition);
+            headerContainer.add(header, constraint);
         }
 
+        String headerConstraint = headerPositionToBorderLayoutConstraint(
+                state == ZoneState.COLLAPSED
+                        ? defaultCollapsedPosition
+                        : expandedHeaderPosition
+        );
+
+        add(headerContainer, headerConstraint);
         add(scrollPane, BorderLayout.CENTER);
     }
 
-    /**
-     * Branche les trois boutons du header sur leurs méthodes respectives.
-     */
-    private void connectListeners() {
-        if (header != null) {
-            header.addToggleListener(e     -> toggleCollapse());
-            header.addFullScreenListener(e -> toggleFullScreen());
-            header.addFloatListener(e      -> toggleFloat());
+    private void connectListenersOnce() {
+        if (header == null) {
+            return;
+        }
+
+        header.addToggleListener(e -> toggleCollapse());
+        header.addFullScreenListener(e -> toggleFullScreen());
+        header.addFloatListener(e -> toggleFloat());
+    }
+
+    private String headerPositionToBorderLayoutConstraint(HSplitZoneHeader.HeaderPosition pos) {
+        if (pos == null) {
+            return BorderLayout.CENTER;
+        }
+
+        return switch (pos) {
+            case TOP ->
+                BorderLayout.NORTH;
+            case BOTTOM ->
+                BorderLayout.SOUTH;
+            case LEFT ->
+                BorderLayout.WEST;
+            case RIGHT ->
+                BorderLayout.EAST;
+            default ->
+                BorderLayout.CENTER;
+        };
+    }
+
+    private void toggleCollapse() {
+        if (state == ZoneState.COLLAPSED) {
+            expand();
+        } else {
+            collapse();
         }
     }
 
-    // =========================================================================
-    // Logique collapse / expand
-    // =========================================================================
-
-    private void toggleCollapse() {
-        if (collapsed) expand(); else collapse();
-    }
-
-    /**
-     * Réduit la zone à la taille du header.
-     * La taille courante est mémorisée pour la restauration ultérieure.
-     */
     public void collapse() {
-        if (collapsed) return;
-
-        if (animationTimer != null && animationTimer.isRunning()) {
-            animationTimer.stop();
+        if (state == ZoneState.COLLAPSED) {
+            return;
         }
 
         sizeBeforeCollapse = getSize();
-        collapsed = true;
+        state = ZoneState.COLLAPSED;
 
-        if (header != null) header.updateCollapseState(true);
-
-        animate(sizeBeforeCollapse, getCollapsedSize());
-    }
-
-    /**
-     * Développe la zone en restaurant sa taille d'avant le collapse.
-     */
-    public void expand() {
-        if (!collapsed) return;
-
-        if (animationTimer != null && animationTimer.isRunning()) {
-            animationTimer.stop();
+        if (header != null) {
+            header.updateCollapseState(true);
         }
 
-        collapsed = false;
+        animateSize(getCollapsedSize());
+    }
 
-        if (header != null) header.updateCollapseState(false);
+    public void expand() {
+        if (state != ZoneState.COLLAPSED) {
+            return;
+        }
 
+        state = ZoneState.NORMAL;
+
+        if (header != null) {
+            header.updateCollapseState(false);
+        }
+
+        animateSize(resolveExpandedTargetSize());
+    }
+
+    private Dimension resolveExpandedTargetSize() {
         Dimension targetSize = sizeBeforeCollapse;
         if (targetSize == null || (targetSize.width == 0 && targetSize.height == 0)) {
-            targetSize = getPreferredSize();
-            if (targetSize.width  <= 0) targetSize.width  = 200;
-            if (targetSize.height <= 0) targetSize.height = 150;
+            targetSize = new Dimension(200, 150);
         }
-
-        animate(getCollapsedSize(), targetSize);
-    }
-    
-    /**
- * Anime la zone depuis ses bounds actuels vers les bounds cibles.
- * Utilisé par HSplitPane pour la transition d'entrée en fullscreen.
- *
- * @param targetX      position X cible
- * @param targetY      position Y cible
- * @param targetWidth  largeur cible
- * @param targetHeight hauteur cible
- */
-public void animerVersBounds(int targetX, int targetY, int targetWidth, int targetHeight) {
-    if (animationTimer != null && animationTimer.isRunning()) {
-        animationTimer.stop();
+        return targetSize;
     }
 
-    final int startX = getX();
-    final int startY = getY();
-    final int startW = getWidth();
-    final int startH = getHeight();
-    final int[] step = {0};
-
-    inAnimation = true;
-
-    animationTimer = new javax.swing.Timer(ANIMATION_DURATION / STEP_COUNT, e -> {
-        step[0]++;
-        float t = (float) step[0] / STEP_COUNT;
-
-        int cx = (int) (startX + t * (targetX - startX));
-        int cy = (int) (startY + t * (targetY - startY));
-        int cw = (int) (startW + t * (targetWidth  - startW));
-        int ch = (int) (startH + t * (targetHeight - startH));
-
-        setBounds(cx, cy, cw, ch);
-
-        if (getParent() != null) {
-            getParent().revalidate();
-            getParent().repaint();
+    private void refreshHeaderPosition() {
+        if (header == null) {
+            return;
         }
 
-        if (step[0] >= STEP_COUNT) {
-            animationTimer.stop();
-            inAnimation = false;
-            setBounds(targetX, targetY, targetWidth, targetHeight);
-            if (getParent() != null) {
-                getParent().repaint();
-            }
+        HSplitZoneHeader.HeaderPosition targetPosition =
+                (state == ZoneState.COLLAPSED)
+                        ? defaultCollapsedPosition
+                        : expandedHeaderPosition;
+
+        // Mise à jour du header lui-même
+        header.updateEffectivePosition(targetPosition);
+        header.setCouleurFond(headerBackgroundColor);
+        header.setCouleurTitre(headerTitleColor);
+
+        if (headerTitleFont != null) {
+            header.setTitleFont(headerTitleFont);
         }
-    });
 
-    animationTimer.setRepeats(true);
-    animationTimer.start();
-}
+        // Repositionnement du header dans son container
+        headerContainer.removeAll();
+        headerContainer.add(header,
+                headerPositionToBorderLayoutConstraint(targetPosition));
 
-    // =========================================================================
-    // Logique fullscreen
-    // =========================================================================
+        // IMPORTANT :
+        // le headerContainer doit lui aussi être placé sur le bon bord
+        remove(headerContainer);
 
-    /**
-     * Bascule entre le mode fullscreen et le mode normal.
-     * Délègue entièrement au HSplitPane qui coordonne toutes les zones.
-     */
+        add(headerContainer,
+                headerPositionToBorderLayoutConstraint(targetPosition));
+
+        revalidate();
+        repaint();
+    }
+
     private void toggleFullScreen() {
-        if (splitPaneRef == null) return;
-        if (fullScreen) splitPaneRef.exitFullScreen();
-        else            splitPaneRef.enterFullScreen(position);
+        if (splitPaneRef == null) {
+            return;
+        }
+
+        if (state == ZoneState.FULLSCREEN) {
+            splitPaneRef.exitFullScreen();
+        } else {
+            splitPaneRef.enterFullScreen(position);
+        }
     }
 
     /**
-     * Active ou désactive le mode fullscreen sur cette zone.
-     * Appelé exclusivement par HSplitPane — ne pas appeler directement.
-     *
-     * @param fullScreen true pour activer le fullscreen
+     * Bascule l'état plein écran de la zone. Appelée uniquement par HSplitPane,
+     * qui est seul à savoir coordonner les autres zones — voir le commentaire
+     * de classe sur ZoneState pour le principe de source de vérité unique.
      */
     void setFullScreenState(boolean fullScreen) {
-        this.fullScreen = fullScreen;
-        if (header != null) header.updateFullScreenState(fullScreen);
+        if (fullScreen) {
+            stateBeforeFullScreen = state;
+            state = ZoneState.FULLSCREEN;
+        } else {
+            state = (stateBeforeFullScreen != null) ? stateBeforeFullScreen : ZoneState.NORMAL;
+            stateBeforeFullScreen = null;
+        }
+        if (header != null) {
+            header.updateFullScreenState(fullScreen);
+        }
     }
 
-    // =========================================================================
-    // Logique float
-    // =========================================================================
-
-    /**
-     * Bascule entre le mode flottant et le mode intégré.
-     */
     private void toggleFloat() {
-        if (floating) reintegrateZone(); else floatZone();
+        if (state == ZoneState.FLOATING) {
+            reintegrateZone();
+        } else {
+            floatZone();
+        }
     }
 
     /**
-     * Détache la zone dans une fenêtre flottante HDialog.
+     * Détache la zone dans une fenêtre flottante.
      *
-     * Séquence d'opérations :
-     * 1. Retire le scrollPane de la zone pour le transférer dans le dialog
-     * 2. Crée le HSplitFloatDialog et y place le scrollPane
-     * 3. Collapse la zone dans le HSplitPane (seul le header reste visible)
-     * 4. Affiche le dialog
-     *
-     * Note : en Swing un composant ne peut avoir qu'un seul parent.
-     * Le retrait du scrollPane de la zone et son ajout dans le dialog
-     * est donc la seule façon de le "déplacer".
+     * CHANGEMENT — auparavant, floatZone() dupliquait collapse() dans une
+     * méthode privée collapserPourFloat() presque identique (même animation,
+     * mêmes mises à jour de header), simplement parce que le modèle à 4
+     * booléens indépendants "avait besoin" d'être à la fois collapsed=true et
+     * floating=true. Avec un état exclusif, on n'a plus ce besoin : le mode
+     * FLOATING représente à lui seul "une zone réduite à un emplacement réservé
+     * pendant que son contenu vit dans une fenêtre externe" (voir
+     * HSplitPaneRootLayout, qui traite COLLAPSED et FLOATING de la même façon
+     * pour le calcul de taille). Résultat : une seule animation de réduction,
+     * appelée ici directement, sans méthode dupliquée.
      */
     public void floatZone() {
-        if (floating) return;
 
-        floating = true;
+        if (state == ZoneState.FLOATING) {
+            return;
+        }
 
-        if (header != null) header.updateFloatingState(true);
+        boolean etaitCollapsed = (state == ZoneState.COLLAPSED);
+        state = ZoneState.FLOATING;
 
-        // Transfert du scrollPane vers le dialog
+        if (header != null) {
+            header.updateFloatingState(true);
+        }
+
         remove(scrollPane);
         revalidate();
         repaint();
 
-        // Création du dialog flottant
-        floatDialog = new HSplitFloatDialog(titre != null ? titre : "Zone flottante");
+        String dialogTitle = titre != null ? titre : "Zone flottante";
+        floatDialog = new HSplitFloatDialog(dialogTitle);
         floatDialog.setContenu(scrollPane);
-
-        // Le callback de fermeture déclenche la réintégration
         floatDialog.setOnFermetureCallback(this::reintegrateZone);
 
-        // La zone se réduit dans le HSplitPane — seul le header reste visible
-        collapserPourFloat();
+        if (!etaitCollapsed) {
+            sizeBeforeCollapse = getSize();
+            animateSize(getCollapsedSize());
+        }
 
         floatDialog.afficher();
     }
 
-    /**
-     * Réintègre la zone dans le HSplitPane après fermeture du dialog flottant.
-     *
-     * Séquence d'opérations :
-     * 1. Récupère le scrollPane depuis le dialog et le réintègre dans la zone
-     * 2. Expand la zone dans le HSplitPane
-     * 3. Ferme le dialog si toujours ouvert
-     */
     public void reintegrateZone() {
-        if (!floating) return;
 
-        floating = false;
+        if (state != ZoneState.FLOATING) {
+            return;
+        }
 
-        if (header != null) header.updateFloatingState(false);
+        state = ZoneState.NORMAL;
 
-        // Récupération du scrollPane et réintégration dans la zone
+        if (header != null) {
+            header.updateFloatingState(false);
+        }
+
         add(scrollPane, BorderLayout.CENTER);
         revalidate();
         repaint();
 
-        // Expand pour restaurer la zone dans le HSplitPane
-        expandDepuisFloat();
+        animateSize(resolveExpandedTargetSize());
 
-        // Fermeture du dialog si toujours visible.
-        // On neutralise le callback AVANT d'appeler fermer() pour éviter
-        // que la fermeture ne déclenche à nouveau reintegrateZone().
         if (floatDialog != null) {
             floatDialog.setOnFermetureCallback(null);
             if (floatDialog.isVisible()) {
@@ -391,61 +412,40 @@ public void animerVersBounds(int targetX, int targetY, int targetWidth, int targ
         }
     }
 
-    /**
-     * Réduit la zone dans le HSplitPane au moment du passage en mode flottant.
-     * Mémorise la taille courante pour la restauration future.
-     */
-    private void collapserPourFloat() {
-        if (!collapsed) {
-            sizeBeforeCollapse = getSize();
-            collapsed = true;
-            if (header != null) header.updateCollapseState(true);
-            animate(sizeBeforeCollapse, getCollapsedSize());
-        }
-    }
-
-    /**
-     * Développe la zone lors de la réintégration depuis le mode flottant.
-     */
-    private void expandDepuisFloat() {
-        if (collapsed) {
-            collapsed = false;
-            if (header != null) header.updateCollapseState(false);
-
-            Dimension targetSize = sizeBeforeCollapse;
-            if (targetSize == null || (targetSize.width == 0 && targetSize.height == 0)) {
-                targetSize = new Dimension(200, 150);
-            }
-
-            animate(getCollapsedSize(), targetSize);
-        }
-    }
-
     // =========================================================================
-    // Animation
+    // Moteur d'animation — unifié
+    //
+    // CHANGEMENT — animate(Dimension,Dimension) et animerVersBounds(x,y,w,h)
+    // réimplémentaient chacune leur propre javax.swing.Timer avec la même
+    // interpolation linéaire. animateSize() n'est plus qu'un raccourci de
+    // animateTo() qui garde la position (x,y) courante. Une seule mécanique
+    // d'animation à maintenir : si demain tu veux changer la courbe
+    // d'interpolation (easing au lieu de linéaire), un seul endroit à modifier.
     // =========================================================================
+    private void animateTo(int targetX, int targetY, int targetWidth, int targetHeight) {
+        if (animationTimer != null && animationTimer.isRunning()) {
+            animationTimer.stop();
+        }
 
-    /**
-     * Lance une animation progressive entre deux tailles.
-     *
-     * À chaque tick du timer on interpole linéairement entre startSize et
-     * targetSize. Le flag inAnimation signale au HSplitPaneRootLayout de
-     * respecter la taille courante de la zone pendant toute la durée.
-     */
-    private void animate(Dimension startSize, Dimension targetSize) {
+        final int startX = getX();
+        final int startY = getY();
+        final int startW = getWidth();
+        final int startH = getHeight();
         final int[] step = {0};
-        int interval = ANIMATION_DURATION / STEP_COUNT;
 
         inAnimation = true;
 
-        animationTimer = new javax.swing.Timer(interval, e -> {
+        animationTimer = new javax.swing.Timer(ANIMATION_DURATION / STEP_COUNT, e -> {
             step[0]++;
             float t = (float) step[0] / STEP_COUNT;
 
-            int w = (int) (startSize.width  + t * (targetSize.width  - startSize.width));
-            int h = (int) (startSize.height + t * (targetSize.height - startSize.height));
+            int cx = (int) (startX + t * (targetX - startX));
+            int cy = (int) (startY + t * (targetY - startY));
+            int cw = (int) (startW + t * (targetWidth - startW));
+            int ch = (int) (startH + t * (targetHeight - startH));
 
-            setSize(w, h);
+            currentAnimationSize = new Dimension(cw, ch);
+            setBounds(cx, cy, cw, ch);
 
             if (getParent() != null) {
                 getParent().revalidate();
@@ -455,7 +455,8 @@ public void animerVersBounds(int targetX, int targetY, int targetWidth, int targ
             if (step[0] >= STEP_COUNT) {
                 animationTimer.stop();
                 inAnimation = false;
-                setSize(targetSize.width, targetSize.height);
+                currentAnimationSize = null;
+                setBounds(targetX, targetY, targetWidth, targetHeight);
 
                 if (getParent() != null) {
                     getParent().revalidate();
@@ -469,26 +470,151 @@ public void animerVersBounds(int targetX, int targetY, int targetWidth, int targ
     }
 
     /**
-     * Retourne la taille minimale visible quand la zone est réduite.
-     * Correspond à la taille du header pour que les boutons restent accessibles.
+     * Anime uniquement la taille, en conservant la position actuelle
+     * (collapse/expand/float).
      */
+    private void animateSize(Dimension targetSize) {
+        animateTo(getX(), getY(), targetSize.width, targetSize.height);
+    }
+
+    /**
+     * Anime position ET taille (utilisé pour le passage en plein écran).
+     */
+    public void animerVersBounds(int targetX, int targetY, int targetWidth, int targetHeight) {
+        animateTo(targetX, targetY, targetWidth, targetHeight);
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+
+        if (inAnimation && currentAnimationSize != null) {
+            return new Dimension(currentAnimationSize);
+        }
+
+        if (initialSize != null) {
+            return switch (position) {
+                case NORTH, SOUTH ->
+                    new Dimension(0, initialSize);
+                case WEST, EAST ->
+                    new Dimension(initialSize, 0);
+                case CENTER ->
+                    super.getPreferredSize();
+            };
+        }
+
+        return super.getPreferredSize();
+    }
+
     public Dimension getCollapsedSize() {
-        if (header == null) return new Dimension(0, 0);
+        if (header == null) {
+            return new Dimension(0, 0);
+        }
 
-        Dimension hs = header.getPreferredSize();
+        int thickness = header.getEpaisseur();
 
-        switch (position) {
-            case NORTH:
-            case SOUTH: return new Dimension(0, hs.height);
-            case WEST:
-            case EAST:  return new Dimension(hs.width, 0);
-            default:    return new Dimension(0, 0);
+        if (defaultCollapsedPosition == HSplitZoneHeader.HeaderPosition.TOP
+                || defaultCollapsedPosition == HSplitZoneHeader.HeaderPosition.BOTTOM) {
+
+            return new Dimension(0, thickness);
+        } else {
+
+            return new Dimension(thickness, 0);
         }
     }
 
-    // =========================================================================
-    // API publique
-    // =========================================================================
+    public void setExpandedHeaderPosition(HSplitZoneHeader.HeaderPosition position) {
+        if (position == null) {
+            throw new IllegalArgumentException("La position du header ne peut pas être null");
+        }
+
+        if (!isValidHeaderPosition(position)) {
+            throw new IllegalArgumentException(
+                    "La position " + position + " n'est pas valide pour la zone " + this.position
+            );
+        }
+
+        this.expandedHeaderPosition = position;
+
+        if (!inAnimation) {
+            refreshHeaderPosition();
+            revalidate();
+            repaint();
+        }
+    }
+
+    public HSplitZoneHeader.HeaderPosition getExpandedHeaderPosition() {
+        return expandedHeaderPosition;
+    }
+
+    public HSplitZoneHeader.HeaderPosition getDefaultCollapsedPosition() {
+        return defaultCollapsedPosition;
+    }
+
+    private boolean isValidHeaderPosition(HSplitZoneHeader.HeaderPosition pos) {
+        if (pos == null) {
+            return false;
+        }
+
+        return switch (position) {
+            case NORTH ->
+                pos == HSplitZoneHeader.HeaderPosition.TOP
+                || pos == HSplitZoneHeader.HeaderPosition.BOTTOM;
+            case SOUTH ->
+                pos == HSplitZoneHeader.HeaderPosition.TOP
+                || pos == HSplitZoneHeader.HeaderPosition.BOTTOM;
+            case WEST ->
+                pos == HSplitZoneHeader.HeaderPosition.LEFT
+                || pos == HSplitZoneHeader.HeaderPosition.RIGHT
+                || pos == HSplitZoneHeader.HeaderPosition.TOP;
+            case EAST ->
+                pos == HSplitZoneHeader.HeaderPosition.LEFT
+                || pos == HSplitZoneHeader.HeaderPosition.RIGHT
+                || pos == HSplitZoneHeader.HeaderPosition.TOP;
+            case CENTER ->
+                false;
+            default ->
+                false;
+        };
+    }
+
+    public void setHeaderBackgroundColor(Color color) {
+        this.headerBackgroundColor = color;
+        if (header != null) {
+            header.setCouleurFond(color);
+        }
+    }
+
+    public Color getHeaderBackgroundColor() {
+        return headerBackgroundColor;
+    }
+
+    public void setHeaderTitleColor(Color color) {
+        if (color == null) {
+            return;
+        }
+        this.headerTitleColor = color;
+        if (header != null) {
+            header.setCouleurTitre(color);
+        }
+    }
+
+    public Color getHeaderTitleColor() {
+        return headerTitleColor;
+    }
+
+    public void setHeaderTitleFont(Font font) {
+        if (font == null) {
+            return;
+        }
+        this.headerTitleFont = font;
+        if (header != null) {
+            header.setTitleFont(font);
+        }
+    }
+
+    public Font getHeaderTitleFont() {
+        return headerTitleFont;
+    }
 
     public void addContainer(Component composant) {
         contentPanel.add(composant);
@@ -520,39 +646,74 @@ public void animerVersBounds(int targetX, int targetY, int targetWidth, int targ
         contentPanel.repaint();
     }
 
-    // =========================================================================
-    // Getters et Setters
-    // =========================================================================
-
-    public ZonePosition getPosition()         { return position;    }
-    public boolean      isCollapsed()         { return collapsed;   }
-    public boolean      isFullScreen()        { return fullScreen;  }
-    public boolean      isFloating()          { return floating;    }
-    public boolean      isEnAnimation()       { return inAnimation; }
-    public boolean      animationInProgress() { return inAnimation; }
-    public Dimension    getInitialSize()      { return initialSize; }
-
-    public void setInitialSize(Dimension initialSize) {
-        this.initialSize = initialSize;
+    public ZonePosition getPosition() {
+        return position;
     }
 
-    public Dimension getSizeBeforeCollapse() { return sizeBeforeCollapse; }
-    public String    getTitre()              { return titre;              }
+    public String getTitre() {
+        return titre;
+    }
 
     public void setTitre(String titre) {
         this.titre = titre;
-        if (header != null) header.setTitre(titre);
+        if (header != null) {
+            header.setTitre(titre);
+        }
     }
 
-    public HSplitZoneHeader getHeader() { return header; }
+    public ZoneState getState() {
+        return state;
+    }
+
+    public boolean isCollapsed() {
+        return state == ZoneState.COLLAPSED;
+    }
+
+    public boolean isFullScreen() {
+        return state == ZoneState.FULLSCREEN;
+    }
+
+    public boolean isFloating() {
+        return state == ZoneState.FLOATING;
+    }
 
     /**
-     * Enregistre la référence au HSplitPane parent.
-     * Appelé par HSplitPane lors de la construction — nécessaire pour que
-     * les boutons fullscreen et float puissent coordonner avec le parent.
-     *
-     * @param splitPane le HSplitPane qui contient cette zone
+     * Vrai si la zone doit être rendue à sa taille réduite (collapsed OU
+     * floating se comportent visuellement de la même façon dans le layout du
+     * parent).
      */
+    public boolean isCollapsedOrFloating() {
+        return state == ZoneState.COLLAPSED || state == ZoneState.FLOATING;
+    }
+
+    public boolean isEnAnimation() {
+        return inAnimation;
+    }
+
+    public boolean animationInProgress() {
+        return inAnimation;
+    }
+
+    public Integer getInitialSize() {
+        return initialSize;
+    }
+
+    public void setInitialSize(Integer initialSize) {
+        if (position == ZonePosition.CENTER) {
+            throw new UnsupportedOperationException(
+                    "La zone CENTER occupe toujours l'espace restant, sa taille ne peut pas être définie.");
+        }
+        this.initialSize = initialSize;
+    }
+
+    public Dimension getSizeBeforeCollapse() {
+        return sizeBeforeCollapse;
+    }
+
+    public HSplitZoneHeader getHeader() {
+        return header;
+    }
+
     public void setSplitPaneRef(HSplitPane splitPane) {
         this.splitPaneRef = splitPane;
     }

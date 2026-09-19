@@ -1,0 +1,142 @@
+@startuml HSplitPane
+
+skinparam classAttributeIconSize 0
+hide empty members
+skinparam linetype ortho
+
+package "hsplitpane" {
+
+    ' ==============================
+    ' API PRINCIPALE
+    ' ==============================
+
+    class HSplitPane {
+        +add(Component, ZonePosition)
+        +remove(Component, ZonePosition)
+
+        +getZone(ZonePosition): HSplitZone
+        +getDivider(ZonePosition): HSplitDivider
+
+        +enterFullScreen(ZonePosition)
+        +exitFullScreen()
+
+        +isZoneFullScreen(ZonePosition): boolean
+    }
+
+    class HSplitZone {
+        -position: ZonePosition
+        -state: ZoneState
+        -titre: String
+
+        +collapse()
+        +expand()
+        +floatZone()
+        +reintegrateZone()
+    }
+
+    class HSplitDivider {
+        -orientation: WrapDirection
+        -locked: boolean
+    }
+
+    class HSplitZoneHeader {
+        -title: String
+    }
+
+    ' ==============================
+    ' CONFIGURATION
+    ' ==============================
+
+    class HSplitPaneConfig {
+        -northSize: Integer
+        -southSize: Integer
+        -westSize: Integer
+        -eastSize: Integer
+        -centerSize: Integer
+        -showCenter: boolean
+    }
+
+    ' ==============================
+    ' UI / LAYOUT
+    ' ==============================
+
+    abstract class HSplitPaneUI
+
+    class BasicHSplitPaneUI
+
+    class HSplitPaneRootLayout
+
+    ' ==============================
+    ' ENUMERATIONS
+    ' ==============================
+
+    enum ZonePosition {
+        NORTH
+        SOUTH
+        WEST
+        EAST
+        CENTER
+    }
+
+    enum ZoneState {
+        NORMAL
+        COLLAPSED
+        FULLSCREEN
+        FLOATING
+    }
+
+    enum WrapDirection {
+        HORIZONTAL
+        VERTICAL
+    }
+}
+
+
+' ==================================
+' RELATIONS PRINCIPALES
+' ==================================
+
+HSplitPane "1" *-- "5" HSplitZone : zones
+HSplitPane "1" *-- "4" HSplitDivider : dividers
+
+HSplitPane "1" o-- "1" HSplitPaneConfig : configuration
+
+HSplitZone "1" *-- "0..1" HSplitZoneHeader : header
+
+HSplitZone --> ZonePosition
+HSplitZone --> ZoneState
+
+HSplitDivider --> WrapDirection
+
+
+' ==================================
+' UI DELEGATE
+' ==================================
+
+HSplitPane --> HSplitPaneUI : UI delegate
+BasicHSplitPaneUI --|> HSplitPaneUI
+
+BasicHSplitPaneUI ..> HSplitPane : configure
+BasicHSplitPaneUI ..> HSplitZone : create
+BasicHSplitPaneUI ..> HSplitDivider : create
+BasicHSplitPaneUI ..> HSplitPaneRootLayout : install
+
+HSplitPaneRootLayout ..> HSplitZone : layout
+HSplitPaneRootLayout ..> HSplitDivider : layout
+
+
+' ==================================
+' SWING
+' ==================================
+
+HSplitPane --|> JPanel
+HSplitZone --|> JPanel
+HSplitDivider --|> JPanel
+HSplitZoneHeader --|> JPanel
+
+HSplitPaneUI --|> PanelUI
+PanelUI --|> ComponentUI
+
+HSplitPaneRootLayout ..|> LayoutManager2
+
+@enduml

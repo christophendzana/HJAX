@@ -3,77 +3,63 @@ package hsplitpane;
 import hcomponents.HButton;
 import hcomponents.HLabel;
 import hcomponents.vues.HLabelOrientation;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.Graphics;
-import java.awt.Graphics2D;
-import java.awt.RenderingHints;
-import java.awt.event.ActionListener;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JPanel;
+
+import javax.swing.*;
 import javax.swing.border.EmptyBorder;
-import hsplitpane.HSplitPane.ZonePosition;
+import java.awt.*;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Barre de contrôle affichée en bordure d'une HSplitZone.
- *
- * Contient trois boutons dessinés programmatiquement :
- * - Toggle      : collapse / expand de la zone
- * - FullScreen  : agrandit la zone / restaure les dimensions normales
- * - Float       : détache la zone dans une fenêtre flottante
- *
- * Pour EAST et WEST, le layout est vertical et le titre s'oriente
- * automatiquement pour rester lisible.
+ * 
+ *@author FIDELE
  */
 public class HSplitZoneHeader extends JPanel {
 
-    // -------------------------------------------------------------------------
-    // Constantes
-    // -------------------------------------------------------------------------
+    private static final int DEFAULT_HEIGHT = 22;
 
-    private static final int   DEFAULT_HEIGHT           = 22;
-    private static final int   BUTTON_SIZE              = 16;
+    private static final int BUTTON_SIZE = 16;
+
     private static final Color DEFAULT_BACKGROUND_COLOR = new Color(60, 63, 65);
-    private static final Color DEFAULT_TITLE_COLOR      = new Color(187, 187, 187);
 
-    // -------------------------------------------------------------------------
-    // Configuration
-    // -------------------------------------------------------------------------
+    private static final Color DEFAULT_TITLE_COLOR = new Color(187, 187, 187);
+
+    public enum HeaderPosition {
+
+        TOP,
+        BOTTOM,
+        LEFT,
+        RIGHT
+    }
 
     private final ZonePosition position;
-    private String             title;
-    private Color              backgroundColor;
-    private Color              titleColor;
-    private int                thickness;
 
-    // -------------------------------------------------------------------------
-    // États visuels
-    // -------------------------------------------------------------------------
+    private String title;
 
-    /** true si la zone est réduite — détermine le sens de la flèche toggle. */
+    private Color backgroundColor;
+
+    private Color titleColor;
+
+    private int thickness;
+
+    private HeaderPosition effectivePosition;
+
     private boolean isCollapsed;
 
-    /** true si la zone est en mode fullscreen. */
     private boolean isFullScreen;
 
-    /** true si la zone est actuellement flottante. */
     private boolean isFloating;
 
-    // -------------------------------------------------------------------------
-    // Composants internes
-    // -------------------------------------------------------------------------
+    private HLabel titleLabel;
 
-    private HLabel  titleLabel;
-    private HButton toggleButton;
-    private HButton fullScreenButton;
-    private HButton floatButton;
-
-    // =========================================================================
-    // Constructeurs
-    // =========================================================================
+    // Les 3 actions standard du header. Pour ajouter une 4ème action (ex: pin),
+    // voir getActions() plus bas et le commentaire de limite assumée dans
+    // HeaderAction.java.
+    private final List<HeaderAction> actions = new ArrayList<>();
+    private HeaderAction toggleAction;
+    private HeaderAction fullScreenAction;
+    private HeaderAction floatAction;
 
     public HSplitZoneHeader(ZonePosition position) {
         this(position, null, DEFAULT_BACKGROUND_COLOR, DEFAULT_TITLE_COLOR, DEFAULT_HEIGHT);
@@ -84,60 +70,102 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     public HSplitZoneHeader(ZonePosition position, String title,
-            Color backgroundColor, Color titleColor, int thickness) {
-        this.position        = position;
-        this.title           = title;
-        this.backgroundColor = backgroundColor;
-        this.titleColor      = titleColor;
-        this.thickness       = thickness;
-        this.isCollapsed     = false;
-        this.isFullScreen    = false;
-        this.isFloating      = false;
+            Color backgroundColor, Color titleColor,
+            int thickness) {
+        this(position, title, backgroundColor, titleColor, thickness,
+                getDefaultHeaderPositionForZone(position));
+    }
 
+    public HSplitZoneHeader(ZonePosition position, String title,
+            Color backgroundColor, Color titleColor,
+            int thickness, HeaderPosition effectivePosition) {
+        this.position = position;
+        this.title = title;
+        this.backgroundColor = backgroundColor;
+        this.titleColor = titleColor;
+        this.thickness = thickness;
+        this.effectivePosition = effectivePosition;
+
+        this.isCollapsed = false;
+        this.isFullScreen = false;
+        this.isFloating = false;
+
+        initialiserActions();
         initialiserComposants();
         applyDimensions();
     }
 
-    // =========================================================================
-    // Initialisation
-    // =========================================================================
+    private static HeaderPosition getDefaultHeaderPositionForZone(ZonePosition pos) {
+        if (pos == null) {
+            return HeaderPosition.TOP;
+        }
+
+        return switch (pos) {
+            case NORTH ->
+                HeaderPosition.BOTTOM;
+            case SOUTH ->
+                HeaderPosition.TOP;
+            case WEST ->
+                HeaderPosition.RIGHT;
+            case EAST ->
+                HeaderPosition.LEFT;
+            default ->
+                HeaderPosition.TOP;
+        };
+    }
 
     /**
-     * Construit les composants internes et applique le layout selon la position.
-     *
-     * NORTH / SOUTH : BoxLayout horizontal, titre à gauche, boutons à droite.
-     * EAST  / WEST  : BoxLayout vertical, boutons en haut, titre en bas.
+     * Crée les 3 actions standard une seule fois (à la construction). Leurs
+     * écouteurs survivent à toute reconstruction ultérieure des boutons —
+     * voir HeaderAction.bindButton().
      */
+    private void initialiserActions() {
+        toggleAction = new HeaderAction("toggle", (g2, w, h, color) -> {
+            g2.setColor(color);
+            dessinerFleche(g2, w / 2, h / 2, 4);
+        });
+
+        fullScreenAction = new HeaderAction("fullscreen", (g2, w, h, color) -> {
+            g2.setColor(color);
+            g2.setStroke(new BasicStroke(1.5f));
+            dessinerIconeFullScreen(g2, w, h);
+        });
+
+        floatAction = new HeaderAction("float", (g2, w, h, color) -> {
+            g2.setColor(color);
+            g2.setStroke(new BasicStroke(1.5f));
+            dessinerIconeFloat(g2, w, h);
+        });
+
+        actions.add(toggleAction);
+        actions.add(fullScreenAction);
+        actions.add(floatAction);
+    }
+
     private void initialiserComposants() {
         setOpaque(true);
 
-        // -- Titre orienté automatiquement --
         titleLabel = new HLabel(title != null ? title : "");
         titleLabel.setForeground(titleColor);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.PLAIN, 11f));
         titleLabel.setVisible(title != null && !title.isEmpty());
 
-        switch (position) {
-            case WEST:
-                titleLabel.setOrientation(HLabelOrientation.VERTICAL_UP);
-                break;
-            case EAST:
-                titleLabel.setOrientation(HLabelOrientation.VERTICAL_DOWN);
-                break;
-            default:
-                titleLabel.setOrientation(HLabelOrientation.HORIZONTAL);
-                break;
+        if (effectivePosition == HeaderPosition.LEFT) {
+            titleLabel.setOrientation(HLabelOrientation.VERTICAL_UP);
+        } else if (effectivePosition == HeaderPosition.RIGHT) {
+            titleLabel.setOrientation(HLabelOrientation.VERTICAL_DOWN);
+        } else {
+            titleLabel.setOrientation(HLabelOrientation.HORIZONTAL);
         }
 
-        // -- Boutons --
-        toggleButton     = creerBoutonToggle();
-        fullScreenButton = creerBoutonFullScreen();
-        floatButton      = creerBoutonFloat();
+        HButton toggleButton = createActionButton(toggleAction);
+        HButton fullScreenButton = createActionButton(fullScreenAction);
+        HButton floatButton = createActionButton(floatAction);
 
-        // -- Layout selon l'orientation --
-        if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
+        if (effectivePosition == HeaderPosition.TOP || effectivePosition == HeaderPosition.BOTTOM) {
 
             setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
+
             add(Box.createHorizontalStrut(4));
             add(titleLabel);
             add(Box.createHorizontalGlue());
@@ -156,6 +184,7 @@ public class HSplitZoneHeader extends JPanel {
         } else {
 
             setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+
             add(Box.createVerticalStrut(4));
             add(toggleButton);
             add(Box.createVerticalStrut(2));
@@ -173,140 +202,103 @@ public class HSplitZoneHeader extends JPanel {
         }
     }
 
-    /**
-     * Applique les contraintes de taille selon la position.
-     */
     private void applyDimensions() {
-        if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
+        if (effectivePosition == HeaderPosition.TOP || effectivePosition == HeaderPosition.BOTTOM) {
             setPreferredSize(new Dimension(Integer.MAX_VALUE, thickness));
             setMaximumSize(new Dimension(Integer.MAX_VALUE, thickness));
             setMinimumSize(new Dimension(0, thickness));
-        } else if (position == ZonePosition.EAST || position == ZonePosition.WEST) {
+        } else {
             setPreferredSize(new Dimension(thickness, Integer.MAX_VALUE));
             setMaximumSize(new Dimension(thickness, Integer.MAX_VALUE));
             setMinimumSize(new Dimension(thickness, 0));
         }
     }
 
-    // =========================================================================
-    // Création des boutons
-    // =========================================================================
-
     /**
-     * Crée le bouton toggle avec une flèche directionnelle.
-     * Le sens de la flèche dépend de la position de la zone et de l'état
-     * collapsed/expanded.
+     * CHANGEMENT — ne recrée plus les HeaderAction (ce qui aurait perdu leurs
+     * listeners), seulement les boutons/layout. Voir le commentaire de classe.
      */
-    private HButton creerBoutonToggle() {
+    public void updateEffectivePosition(HeaderPosition newPosition) {
+
+        if (this.effectivePosition == newPosition) {
+            return;
+        }
+
+        this.effectivePosition = newPosition;
+
+        removeAll();
+        initialiserComposants();
+        applyDimensions();
+
+        revalidate();
+        repaint();
+    }
+
+    private HButton createActionButton(HeaderAction action) {
         HButton bouton = new HButton() {
             @Override
             protected void paintComponent(Graphics g) {
                 Graphics2D g2 = (Graphics2D) g.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(titleColor);
-                dessinerFleche(g2, getWidth() / 2, getHeight() / 2, 4);
+                action.getIconPainter().paint(g2, getWidth(), getHeight(), titleColor);
                 g2.dispose();
             }
         };
         styleButton(bouton);
+        action.bindButton(bouton);
         return bouton;
     }
 
-    /**
-     * Crée le bouton fullscreen.
-     *
-     * État normal    : carré vide avec coins marqués (agrandir)
-     * État fullscreen: deux carrés imbriqués décalés (restaurer)
-     */
-    private HButton creerBoutonFullScreen() {
-        HButton bouton = new HButton() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                        RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(titleColor);
-                g2.setStroke(new BasicStroke(1.5f));
+    private void dessinerIconeFullScreen(Graphics2D g2, int w, int h) {
+        int m = 3;
+        int sz = Math.min(w, h) - m * 2;
+        int x0 = (w - sz) / 2;
+        int y0 = (h - sz) / 2;
 
-                int w  = getWidth();
-                int h  = getHeight();
-                int m  = 3;
-                int sz = Math.min(w, h) - m * 2;
-                int x0 = (w - sz) / 2;
-                int y0 = (h - sz) / 2;
+        if (!isFullScreen) {
+            g2.drawRect(x0, y0, sz, sz);
 
-                if (!isFullScreen) {
-                    // Icône "agrandir" : carré simple
-                    g2.drawRect(x0, y0, sz, sz);
-                } else {
-                    // Icône "restaurer" : deux carrés décalés
-                    int off = 3;
-                    int sz2 = sz - off;
-                    g2.drawRect(x0 + off, y0, sz2, sz2);
-                    g2.drawRect(x0, y0 + off, sz2, sz2);
-                }
-
-                g2.dispose();
-            }
-        };
-        styleButton(bouton);
-        return bouton;
+            int cornerLen = 3;
+            g2.drawLine(x0, y0, x0 + cornerLen, y0);
+            g2.drawLine(x0, y0, x0, y0 + cornerLen);
+            g2.drawLine(x0 + sz, y0, x0 + sz - cornerLen, y0);
+            g2.drawLine(x0 + sz, y0, x0 + sz, y0 + cornerLen);
+        } else {
+            int off = 3;
+            int sz2 = sz - off;
+            g2.drawRect(x0 + off, y0, sz2, sz2);
+            g2.drawRect(x0, y0 + off, sz2, sz2);
+        }
     }
 
-    /**
-     * Crée le bouton float.
-     *
-     * État normal  : petite fenêtre avec flèche sortante (détacher)
-     * État flottant: flèche entrante (réintégrer)
-     */
-    private HButton creerBoutonFloat() {
-        HButton bouton = new HButton() {
-            @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
-                        RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(titleColor);
-                g2.setStroke(new BasicStroke(1.5f));
+    private void dessinerIconeFloat(Graphics2D g2, int w, int h) {
+        int m = 3;
+        int sz = Math.min(w, h) - m * 2;
+        int x0 = (w - sz) / 2;
+        int y0 = (h - sz) / 2;
 
-                int w  = getWidth();
-                int h  = getHeight();
-                int m  = 3;
-                int sz = Math.min(w, h) - m * 2;
-                int x0 = (w - sz) / 2;
-                int y0 = (h - sz) / 2;
+        if (!isFloating) {
+            int ws = (int) (sz * 0.65);
 
-                if (!isFloating) {
-                    // Petite fenêtre en bas-gauche
-                    int ws = (int) (sz * 0.65);
-                    g2.drawRect(x0, y0 + sz - ws, ws, ws);
-                    // Flèche diagonale vers le haut-droit
-                    int ax = x0 + sz;
-                    int ay = y0;
-                    int as = 3;
-                    g2.drawLine(x0 + ws - 1, y0 + sz - ws + 1, ax, ay);
-                    g2.drawLine(ax, ay, ax - as, ay);
-                    g2.drawLine(ax, ay, ax, ay + as);
-                } else {
-                    // Flèche diagonale vers le bas-gauche (réintégrer)
-                    int as = 4;
-                    g2.drawLine(x0 + sz, y0, x0, y0 + sz);
-                    g2.drawLine(x0, y0 + sz, x0 + as * 2, y0 + sz);
-                    g2.drawLine(x0, y0 + sz, x0, y0 + sz - as * 2);
-                }
+            g2.drawRect(x0, y0 + sz - ws, ws, ws);
 
-                g2.dispose();
-            }
-        };
-        styleButton(bouton);
-        return bouton;
+            int ax = x0 + sz;
+            int ay = y0;
+            int as = 3;
+            g2.drawLine(x0 + ws - 1, y0 + sz - ws + 1, ax, ay);
+
+            g2.drawLine(ax, ay, ax - as, ay);
+            g2.drawLine(ax, ay, ax, ay + as);
+        } else {
+            int as = 4;
+            g2.drawLine(x0 + sz, y0, x0, y0 + sz);
+
+            g2.drawLine(x0, y0 + sz, x0 + as * 2, y0 + sz);
+            g2.drawLine(x0, y0 + sz, x0, y0 + sz - as * 2);
+        }
     }
 
-    /**
-     * Applique le style commun (transparent, sans bordure, taille fixe)
-     * à un bouton du header.
-     */
     private void styleButton(HButton bouton) {
         bouton.setOpaque(false);
         bouton.setContentAreaFilled(false);
@@ -319,51 +311,87 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     // =========================================================================
-    // Dessin de la flèche toggle
+    // NOTE — dessinerFleche() n'a pas été retouchée dans cette refonte : sa
+    // logique combine (position de zone × position du header) avec des cas
+    // spéciaux codés en dur, sans garantie que isValidHeaderPosition()
+    // (dans HSplitZone) et cette méthode restent synchronisées si une nouvelle
+    // combinaison devient valide un jour. Ce n'était pas dans le périmètre des
+    // 4 décisions validées — je te le signale comme recommandation de suite,
+    // pas comme un correctif appliqué ici.
     // =========================================================================
-
-    /**
-     * Dessine la flèche du bouton toggle.
-     * Le sens dépend de la position de la zone et de l'état collapsed.
-     */
     private void dessinerFleche(Graphics2D g2, int cx, int cy, int t) {
         int[] xPoints;
         int[] yPoints;
 
-        switch (position) {
-            case NORTH:
+        if (position == ZonePosition.WEST && effectivePosition == HeaderPosition.TOP) {
+            if (isCollapsed) {
+                xPoints = new int[]{cx + t, cx - t, cx - t};
+                yPoints = new int[]{cy, cy - t, cy + t};
+            } else {
+                xPoints = new int[]{cx - t, cx + t, cx + t};
+                yPoints = new int[]{cy, cy - t, cy + t};
+            }
+        } else if (position == ZonePosition.EAST && effectivePosition == HeaderPosition.TOP) {
+            if (isCollapsed) {
+                xPoints = new int[]{cx - t, cx + t, cx + t};
+                yPoints = new int[]{cy, cy - t, cy + t};
+            } else {
+                xPoints = new int[]{cx + t, cx - t, cx - t};
+                yPoints = new int[]{cy, cy - t, cy + t};
+            }
+        } else if (position == ZonePosition.NORTH && effectivePosition == HeaderPosition.TOP) {
+            if (isCollapsed) {
                 xPoints = new int[]{cx - t, cx + t, cx};
-                yPoints = isCollapsed
-                        ? new int[]{cy - t, cy - t, cy + t}
-                        : new int[]{cy + t, cy + t, cy - t};
-                break;
-            case SOUTH:
+                yPoints = new int[]{cy - t, cy - t, cy + t};
+            } else {
                 xPoints = new int[]{cx - t, cx + t, cx};
-                yPoints = isCollapsed
-                        ? new int[]{cy + t, cy + t, cy - t}
-                        : new int[]{cy - t, cy - t, cy + t};
-                break;
-            case WEST:
-                xPoints = isCollapsed
-                        ? new int[]{cx - t, cx - t, cx + t}
-                        : new int[]{cx + t, cx + t, cx - t};
-                yPoints = new int[]{cy - t, cy + t, cy};
-                break;
-            case EAST:
-            default:
-                xPoints = isCollapsed
-                        ? new int[]{cx + t, cx + t, cx - t}
-                        : new int[]{cx - t, cx - t, cx + t};
-                yPoints = new int[]{cy - t, cy + t, cy};
-                break;
+                yPoints = new int[]{cy + t, cy + t, cy - t};
+            }
+        } else if (position == ZonePosition.SOUTH && effectivePosition == HeaderPosition.BOTTOM) {
+            if (isCollapsed) {
+                xPoints = new int[]{cx - t, cx + t, cx};
+                yPoints = new int[]{cy + t, cy + t, cy - t};
+            } else {
+                xPoints = new int[]{cx - t, cx + t, cx};
+                yPoints = new int[]{cy - t, cy - t, cy + t};
+            }
+        } else {
+            switch (effectivePosition) {
+                case TOP:
+                    xPoints = new int[]{cx - t, cx + t, cx};
+                    yPoints = isCollapsed
+                            ? new int[]{cy + t, cy + t, cy - t}
+                            : new int[]{cy - t, cy - t, cy + t};
+                    break;
+
+                case BOTTOM:
+                    xPoints = new int[]{cx - t, cx + t, cx};
+                    yPoints = isCollapsed
+                            ? new int[]{cy - t, cy - t, cy + t}
+                            : new int[]{cy + t, cy + t, cy - t};
+                    break;
+
+                case LEFT:
+                    xPoints = isCollapsed
+                            ? new int[]{cx - t, cx - t, cx + t}
+                            : new int[]{cx + t, cx + t, cx - t};
+                    yPoints = new int[]{cy - t, cy + t, cy};
+                    break;
+
+                case RIGHT:
+                    xPoints = isCollapsed
+                            ? new int[]{cx + t, cx + t, cx - t}
+                            : new int[]{cx - t, cx - t, cx + t};
+                    yPoints = new int[]{cy - t, cy + t, cy};
+                    break;
+
+                default:
+                    return;
+            }
         }
 
         g2.fillPolygon(xPoints, yPoints, 3);
     }
-
-    // =========================================================================
-    // Rendu du fond
-    // =========================================================================
 
     @Override
     protected void paintComponent(Graphics g) {
@@ -373,69 +401,40 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     // =========================================================================
-    // API publique — enregistrement des écouteurs
+    // Méthodes de compatibilité — routent vers les HeaderAction correspondantes.
+    // HSplitZone continue d'appeler ces 3 méthodes sans aucun changement de son
+    // côté ; c'est l'implémentation interne qui n'est plus dupliquée.
     // =========================================================================
-
-    /**
-     * Enregistre l'écouteur du bouton toggle (collapse/expand).
-     */
     public void addToggleListener(ActionListener listener) {
-        toggleButton.addActionListener(listener);
+        toggleAction.addListener(listener);
     }
 
-    /**
-     * Enregistre l'écouteur du bouton fullscreen.
-     */
     public void addFullScreenListener(ActionListener listener) {
-        fullScreenButton.addActionListener(listener);
+        fullScreenAction.addListener(listener);
     }
 
-    /**
-     * Enregistre l'écouteur du bouton float.
-     */
     public void addFloatListener(ActionListener listener) {
-        floatButton.addActionListener(listener);
+        floatAction.addListener(listener);
     }
 
-    // =========================================================================
-    // API publique — mise à jour des états visuels
-    // =========================================================================
-
-    /**
-     * Met à jour l'icône du bouton toggle.
-     *
-     * @param collapsed true si la zone est réduite
-     */
     public void updateCollapseState(boolean collapsed) {
         this.isCollapsed = collapsed;
-        toggleButton.repaint();
+        toggleAction.repaintButton();
     }
 
-    /**
-     * Met à jour l'icône du bouton fullscreen.
-     *
-     * @param fullScreen true si la zone est en mode fullscreen
-     */
     public void updateFullScreenState(boolean fullScreen) {
         this.isFullScreen = fullScreen;
-        fullScreenButton.repaint();
+        fullScreenAction.repaintButton();
     }
 
-    /**
-     * Met à jour l'icône du bouton float.
-     *
-     * @param floating true si la zone est actuellement flottante
-     */
     public void updateFloatingState(boolean floating) {
         this.isFloating = floating;
-        floatButton.repaint();
+        floatAction.repaintButton();
     }
 
-    // =========================================================================
-    // Getters et Setters
-    // =========================================================================
-
-    public String getTitre() { return title; }
+    public String getTitre() {
+        return title;
+    }
 
     public void setTitre(String title) {
         this.title = title;
@@ -446,39 +445,53 @@ public class HSplitZoneHeader extends JPanel {
     }
 
     public void setTitleFont(Font font) {
-        titleLabel.setFont(font);
-        revalidate();
-        repaint();
+        if (font != null && titleLabel != null) {
+            titleLabel.setFont(font);
+            revalidate();
+            repaint();
+        }
     }
 
-    public Font getTitleFont() { return titleLabel.getFont(); }
+    public Font getTitleFont() {
+        return titleLabel != null ? titleLabel.getFont() : null;
+    }
 
     public void setTitleOrientation(HLabelOrientation orientation) {
-        titleLabel.setOrientation(orientation);
-        revalidate();
-        repaint();
+        if (titleLabel != null) {
+            titleLabel.setOrientation(orientation);
+            revalidate();
+            repaint();
+        }
     }
 
     public HLabelOrientation getTitleOrientation() {
-        return titleLabel.getOrientation();
+        return titleLabel != null ? titleLabel.getOrientation() : HLabelOrientation.HORIZONTAL;
     }
 
-    public Color getCouleurFond()  { return backgroundColor; }
+    public Color getCouleurFond() {
+        return backgroundColor;
+    }
 
     public void setCouleurFond(Color backgroundColor) {
         this.backgroundColor = backgroundColor;
         repaint();
     }
 
-    public Color getCouleurTitre() { return titleColor; }
+    public Color getCouleurTitre() {
+        return titleColor;
+    }
 
     public void setCouleurTitre(Color titleColor) {
         this.titleColor = titleColor;
-        titleLabel.setForeground(titleColor);
+        if (titleLabel != null) {
+            titleLabel.setForeground(titleColor);
+        }
         repaint();
     }
 
-    public int getEpaisseur() { return thickness; }
+    public int getEpaisseur() {
+        return thickness;
+    }
 
     public void setEpaisseur(int thickness) {
         this.thickness = thickness;
@@ -489,11 +502,53 @@ public class HSplitZoneHeader extends JPanel {
 
     @Override
     public Dimension getPreferredSize() {
-        if (position == ZonePosition.NORTH || position == ZonePosition.SOUTH) {
+        if (effectivePosition == HeaderPosition.TOP || effectivePosition == HeaderPosition.BOTTOM) {
             return new Dimension(Short.MAX_VALUE, thickness);
-        } else if (position == ZonePosition.WEST || position == ZonePosition.EAST) {
+        } else {
             return new Dimension(thickness, Short.MAX_VALUE);
         }
-        return super.getPreferredSize();
     }
+
+    private static class HeaderAction {
+
+        @FunctionalInterface
+        private interface IconPainter {
+            void paint(Graphics2D g2, int width, int height, Color color);
+        }
+
+        private final String id;
+        private final IconPainter iconPainter;
+        private final List<ActionListener> listeners = new ArrayList<>();
+        private AbstractButton button;
+
+        private HeaderAction(String id, IconPainter iconPainter) {
+            this.id = id;
+            this.iconPainter = iconPainter;
+        }
+
+        private IconPainter getIconPainter() {
+            return iconPainter;
+        }
+
+        private void addListener(ActionListener listener) {
+            listeners.add(listener);
+            if (button != null) {
+                button.addActionListener(listener);
+            }
+        }
+
+        private void bindButton(AbstractButton newButton) {
+            this.button = newButton;
+            for (ActionListener l : listeners) {
+                newButton.addActionListener(l);
+            }
+        }
+
+        private void repaintButton() {
+            if (button != null) {
+                button.repaint();
+            }
+        }
+    }
+
 }

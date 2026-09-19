@@ -3,97 +3,68 @@ package hsplitpane;
 import java.awt.Dimension;
 
 /**
- * Objet de configuration pour la construction d'un HSplitPane.
+ * Config des tailles initiales des zones. La piste "config porte aussi le
+ * contenu" (Component par zone) a été explorée puis écartée : le contenu se
+ * câble désormais via HSplitPane.add(Component, ZonePosition), pas via cet
+ * objet — un seul chemin pour ajouter du contenu, cohérent avec la façade
+ * réduite.
  *
- * Cet objet permet de définir les paramètres initiaux du composant sans avoir à
- * passer par un constructeur surchargé. L'utilisateur instancie cette classe,
- * renseigne uniquement les champs qui l'intéressent, puis transmet l'objet au
- * constructeur de HSplitPane.
- *
- * Tous les champs de dimensions sont à null par défaut, ce qui signifie que la
- * zone correspondante sera flexible et prendra l'espace restant après placement
- * des zones à taille définie.
+ * RAPPEL (TODO en attente) : getCenterSize()/setCenterSize() sont des méthodes
+ * mortes — HSplitPaneRootLayout ne lit jamais cette valeur pour CENTER, et
+ * HSplitZone.setInitialSize() lève désormais une exception pour CENTER. Pas
+ * corrigé ici, à traiter séparément comme convenu.
  */
 public class HSplitPaneConfig {
 
-    // -------------------------------------------------------------------------
-    // Dimensions initiales de chaque zone
-    // Une valeur null indique que la zone est flexible (taille automatique)
-    // -------------------------------------------------------------------------
-    /**
-     * Taille initiale de la zone du haut.
-     */
-    private Dimension northSize;
+    private Integer northSize;
 
-    /**
-     * Taille initiale de la zone du bas.
-     */
-    private Dimension southSize;
+    private Integer southSize;
 
-    /**
-     * Taille initiale de la zone de gauche.
-     */
-    private Dimension westSize;
+    private Integer westSize;
 
-    /**
-     * Taille initiale de la zone de droite.
-     */
-    private Dimension eastSize;
+    private Integer eastSize;
 
-    /**
-     * Taille initiale de la zone centrale.
-     */
-    private Dimension centerSize;
+    private Integer centerSize;
 
-    // -------------------------------------------------------------------------
-    // Paramètres d'affichage
-    // -------------------------------------------------------------------------
-    /**
-     * Indique si la zone centrale doit être affichée. Par défaut à true : la
-     * zone CENTER est présente.
-     */
     private boolean showCenter = true;
 
-    // =========================================================================
-    // Getters et Setters
-    // =========================================================================
-    public Dimension getNorthSize() {
+    public Integer getNorthSize() {
         return northSize;
     }
 
-    public void setNorthSize(Dimension northSize) {
+    public void setNorthSize(Integer northSize) {
         this.northSize = northSize;
     }
 
-    public Dimension getSouthSize() {
+    public Integer getSouthSize() {
         return southSize;
     }
 
-    public void setSouthSize(Dimension southSize) {
+    public void setSouthSize(Integer southSize) {
         this.southSize = southSize;
     }
 
-    public Dimension getWestSize() {
+    public Integer getWestSize() {
         return westSize;
     }
 
-    public void setWestSize(Dimension westSize) {
+    public void setWestSize(Integer westSize) {
         this.westSize = westSize;
     }
 
-    public Dimension getEastSize() {
+    public Integer getEastSize() {
         return eastSize;
     }
 
-    public void setEastSize(Dimension eastSize) {
+    public void setEastSize(Integer eastSize) {
         this.eastSize = eastSize;
     }
 
-    public Dimension getCenterSize() {
+    public Integer getCenterSize() {
         return centerSize;
     }
 
-    public void setCenterSize(Dimension centerSize) {
+    public void setCenterSize(Integer centerSize) {
         this.centerSize = centerSize;
     }
 

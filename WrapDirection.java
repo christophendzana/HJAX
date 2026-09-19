@@ -1,24 +1,52 @@
 package hsplitpane;
 
+import java.awt.Dimension;
+import java.awt.Rectangle;
+
 /**
- * Définit la direction de disposition des composants dans une zone.
- *
- * Cette direction est utilisée par HSplitWrapLayout pour déterminer
- * l'axe principal sur lequel les composants sont alignés avant
- * de passer à la ligne ou colonne suivante.
+ * Direction de disposition des composants dans une zone, ET axe géométrique
+ * principal utilisé par HSplitPaneRootLayout / HSplitWrapLayout pour
+ * factoriser leur logique horizontale/verticale (voir mainSize/crossSize/
+ * mainPos — évite un second enum "Axis" séparé qui dirait la même chose).
  */
 public enum WrapDirection {
 
-    /**
-     * Les composants s'alignent de gauche à droite.
-     * Quand la largeur disponible est épuisée, on passe à la ligne suivante.
-     * C'est la direction par défaut.
-     */
-    HORIZONTAL,
+    HORIZONTAL {
+        @Override
+        public int mainSize(Dimension d) {
+            return d.width;
+        }
 
-    /**
-     * Les composants s'alignent de haut en bas.
-     * Quand la hauteur disponible est épuisée, on passe à la colonne suivante.
-     */
-    VERTICAL
+        @Override
+        public int crossSize(Dimension d) {
+            return d.height;
+        }
+
+        @Override
+        public int mainPos(Rectangle r) {
+            return r.x;
+        }
+    },
+    VERTICAL {
+        @Override
+        public int mainSize(Dimension d) {
+            return d.height;
+        }
+
+        @Override
+        public int crossSize(Dimension d) {
+            return d.width;
+        }
+
+        @Override
+        public int mainPos(Rectangle r) {
+            return r.y;
+        }
+    };
+
+    public abstract int mainSize(Dimension d);
+
+    public abstract int crossSize(Dimension d);
+
+    public abstract int mainPos(Rectangle r);
 }
