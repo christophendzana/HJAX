@@ -1,4 +1,4 @@
-package IllustrationShape.border;
+package IllustrationShape.vues.border;
 
 import java.awt.Insets;
 

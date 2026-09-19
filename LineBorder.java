@@ -1,6 +1,5 @@
-package IllustrationShape.border;
+package IllustrationShape.vues.border;
 
-import illustrations.border.*;
 import java.awt.*;
 
 /**
@@ -8,12 +7,12 @@ import java.awt.*;
  */
 public class LineBorder extends AbstractViewBorder {
 
-    private final Color color;
-    private final int thickness;
+    private Color color;
+    private int thickness;
 
     public LineBorder(Color color, int thickness) {
-        this.color = color;
-        this.thickness = thickness;
+        this.setColor(color);
+        this.setThickness(thickness);
     }
 
     // Trace un rectangle plein autour de la zone, sans altérer le style du contexte graphique appelant
@@ -27,7 +26,29 @@ public class LineBorder extends AbstractViewBorder {
         g.setColor(savedColor);
         g.setStroke(savedStroke);
     }
+    
+    public void setThickness( int thickness ){
+        if (thickness < 0) {
+            throw new IllegalArgumentException("The thickness cannot be a negative value.");
+        }
+        this.thickness = thickness;
+    }
 
+    public int getThickness() {
+        return thickness;
+    }       
+
+    public void setColor( Color color ){
+        if (color == null) {
+            throw new IllegalArgumentException("Color cannot be null");
+        }
+        this.color = color;
+    }
+    
+    public Color getColor() {
+        return color;
+    }
+    
     @Override
     public Insets getBorderInsets(int width, int height) {
         return new Insets(thickness, thickness, thickness, thickness);
