@@ -1,5 +1,6 @@
 package IllustrationShape.model;
 
+import IllustrationShape.HShape;
 import IllustrationShape.HView;
 import java.util.List;
 
@@ -42,4 +43,25 @@ public interface ViewModel {
      * @return true si le listener a été retiré, false s'il n'était pas présent
      */
     boolean removeListener(ViewModelListener listener);
+    
+    void viewMoved(HShape shape, boolean isAdjusting);
+    
+    void viewResized(HShape shape, boolean isAdjusting);
+    
+    void viewRotated(HShape shape, boolean isAdjusting);
+    
+    void viewAdjusted(HShape shape, boolean isAdjusting);
+    
+    void viewHoverEntered(HShape shape);
+    
+    void viewHoverExited(HShape shape);
+    
+    void notifyViewEvent(HShape shape, ViewEvent.Type type, boolean isAdjusting);
+    
+     List<HShape> getShapes();
+     
+     Integer adjustmentHandleAt(HShape shape, int x, int y);
+     
+     HShape findShapeAt(int x, int y);
+    
 }

@@ -9,10 +9,14 @@ import java.util.List;
  */
 public interface ViewModelSelection {
 
-    /** Un seul élément peut être sélectionné à la fois. */
+    /**
+     * Un seul élément peut être sélectionné à la fois.
+     */
     int SINGLE_SELECTION = 0;
 
-    /** Plusieurs éléments peuvent être sélectionnés simultanément. */
+    /**
+     * Plusieurs éléments peuvent être sélectionnés simultanément.
+     */
     int MULTIPLE_SELECTION = 1;
 
     boolean addViewSelected(HView view);
@@ -38,20 +42,19 @@ public interface ViewModelSelection {
     int getSelectedViewCount();
 
     /**
-     * Indique si les changements de sélection à venir doivent être
-     * considérés comme une seule et même opération (ex. glissement de
-     * souris pendant une sélection rectangle). Permet aux listeners de
-     * n'agir que sur le changement final plutôt que sur chaque état
-     * intermédiaire.
+     * Indique si les changements de sélection à venir doivent être considérés
+     * comme une seule et même opération (ex. glissement de souris pendant une
+     * sélection rectangle). Permet aux listeners de n'agir que sur le
+     * changement final plutôt que sur chaque état intermédiaire.
      *
-     * @param adjusting true pour démarrer une série de changements,
-     *                  false pour la clôturer
+     * @param adjusting true pour démarrer une série de changements, false pour
+     * la clôturer
      */
     void setValueIsAdjusting(boolean adjusting);
 
     boolean getValueIsAdjusting();
 
-    boolean addListSelectionListener(ListSelectionViewListener listener);
+    boolean addListSelectionListener(ListViewSelectionListener listener);
 
-    boolean removeListSelectionListener(ListSelectionViewListener listener);
+    boolean removeListSelectionListener(ListViewSelectionListener listener);
 }

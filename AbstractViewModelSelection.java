@@ -1,5 +1,6 @@
 package IllustrationShape.model;
 
+import IllustrationShape.HShapeResizer;
 import IllustrationShape.HView;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -13,23 +14,37 @@ import java.util.Set;
  *
  */
 public abstract class AbstractViewModelSelection implements ViewModelSelection {
-
-    private final Set<HView> selected = new LinkedHashSet<>();
-    private final List<ListSelectionViewListener> listeners = new ArrayList<>();
+    
+    private final Set<HView> selectedViews = new LinkedHashSet<>();
+    private final List<ListViewSelectionListener> listeners = new ArrayList<>();
 
     private int selectionMode = MULTIPLE_SELECTION;
+    
+    //Est-ce qu'une opération de sélection est actuellement en cours ?
     private boolean valueIsAdjusting = false;
+    
+    //Est-ce que la sélection a effectivement changé pendant cette opération ?
     private boolean changedDuringAdjustment = false;
 
+    private List<HShapeResizer> HShapeResizers;
+    
+    public AbstractViewModelSelection(){
+        HShapeResizers = new ArrayList<>();
+    }
+    
     @Override
     public boolean addViewSelected(HView view) {
         if (view == null) {
             return false;
         }
-        if (selectionMode == SINGLE_SELECTION && !selected.contains(view)) {
-            selected.clear();
+        if (selectionMode == SINGLE_SELECTION && !selectedViews.contains(view)) {
+            List<HView> previouslySelected = new ArrayList<>(selectedViews);
+            selectedViews.clear();
+            for (HView removedView : previouslySelected) {
+                notifySelectionChanged(removedView);
+            }
         }
-        boolean added = selected.add(view);
+        boolean added = selectedViews.add(view);
         if (added) {
             notifySelectionChanged(view);
         }
@@ -38,7 +53,7 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
 
     @Override
     public boolean removeViewSelected(HView view) {
-        boolean removed = selected.remove(view);
+        boolean removed = selectedViews.remove(view);
         if (removed) {
             notifySelectionChanged(view);
         }
@@ -48,7 +63,7 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
     @Override
     public HView getViewSelected() {
         HView last = null;
-        for (HView view : selected) {
+        for (HView view : selectedViews) {
             last = view;
         }
         return last;
@@ -56,26 +71,29 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
 
     @Override
     public boolean isSelectedView(HView view) {
-        return selected.contains(view);
+        return selectedViews.contains(view);
     }
 
     @Override
     public List<HView> getListViewSelected() {
-        return new ArrayList<>(selected);
+        return new ArrayList<>(selectedViews);
     }
 
     @Override
     public void clearSelection() {
-        if (selected.isEmpty()) {
+        if (selectedViews.isEmpty()) {
             return;
         }
-        selected.clear();
-        notifySelectionChanged(null);
+        List<HView> previouslySelected = new ArrayList<>(selectedViews);
+        selectedViews.clear();
+        for (HView removedView : previouslySelected) {
+            notifySelectionChanged(removedView);
+        }
     }
 
     @Override
     public boolean isSelectionEmpty() {
-        return selected.isEmpty();
+        return selectedViews.isEmpty();
     }
 
     @Override
@@ -83,11 +101,16 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
         if (listViews == null || listViews.isEmpty()) {
             return false;
         }
-        boolean changed = selected.removeAll(listViews);
-        if (changed) {
-            notifySelectionChanged(null);
+        List<HView> actuallyRemoved = new ArrayList<>();
+        for (HView view : listViews) {
+            if (selectedViews.remove(view)) {
+                actuallyRemoved.add(view);
+            }
         }
-        return changed;
+        for (HView view : actuallyRemoved) {
+            notifySelectionChanged(view);
+        }
+        return !actuallyRemoved.isEmpty();
     }
 
     @Override
@@ -102,7 +125,7 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
 
     @Override
     public int getSelectedViewCount() {
-        return selected.size();
+        return selectedViews.size();
     }
 
     @Override
@@ -114,11 +137,9 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
         if (adjusting) {
             changedDuringAdjustment = false;
         } else if (changedDuringAdjustment) {
-            // Événement final caractérisant l'ensemble du changement,
-            // comme le fait DefaultListSelectionModel.
             fireEvent(new ListViewSelectionEvent(this, null, false));
             changedDuringAdjustment = false;
-        }
+        }        
     }
 
     @Override
@@ -127,7 +148,7 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
     }
 
     @Override
-    public boolean addListSelectionListener(ListSelectionViewListener listener) {
+    public boolean addListSelectionListener(ListViewSelectionListener listener) {
         if (listener == null || listeners.contains(listener)) {
             return false;
         }
@@ -136,7 +157,7 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
     }
 
     @Override
-    public boolean removeListSelectionListener(ListSelectionViewListener listener) {
+    public boolean removeListSelectionListener(ListViewSelectionListener listener) {
         return listeners.remove(listener);
     }
 
@@ -147,16 +168,11 @@ public abstract class AbstractViewModelSelection implements ViewModelSelection {
         fireEvent(new ListViewSelectionEvent(this, view, valueIsAdjusting));
     }
 
-    /**
-     * Notifie tous les listeners d'un changement de sélection.
-     *
-     * @param event événement à transmettre
-     */
     protected void fireEvent(ListViewSelectionEvent event) {
         if (event == null) {
             return;
         }
-        for (ListSelectionViewListener listener : new ArrayList<>(listeners)) {
+        for (ListViewSelectionListener listener : new ArrayList<>(listeners)) {
             listener.valueChanged(event);
         }
     }
