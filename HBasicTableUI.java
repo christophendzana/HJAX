@@ -1,7 +1,13 @@
-package hsupertable;
+package hsupertable.view;
 
-import hsupertable.HSuperDefaultTableModel.Cell;
-import hsupertable.HSuperDefaultTableModel.InternalGrid;
+import hsupertable.HSuperTable;
+import hsupertable.controller.HSuperTableController;
+import hsupertable.model.HSuperTableCellModel;
+import hsupertable.model.HSuperDefaultTableModel;
+import hsupertable.model.HSuperDefaultTableModel.Cell;
+import hsupertable.model.HSuperDefaultTableModel.InternalGrid;
+import hsupertable.style.HSuperTableStyle;
+
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicTableUI;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -300,6 +306,7 @@ public class HBasicTableUI extends BasicTableUI {
      * structurel (gestion des subdivisions internes).
      */
     private void paintCell(Graphics2D g2, HSuperTable t, int row, int col) {
+        
         HSuperDefaultTableModel model = t.getHModel();
         HSuperDefaultTableModel.Cell cell = model.getCell(row, col);
         if (cell.isAbsorbed()) {
@@ -326,14 +333,15 @@ public class HBasicTableUI extends BasicTableUI {
             Graphics2D g2, HSuperTable t,
             HSuperDefaultTableModel.Cell cell,
             Rectangle rect, int row, int col,
-            boolean isSubCell // ← nouveau paramètre
+            boolean isSubCell // <- nouveau paramètre
     ) {
         // CAS 1
+                // CAS 1
         if (cell.internalGrid == null) {
             HSuperTableStyle style = t.getTableStyle();
             HSuperTableCellModel cModel = t.getHModel().getCellModel(row, col);
 
-            // Fond
+            // Fond de base
             Color bg;
             if (cell.style != null && cell.style.hasBackground()) {
                 bg = cell.style.getBackground();
@@ -345,6 +353,14 @@ public class HBasicTableUI extends BasicTableUI {
             }
             g2.setColor(bg);
             g2.fillRect(rect.x, rect.y, rect.width, rect.height);
+
+            // Superposition d'état interactif — par-dessus le fond,
+            // custom ou non
+            Color overlay = resolveSelectionOverlay(t, style, row, col);
+            if (overlay != null) {
+                g2.setColor(overlay);
+                g2.fillRect(rect.x, rect.y, rect.width, rect.height);
+            }
 
             // Valeur — sous-cellule : cell.value uniquement
             // cellule racine : cell.value puis DefaultTableModel
@@ -919,12 +935,16 @@ public class HBasicTableUI extends BasicTableUI {
      * Cette méthode centralise toute la logique de couleur pour éviter qu'elle
      * soit éparpillée entre le renderer et le paint().
      */
+        /**
+     * Détermine le fond de BASE d'une cellule (hors états interactifs) :
+     * couleur custom, ligne/colonne mise en valeur, bandes, alternance.
+     */
     private Color resolveCellBackground(HSuperTable t, HSuperTableStyle style,
             int row, int col) {
         HSuperDefaultTableModel model = t.getHModel();
         HSuperTableCellModel cModel = model.getCellModel(row, col);
 
-        // 1. Couleur custom individuelle — priorité absolue
+        // 1. Couleur custom individuelle — priorité absolue sur le fond
         if (cModel.hasBackground()) {
             return cModel.getBackground();
         }
@@ -935,46 +955,16 @@ public class HBasicTableUI extends BasicTableUI {
             return rowBg;
         }
 
-        // 3. Ligne en surbrillance
-        if (row == t.getHighlightedRow()) {
-            return style != null ? style.getHighlightBackground()
-                    : new Color(13, 110, 253, 40);
-        }
-
-        // 4. Ligne survolée
-        if (row == t.getHoveredRow()) {
-            return style != null ? style.getHoverBackground()
-                    : new Color(13, 110, 253, 20);
-        }
-
-        // 5. Cellule dans la sélection de zone (CellRange) — NOUVEAU
-        //    Légèrement plus marqué que le hover pour bien délimiter la zone
-        if (t.hasSelection() && t.getSelection().contains(row, col)) {
-            return style != null
-                    ? new Color(
-                            style.getSelectionBackground().getRed(),
-                            style.getSelectionBackground().getGreen(),
-                            style.getSelectionBackground().getBlue(),
-                            70) // alpha plus marqué que le hover
-                    : new Color(13, 110, 253, 70);
-        }
-
-        // 6. Ligne sélectionnée (ancienne sélection par lignes)
-        if (t.getRowsSelected().contains(row)) {
-            return style != null ? style.getSelectionBackground()
-                    : new Color(13, 110, 253, 30);
-        }
-
         if (style == null) {
             return Color.WHITE;
         }
 
-        // 7. Ligne totale
+        // 3. Ligne totale
         if (t.isTotalRowEnabled() && row == t.getRowCount() - 1) {
             return style.getTotalRowBackground();
         }
 
-        // 8. Première / dernière colonne
+        // 4. Première / dernière colonne
         if (t.isFirstColumnHighlighted() && col == 0) {
             return style.getFirstColumnBackground();
         }
@@ -982,19 +972,61 @@ public class HBasicTableUI extends BasicTableUI {
             return style.getLastColumnBackground();
         }
 
-        // 9. Bandes de colonnes
+        // 5. Bandes de colonnes
         if (t.isBandedColumns()) {
             return (col % 2 == 0) ? style.getCellBackground()
                     : style.getCellAlternateBackground();
         }
 
-        // 10. Alternance de lignes
+        // 6. Alternance de lignes
         if (t.isBandedRows()) {
             return (row % 2 == 0) ? style.getCellBackground()
                     : style.getCellAlternateBackground();
         }
 
         return style.getCellBackground();
+    }
+
+    /**
+     * Détermine la superposition semi-transparente d'état interactif
+     * (surbrillance, survol, sélection) à peindre PAR-DESSUS le fond de
+     * base — jamais à sa place, pour que la sélection reste visible même
+     * sur une cellule à fond personnalisé. Retourne null si aucun état
+     * actif ne concerne cette cellule.
+     */
+    private Color resolveSelectionOverlay(HSuperTable t, HSuperTableStyle style,
+            int row, int col) {
+
+        // Ligne en surbrillance
+        if (row == t.getHighlightedRow()) {
+            return style != null ? style.getHighlightBackground()
+                    : new Color(13, 110, 253, 40);
+        }
+
+        // Ligne survolée
+        if (row == t.getHoveredRow()) {
+            return style != null ? style.getHoverBackground()
+                    : new Color(13, 110, 253, 20);
+        }
+
+        // Cellule dans la sélection de zone (CellRange)
+        if (t.hasSelection() && t.getSelection().contains(row, col)) {
+            return style != null
+                    ? new Color(
+                            style.getSelectionBackground().getRed(),
+                            style.getSelectionBackground().getGreen(),
+                            style.getSelectionBackground().getBlue(),
+                            70)
+                    : new Color(13, 110, 253, 70);
+        }
+
+        // Ligne sélectionnée (Ctrl+clic — ancienne sélection par lignes)
+        if (t.getRowsSelected().contains(row)) {
+            return style != null ? style.getSelectionBackground()
+                    : new Color(13, 110, 253, 30);
+        }
+
+        return null;
     }
 
     // =========================================================================

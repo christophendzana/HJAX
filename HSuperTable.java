@@ -1,10 +1,16 @@
 package hsupertable;
 
+import hsupertable.formula.HTableFormula;
+import hsupertable.controller.HSuperTableController;
+import hsupertable.style.HSuperTableStyle;
+import hsupertable.view.HBasicTableUI;
+import hsupertable.model.HSuperTableCellModel;
+import hsupertable.model.HSuperDefaultTableModel;
 import hcomponents.HMenu;
 import hcomponents.HMenuItem;
 import hcomponents.HPopupMenu;
-import hsupertable.HBasicTableUI.InternalCellHit;
-import hsupertable.HSuperDefaultTableModel.Cell;
+import hsupertable.view.HBasicTableUI.InternalCellHit;
+import hsupertable.model.HSuperDefaultTableModel.Cell;
 import javax.swing.*;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
@@ -189,7 +195,7 @@ public class HSuperTable extends JTable {
     public HSuperTable(HSuperDefaultTableModel model) {
         super(model);
         this.hModel = model;
-        this.controller = new hsupertable.HSuperTableController(this);
+        this.controller = new hsupertable.controller.HSuperTableController(this);
         setLayout(null);
         internalEditor.setVisible(false);
         add(internalEditor);
@@ -869,17 +875,28 @@ public class HSuperTable extends JTable {
     }
 
     /**
-     * Sélectionne toute une colonne. JTable n'a pas de notion de "colonne
-     * sélectionnée" dans notre modèle custom — on met le focus sur la colonne
-     * et on sélectionne toutes les lignes pour signaler visuellement la
-     * sélection.
+     * Sélectionne toute une colonne — délègue à selectColumns() pour une
+     * colonne unique.
      */
     public void selectColumn(int col) {
-        clearSelection();
-        for (int r = 0; r < getRowCount(); r++) {
-            addSelectedRow(r);
+        selectColumns(col, col);
+    }
+
+    /**
+     * Sélectionne une plage de colonnes, de colStart à colEnd (ordre
+     * indifférent — CellRange normalise). Base de la sélection façon Word
+     * depuis le header : clic = une colonne, clic-glisser = plusieurs.
+     */
+    public void selectColumns(int colStart, int colEnd) {
+        if (getRowCount() == 0
+                || colStart < 0 || colEnd < 0
+                || colStart >= getColumnCount() || colEnd >= getColumnCount()) {
+            return;
         }
-        setFocusedCell(0, col);
+        clearSelection(); // efface toute sélection de lignes précédente
+        int lastRow = getRowCount() - 1;
+        setSelection(new CellRange(0, colStart, lastRow, colEnd));
+        setFocusedCell(0, Math.min(colStart, colEnd));
     }
 
     /**
@@ -2135,7 +2152,7 @@ public class HSuperTable extends JTable {
         return hModel;
     }
 
-    public hsupertable.HSuperTableController getController() {
+    public hsupertable.controller.HSuperTableController getController() {
         return controller;
     }
 
@@ -3863,8 +3880,11 @@ public class HSuperTable extends JTable {
             this.isInternalCell = (internalHit != null && internalHit.parent != null);
             this.internalCell = isInternalCell ? internalHit.cell : null;
 
-            // Sélection multiple : plus d'une ligne sélectionnée
-            this.hasMultipleSelection = table.getRowsSelected().size() > 1;
+            // Sélection multiple : la zone sélectionnée couvre plus d'une
+            // cellule (corrige l'ancienne base sur selectedRows, qui ratait
+            // les sélections de colonnes qui ne passent pas par selectedRows)
+            this.hasMultipleSelection = table.hasSelection()
+                    && !table.getSelection().isSingleCell();
         }
 
         @Override

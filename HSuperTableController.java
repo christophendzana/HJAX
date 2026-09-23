@@ -1,9 +1,11 @@
-package hsupertable;
+package hsupertable.controller;
 
-import hsupertable.HBasicTableUI.InternalCellHit;
-import hsupertable.HSuperDefaultTableModel.InternalGrid;
+import hsupertable.HSuperTable;
+import hsupertable.view.HBasicTableUI;
+import hsupertable.model.HSuperDefaultTableModel;
+import hsupertable.view.HBasicTableUI.InternalCellHit;
+import hsupertable.model.HSuperDefaultTableModel.InternalGrid;
 import hsupertable.HSuperTable.CellRange;
-import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -14,6 +16,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import javax.swing.table.JTableHeader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -75,6 +78,11 @@ public class HSuperTableController {
     private final MouseMotionAdapter motionListener;
     private final KeyAdapter keyListener;
     private final FocusAdapter focusListener;
+    private final MouseAdapter headerListener;
+
+    // Ancre et colonne courante pour la sélection de colonnes depuis le header
+    private int headerAnchorCol = -1;
+    private int headerDragCol = -1;
 
     private long lastClickTime = 0;
 
@@ -140,7 +148,10 @@ public class HSuperTableController {
         };
 
         // ── Listener double-clic et clic droit sur l'en-tête ─────────────────
-        table.getTableHeader().addMouseListener(new MouseAdapter() {
+                // ── Listener souris + survol sur l'en-tête ───────────────────────────
+        // Renommage (double-clic), menu contextuel (clic droit), et
+        // sélection de colonne(s) façon Word (clic / clic-glisser gauche).
+        headerListener = new MouseAdapter() {
 
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -165,7 +176,62 @@ public class HSuperTableController {
                     table.showHeaderMenu(ctx, e.getX(), e.getY());
                 }
             }
-        });
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+                // Sur une bordure redimensionnable → on laisse le resize
+                // natif du header agir, pas de sélection de colonne ici
+                if (isNearColumnHeaderBorder(e.getPoint())) {
+                    return;
+                }
+                int col = table.getTableHeader().columnAtPoint(e.getPoint());
+                if (col < 0) {
+                    return;
+                }
+                headerAnchorCol = col;
+                headerDragCol = col;
+                table.selectColumn(col);
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (headerAnchorCol < 0) {
+                    return;
+                }
+                int col = table.getTableHeader().columnAtPoint(e.getPoint());
+                if (col < 0 || col == headerDragCol) {
+                    return;
+                }
+                headerDragCol = col;
+                table.selectColumns(headerAnchorCol, headerDragCol);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                headerAnchorCol = -1;
+                headerDragCol = -1;
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                // Curseur "sélection de colonne" façon Word — en attendant
+                // une flèche custom, on approxime avec un curseur système
+                JTableHeader header = table.getTableHeader();
+                header.setCursor(isNearColumnHeaderBorder(e.getPoint())
+                        ? Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR)
+                        : Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent e) {
+                table.getTableHeader().setCursor(Cursor.getDefaultCursor());
+            }
+        };
+        table.getTableHeader().addMouseListener(headerListener);
+        table.getTableHeader().addMouseMotionListener(headerListener);
 
         // Enregistrement des listeners
         table.addMouseListener(mouseListener);
@@ -179,58 +245,58 @@ public class HSuperTableController {
     // GESTION SOURIS — CLIC
     // =========================================================================
     private void handleMouseClick(MouseEvent e) {
-    if (table.getInteractionMode() == HSuperTable.MODE_ERASE
-            && SwingUtilities.isLeftMouseButton(e)) {
-        Point point = e.getPoint();
-        HBasicTableUI ui = (HBasicTableUI) table.getUI();
-        InternalCellHit hit = ui.getInternalCellAt(table, point);
-        if (hit == null || hit.cell == null) {
-            return;
-        }
-
-        // ── Résolution via resolvePoint ───────────────────────────────
-        int[] resolved = table.resolvePoint(point);
-        int row = resolved[0];
-        int col = resolved[1];
-        if (row < 0 || col < 0) {
-            return;
-        }
-
-        if (hit.cell.hasInternalGrid()) {
-            if (hit.parent == null) {
-                table.getHModel().removeInternalGrid(row, col);
-            } else {
-                table.getHModel().removeInternalGridFromCell(hit.cell);
+        if (table.getInteractionMode() == HSuperTable.MODE_ERASE
+                && SwingUtilities.isLeftMouseButton(e)) {
+            Point point = e.getPoint();
+            HBasicTableUI ui = (HBasicTableUI) table.getUI();
+            InternalCellHit hit = ui.getInternalCellAt(table, point);
+            if (hit == null || hit.cell == null) {
+                return;
             }
-        } else if (hit.parent != null && hit.parent.hasInternalGrid()) {
-            table.getHModel().removeInternalGridFromCell(hit.parent);
-        } else {
+
+            // ── Résolution via resolvePoint ───────────────────────────────
+            int[] resolved = table.resolvePoint(point);
+            int row = resolved[0];
+            int col = resolved[1];
+            if (row < 0 || col < 0) {
+                return;
+            }
+
+            if (hit.cell.hasInternalGrid()) {
+                if (hit.parent == null) {
+                    table.getHModel().removeInternalGrid(row, col);
+                } else {
+                    table.getHModel().removeInternalGridFromCell(hit.cell);
+                }
+            } else if (hit.parent != null && hit.parent.hasInternalGrid()) {
+                table.getHModel().removeInternalGridFromCell(hit.parent);
+            } else {
+                return;
+            }
+
+            table.setFocusedInternalCell(null);
+            table.setSelectedInternalCell(null);
+            table.repaint();
             return;
         }
 
-        table.setFocusedInternalCell(null);
-        table.setSelectedInternalCell(null);
-        table.repaint();
-        return;
-    }
-
-    if (SwingUtilities.isRightMouseButton(e)) {
-        // ── Résolution via resolvePoint ───────────────────────────────
-        int[] resolved = table.resolvePoint(e.getPoint());
-        int row = resolved[0];
-        int col = resolved[1];
-        if (row >= 0 && col >= 0) {
-            handleRightClick(row, col, e.getPoint());
+        if (SwingUtilities.isRightMouseButton(e)) {
+            // ── Résolution via resolvePoint ───────────────────────────────
+            int[] resolved = table.resolvePoint(e.getPoint());
+            int row = resolved[0];
+            int col = resolved[1];
+            if (row >= 0 && col >= 0) {
+                handleRightClick(row, col, e.getPoint());
+            }
         }
     }
-}
 
     private void handleSingleClick(int row, int col, MouseEvent e) {
         if (!isValidCell(row, col)) {
             return;
         }
 
-        table.setHighlightedRow(row);
+//        table.setHighlightedRow(row);
         table.setFocusedCell(row, col);
 
         if (e.isShiftDown() && anchorRow >= 0 && anchorCol >= 0) {
@@ -254,7 +320,7 @@ public class HSuperTableController {
             dragRow = row;
             dragCol = col;
             table.clearSelection();
-            table.addSelectedRow(row);
+//            table.addSelectedRow(row);
             // Sélection de zone = cellule unique
             table.setSelection(new CellRange(row, col, row, col));
         }
@@ -295,11 +361,11 @@ public class HSuperTableController {
             dragRow = row;
             dragCol = col;
             table.clearSelection();
-            table.addSelectedRow(row);
+//            table.addSelectedRow(row);
             table.setSelection(new HSuperTable.CellRange(row, col, row, col));
         }
 
-        table.setHighlightedRow(row);
+//        table.setHighlightedRow(row);
         table.setFocusedCell(row, col);
 
         // ── Construction du TableContext ──────────────────────────────────────
@@ -338,305 +404,304 @@ public class HSuperTableController {
     // GESTION SOURIS — PRESS / DRAG / RELEASE
     // =========================================================================
     private void handleMousePress(MouseEvent e) {
-    if (!SwingUtilities.isLeftMouseButton(e)) {
-        return;
-    }
+        if (!SwingUtilities.isLeftMouseButton(e)) {
+            return;
+        }
 
-    // ── Mode crayon ───────────────────────────────────────────────────────
-    if (table.getInteractionMode() == HSuperTable.MODE_DRAW) {
-        drawStartX = e.getX();
-        drawStartY = e.getY();
-        drawEndX = e.getX();
-        drawEndY = e.getY();
-        isDrawing = true;
+        // ── Mode crayon ───────────────────────────────────────────────────────
+        if (table.getInteractionMode() == HSuperTable.MODE_DRAW) {
+            drawStartX = e.getX();
+            drawStartY = e.getY();
+            drawEndX = e.getX();
+            drawEndY = e.getY();
+            isDrawing = true;
 
-        // Résolution via resolvePoint
+            // Résolution via resolvePoint
+            int[] resolved = table.resolvePoint(e.getPoint());
+            int row = resolved[0];
+            int col = resolved[1];
+            if (row >= 0 && col >= 0) {
+                table.setFocusedCell(row, col);
+                HBasicTableUI ui = (HBasicTableUI) table.getUI();
+                InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+                table.setFocusedInternalCell(hit);
+                table.setSelectedInternalCell(hit);
+            }
+            return;
+        }
+
+        // ── Résolution via resolvePoint ───────────────────────────────────────
         int[] resolved = table.resolvePoint(e.getPoint());
         int row = resolved[0];
         int col = resolved[1];
-        if (row >= 0 && col >= 0) {
-            table.setFocusedCell(row, col);
+        if (row < 0 || col < 0) {
+            return;
+        }
+
+        // ── Démarrage du resize ───────────────────────────────────────────────
+        if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
+            if (table.getResizeRowIndex() >= 0) {
+                table.setResizingRow(true);
+                resizeDragStartY = e.getY();
+                resizeOriginalSize = table.getRowHeight(table.getResizeRowIndex());
+                table.setResizePreviewY(e.getY());
+                return;
+            }
+            if (table.getResizeColIndex() >= 0) {
+                int col2 = table.getResizeColIndex();
+                int neighbor = (col2 + 1 < table.getColumnCount()) ? col2 + 1 : -1;
+                table.setResizeColNeighborIndex(neighbor);
+                table.setResizingCol(true);
+                resizeDragStartX = e.getX();
+                resizeOriginalSize = table.getColumnModel().getColumn(col2).getWidth();
+                if (neighbor >= 0) {
+                    table.setResizeNeighborOriginalSize(
+                            table.getColumnModel().getColumn(neighbor).getWidth());
+                }
+                table.setResizePreviewX(e.getX());
+                return;
+            }
+        }
+
+        // ── Double-press ──────────────────────────────────────────────────────
+        if (e.getClickCount() == 2) {
             HBasicTableUI ui = (HBasicTableUI) table.getUI();
             InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
-            table.setFocusedInternalCell(hit);
-            table.setSelectedInternalCell(hit);
-        }
-        return;
-    }
-
-    // ── Résolution via resolvePoint ───────────────────────────────────────
-    int[] resolved = table.resolvePoint(e.getPoint());
-    int row = resolved[0];
-    int col = resolved[1];
-    if (row < 0 || col < 0) {
-        return;
-    }
-
-    // ── Démarrage du resize ───────────────────────────────────────────────
-    if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
-        if (table.getResizeRowIndex() >= 0) {
-            table.setResizingRow(true);
-            resizeDragStartY = e.getY();
-            resizeOriginalSize = table.getRowHeight(table.getResizeRowIndex());
-            table.setResizePreviewY(e.getY());
-            return;
-        }
-        if (table.getResizeColIndex() >= 0) {
-            int col2 = table.getResizeColIndex();
-            int neighbor = (col2 + 1 < table.getColumnCount()) ? col2 + 1 : -1;
-            table.setResizeColNeighborIndex(neighbor);
-            table.setResizingCol(true);
-            resizeDragStartX = e.getX();
-            resizeOriginalSize = table.getColumnModel().getColumn(col2).getWidth();
-            if (neighbor >= 0) {
-                table.setResizeNeighborOriginalSize(
-                        table.getColumnModel().getColumn(neighbor).getWidth());
+            if (hit != null && hit.parent != null) {
+                e.consume();
+                table.startInternalEdit(hit);
+                return;
             }
-            table.setResizePreviewX(e.getX());
             return;
         }
-    }
 
-    // ── Double-press ──────────────────────────────────────────────────────
-    if (e.getClickCount() == 2) {
+        // ── Clic simple ───────────────────────────────────────────────────────
         HBasicTableUI ui = (HBasicTableUI) table.getUI();
         InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+
         if (hit != null && hit.parent != null) {
-            e.consume();
-            table.startInternalEdit(hit);
-            return;
+            table.setFocusedInternalCell(hit);
+            table.setSelectedInternalCell(hit);
+        } else {
+            table.setFocusedInternalCell(null);
+            table.setSelectedInternalCell(null);
         }
-        return;
+
+        if (!e.isShiftDown()) {
+            anchorRow = row;
+            anchorCol = col;
+        }
+
+        dragRow = row;
+        dragCol = col;
+        isDragging = false;
+
+        handleSingleClick(row, col, e);
     }
-
-    // ── Clic simple ───────────────────────────────────────────────────────
-    HBasicTableUI ui = (HBasicTableUI) table.getUI();
-    InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
-
-    if (hit != null && hit.parent != null) {
-        table.setFocusedInternalCell(hit);
-        table.setSelectedInternalCell(hit);
-    } else {
-        table.setFocusedInternalCell(null);
-        table.setSelectedInternalCell(null);
-    }
-
-    if (!e.isShiftDown()) {
-        anchorRow = row;
-        anchorCol = col;
-    }
-
-    dragRow = row;
-    dragCol = col;
-    isDragging = false;
-
-    handleSingleClick(row, col, e);
-}
 
     private void handleMouseDrag(MouseEvent e) {
-    if (!SwingUtilities.isLeftMouseButton(e)) {
-        return;
-    }
-
-    // ── Drag resize de ligne ──────────────────────────────────────────────
-    if (table.isResizingRow()) {
-        int row = table.getResizeRowIndex();
-        int delta = e.getY() - resizeDragStartY;
-        int newHeight = Math.max(20, resizeOriginalSize + delta);
-        Rectangle cellRect = table.getCellRect(row, 0, true);
-        table.setResizePreviewY(cellRect.y + newHeight);
-        table.repaint();
-        return;
-    }
-
-    // ── Drag resize de colonne ────────────────────────────────────────────
-    if (table.isResizingCol()) {
-        int col = table.getResizeColIndex();
-        int delta = e.getX() - resizeDragStartX;
-        int newWidth = Math.max(30, resizeOriginalSize + delta);
-        Rectangle cellRect = table.getCellRect(0, col, true);
-        table.setResizePreviewX(cellRect.x + newWidth);
-        table.repaint();
-        return;
-    }
-
-    // ── Mode crayon ───────────────────────────────────────────────────────
-    if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
-        drawEndX = e.getX();
-        drawEndY = e.getY();
-        table.repaint();
-        return;
-    }
-
-    // ── Drag sélection — résolution via resolvePoint ──────────────────────
-    int x = Math.max(0, Math.min(e.getX(), table.getWidth() - 1));
-    int y = Math.max(0, Math.min(e.getY(), table.getHeight() - 1));
-
-    int[] resolved = table.resolvePoint(new Point(x, y));
-    int row = resolved[0];
-    int col = resolved[1];
-    if (row < 0 || col < 0) {
-        return;
-    }
-
-    if (row == dragRow && col == dragCol) {
-        return;
-    }
-
-    isDragging = true;
-    dragRow = row;
-    dragCol = col;
-
-    applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
-}
-
-    private void handleMouseRelease(MouseEvent e) {
-    if (!SwingUtilities.isLeftMouseButton(e)) {
-        return;
-    }
-
-    // ── Fin resize de ligne ───────────────────────────────────────────────
-    if (table.isResizingRow()) {
-        int row = table.getResizeRowIndex();
-        int delta = e.getY() - resizeDragStartY;
-        int newHeight = Math.max(20, resizeOriginalSize + delta);
-        table.setRowHeight(row, newHeight);
-        table.setResizingRow(false);
-        table.setResizeRowIndex(-1);
-        table.setResizePreviewY(-1);
-        resizeDragStartY = -1;
-        resizeOriginalSize = -1;
-        table.setCursor(Cursor.getDefaultCursor());
-        table.refreshUI();
-        return;
-    }
-
-    // ── Fin resize de colonne ─────────────────────────────────────────────
-    if (table.isResizingCol()) {
-        int col = table.getResizeColIndex();
-        int neighbor = table.getResizeColNeighborIndex();
-        int delta = e.getX() - resizeDragStartX;
-
-        if (Math.abs(delta) > 2) {
-            int newWidthLeft = Math.max(30, resizeOriginalSize + delta);
-            table.getColumnModel().getColumn(col).setWidth(newWidthLeft);
-            table.getColumnModel().getColumn(col).setPreferredWidth(newWidthLeft);
-            if (neighbor >= 0) {
-                int newWidthRight = Math.max(30,
-                        table.getResizeNeighborOriginalSize() - delta);
-                table.getColumnModel().getColumn(neighbor).setWidth(newWidthRight);
-                table.getColumnModel().getColumn(neighbor)
-                        .setPreferredWidth(newWidthRight);
-            }
+        if (!SwingUtilities.isLeftMouseButton(e)) {
+            return;
         }
 
-        table.setResizingCol(false);
-        table.setResizeColIndex(-1);
-        table.setResizeColNeighborIndex(-1);
-        table.setResizeNeighborOriginalSize(-1);
-        table.setResizePreviewX(-1);
-        resizeDragStartX = -1;
-        resizeOriginalSize = -1;
-        table.setCursor(Cursor.getDefaultCursor());
-        table.refreshUI();
-        return;
-    }
+        // ── Drag resize de ligne ──────────────────────────────────────────────
+        if (table.isResizingRow()) {
+            int row = table.getResizeRowIndex();
+            int delta = e.getY() - resizeDragStartY;
+            int newHeight = Math.max(20, resizeOriginalSize + delta);
+            Rectangle cellRect = table.getCellRect(row, 0, true);
+            table.setResizePreviewY(cellRect.y + newHeight);
+            table.repaint();
+            return;
+        }
 
-    // ── Fin mode crayon ───────────────────────────────────────────────────
-    if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
-        isDrawing = false;
+        // ── Drag resize de colonne ────────────────────────────────────────────
+        if (table.isResizingCol()) {
+            int col = table.getResizeColIndex();
+            int delta = e.getX() - resizeDragStartX;
+            int newWidth = Math.max(30, resizeOriginalSize + delta);
+            Rectangle cellRect = table.getCellRect(0, col, true);
+            table.setResizePreviewX(cellRect.x + newWidth);
+            table.repaint();
+            return;
+        }
 
-        // Résolution via resolvePoint pour le point de départ
-        int[] resolved = table.resolvePoint(new Point(drawStartX, drawStartY));
+        // ── Mode crayon ───────────────────────────────────────────────────────
+        if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
+            drawEndX = e.getX();
+            drawEndY = e.getY();
+            table.repaint();
+            return;
+        }
+
+        // ── Drag sélection — résolution via resolvePoint ──────────────────────
+        int x = Math.max(0, Math.min(e.getX(), table.getWidth() - 1));
+        int y = Math.max(0, Math.min(e.getY(), table.getHeight() - 1));
+
+        int[] resolved = table.resolvePoint(new Point(x, y));
         int row = resolved[0];
         int col = resolved[1];
         if (row < 0 || col < 0) {
-            drawStartX = drawEndX = drawStartY = drawEndY = -1;
             return;
         }
 
-        int dx = Math.abs(drawEndX - drawStartX);
-        int dy = Math.abs(drawEndY - drawStartY);
-
-        // Rectangle de référence — fusionné si nécessaire
-        Rectangle refRect;
-        if (table.hasInternalFocus()) {
-            refRect = table.getFocusedInternalCell().bounds;
-        } else {
-            HSuperDefaultTableModel.Cell cell = table.getHModel().getCell(row, col);
-            refRect = (cell.spanRow > 1 || cell.spanCol > 1)
-                    ? ((HBasicTableUI) table.getUI())
-                            .computeMergedRectPublic(table, row, col,
-                                    cell.spanRow, cell.spanCol)
-                    : table.getCellRect(row, col, false);
+        if (row == dragRow && col == dragCol) {
+            return;
         }
 
-        int splitType;
-        float ratio;
+        isDragging = true;
+        dragRow = row;
+        dragCol = col;
 
-        if (dx >= dy) {
-            splitType = InternalGrid.SPLIT_VERTICAL;
-            int relativeX = drawEndX - refRect.x;
-            ratio = (float) relativeX / refRect.width;
-        } else {
-            splitType = InternalGrid.SPLIT_HORIZONTAL;
-            int relativeY = drawEndY - refRect.y;
-            ratio = (float) relativeY / refRect.height;
-        }
-
-        ratio = Math.max(0.15f, Math.min(0.85f, ratio));
-        table.splitCellLocally(row, col, splitType, ratio);
-
-        drawStartX = drawEndX = -1;
-        drawStartY = drawEndY = -1;
-        table.repaint();
-        return;
-    }
-
-    // ── Fin drag sélection ────────────────────────────────────────────────
-    if (isDragging && anchorRow >= 0 && dragRow >= 0) {
         applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
     }
-    isDragging = false;
-}
+
+    private void handleMouseRelease(MouseEvent e) {
+        if (!SwingUtilities.isLeftMouseButton(e)) {
+            return;
+        }
+
+        // ── Fin resize de ligne ───────────────────────────────────────────────
+        if (table.isResizingRow()) {
+            int row = table.getResizeRowIndex();
+            int delta = e.getY() - resizeDragStartY;
+            int newHeight = Math.max(20, resizeOriginalSize + delta);
+            table.setRowHeight(row, newHeight);
+            table.setResizingRow(false);
+            table.setResizeRowIndex(-1);
+            table.setResizePreviewY(-1);
+            resizeDragStartY = -1;
+            resizeOriginalSize = -1;
+            table.setCursor(Cursor.getDefaultCursor());
+            table.refreshUI();
+            return;
+        }
+
+        // ── Fin resize de colonne ─────────────────────────────────────────────
+        if (table.isResizingCol()) {
+            int col = table.getResizeColIndex();
+            int neighbor = table.getResizeColNeighborIndex();
+            int delta = e.getX() - resizeDragStartX;
+
+            if (Math.abs(delta) > 2) {
+                int newWidthLeft = Math.max(30, resizeOriginalSize + delta);
+                table.getColumnModel().getColumn(col).setWidth(newWidthLeft);
+                table.getColumnModel().getColumn(col).setPreferredWidth(newWidthLeft);
+                if (neighbor >= 0) {
+                    int newWidthRight = Math.max(30,
+                            table.getResizeNeighborOriginalSize() - delta);
+                    table.getColumnModel().getColumn(neighbor).setWidth(newWidthRight);
+                    table.getColumnModel().getColumn(neighbor)
+                            .setPreferredWidth(newWidthRight);
+                }
+            }
+
+            table.setResizingCol(false);
+            table.setResizeColIndex(-1);
+            table.setResizeColNeighborIndex(-1);
+            table.setResizeNeighborOriginalSize(-1);
+            table.setResizePreviewX(-1);
+            resizeDragStartX = -1;
+            resizeOriginalSize = -1;
+            table.setCursor(Cursor.getDefaultCursor());
+            table.refreshUI();
+            return;
+        }
+
+        // ── Fin mode crayon ───────────────────────────────────────────────────
+        if (table.getInteractionMode() == HSuperTable.MODE_DRAW && isDrawing) {
+            isDrawing = false;
+
+            // Résolution via resolvePoint pour le point de départ
+            int[] resolved = table.resolvePoint(new Point(drawStartX, drawStartY));
+            int row = resolved[0];
+            int col = resolved[1];
+            if (row < 0 || col < 0) {
+                drawStartX = drawEndX = drawStartY = drawEndY = -1;
+                return;
+            }
+
+            int dx = Math.abs(drawEndX - drawStartX);
+            int dy = Math.abs(drawEndY - drawStartY);
+
+            // Rectangle de référence — fusionné si nécessaire
+            Rectangle refRect;
+            if (table.hasInternalFocus()) {
+                refRect = table.getFocusedInternalCell().bounds;
+            } else {
+                HSuperDefaultTableModel.Cell cell = table.getHModel().getCell(row, col);
+                refRect = (cell.spanRow > 1 || cell.spanCol > 1)
+                        ? ((HBasicTableUI) table.getUI())
+                                .computeMergedRectPublic(table, row, col,
+                                        cell.spanRow, cell.spanCol)
+                        : table.getCellRect(row, col, false);
+            }
+
+            int splitType;
+            float ratio;
+
+            if (dx >= dy) {
+                splitType = InternalGrid.SPLIT_VERTICAL;
+                int relativeX = drawEndX - refRect.x;
+                ratio = (float) relativeX / refRect.width;
+            } else {
+                splitType = InternalGrid.SPLIT_HORIZONTAL;
+                int relativeY = drawEndY - refRect.y;
+                ratio = (float) relativeY / refRect.height;
+            }
+
+            ratio = Math.max(0.15f, Math.min(0.85f, ratio));
+            table.splitCellLocally(row, col, splitType, ratio);
+
+            drawStartX = drawEndX = -1;
+            drawStartY = drawEndY = -1;
+            table.repaint();
+            return;
+        }
+
+        // ── Fin drag sélection ────────────────────────────────────────────────
+        if (isDragging && anchorRow >= 0 && dragRow >= 0) {
+            applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
+        }
+        isDragging = false;
+    }
 
     // =========================================================================
     // GESTION SOURIS — MOUVEMENT hover et resize
     // =========================================================================
-    private void handleMouseMove(MouseEvent e) {
+        private void handleMouseMove(MouseEvent e) {
 
-    // ── Détection resize — sur coordonnées brutes ─────────────────────────
-    // detectResize utilise getCellRect qui gère déjà les fusions
-    if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
-        detectResize(e.getPoint());
-    }
+        // ── Détection resize — sur coordonnées brutes ─────────────────────────
+        if (table.getInteractionMode() == HSuperTable.MODE_NORMAL) {
+            detectResize(e.getPoint());
+        }
 
-    // ── Hover — résolution via resolvePoint ───────────────────────────────
-    if (table.getResizeRowIndex() < 0 && table.getResizeColIndex() < 0) {
+        // ── Hover — résolution via resolvePoint ───────────────────────────────
+        if (table.getResizeRowIndex() < 0 && table.getResizeColIndex() < 0) {
 
-        boolean hasMultiCellSelection = table.hasSelection()
-                && !table.getSelection().isSingleCell();
-
-        if (hasMultiCellSelection) {
-            if (table.getHoveredRow() >= 0) {
-                table.setHoveredRow(-1);
+            // Dès qu'une cellule (ou une plage) est sélectionnée, le survol
+            // n'affiche plus rien — évite la confusion avec la sélection
+            // active, déjà mise en avant par ailleurs
+            if (table.hasSelection()) {
+                if (table.getHoveredRow() >= 0) {
+                    table.setHoveredRow(-1);
+                }
+                if (table.getHoveredInternalCell() != null) {
+                    table.setHoveredInternalCell(null);
+                }
+            } else {
+                // Résoudre vers la cellule principale
+                int[] resolved = table.resolvePoint(e.getPoint());
+                int row = resolved[0];
+                if (row != table.getHoveredRow()) {
+                    table.setHoveredRow(row);
+                }
+                HBasicTableUI ui = (HBasicTableUI) table.getUI();
+                InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
+                table.setHoveredInternalCell(hit);
             }
-            if (table.getHoveredInternalCell() != null) {
-                table.setHoveredInternalCell(null);
-            }
-        } else {
-            // Résoudre vers la cellule principale
-            int[] resolved = table.resolvePoint(e.getPoint());
-            int row = resolved[0];
-            if (row != table.getHoveredRow()) {
-                table.setHoveredRow(row);
-            }
-            HBasicTableUI ui = (HBasicTableUI) table.getUI();
-            InternalCellHit hit = ui.getInternalCellAt(table, e.getPoint());
-            table.setHoveredInternalCell(hit);
         }
     }
-}
 
     public int getDrawStartX() {
         return drawStartX;
@@ -664,7 +729,7 @@ public class HSuperTableController {
     /**
      * Applique une sélection rectangulaire de (r1,c1) à (r2,c2). Met à jour à
      * la fois la sélection de lignes (pour la surbrillance) et la CellRange
-     * (pour les méthodes applyXxx).
+     * (pour les méthodes apply).
      */
     private void applyRangeSelection(int r1, int c1, int r2, int c2) {
         if (r1 < 0 || c1 < 0 || r2 < 0 || c2 < 0) {
@@ -681,10 +746,7 @@ public class HSuperTableController {
                 rowEnd, colEnd));
 
         // Mettre à jour la sélection de lignes pour la surbrillance existante
-        table.clearSelection();
-        for (int r = rowStart; r <= rowEnd; r++) {
-            table.addSelectedRow(r);
-        }
+        table.clearSelection();        
 
         // Focus sur la cellule d'ancrage
         if (isValidCell(r1, c1)) {
@@ -814,7 +876,7 @@ public class HSuperTableController {
             dragRow = newRow;
             dragCol = newCol;
             table.clearSelection();
-            table.addSelectedRow(newRow);
+//            table.addSelectedRow(newRow);
             table.setSelection(new HSuperTable.CellRange(newRow, newCol, newRow, newCol));
             table.setFocusedCell(newRow, newCol);
         }
@@ -834,16 +896,24 @@ public class HSuperTableController {
         }
     }
 
-    private void selectAllRows() {
-        anchorRow = 0;
-        anchorCol = 0;
-        dragRow = table.getRowCount() - 1;
-        dragCol = table.getColumnCount() - 1;
-        applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
-    }
+//    private void selectAllRows() {
+//        anchorRow = 0;
+//        anchorCol = 0;
+//        dragRow = table.getRowCount() - 1;
+//        dragCol = table.getColumnCount() - 1;
+//        applyRangeSelection(anchorRow, anchorCol, dragRow, dragCol);
+//    }
 
-    private void deleteSelectedRows() {
-        List<Integer> rows = new ArrayList<>(table.getRowsSelected());
+        private void deleteSelectedRows() {
+        List<Integer> rows = new ArrayList<>();
+        if (table.hasSelection()) {
+            HSuperTable.CellRange sel = table.getSelection();
+            for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
+                rows.add(r);
+            }
+        } else {
+            rows.addAll(table.getRowsSelected());
+        }
         Collections.sort(rows, Collections.reverseOrder());
         for (int r : rows) {
             if (r >= 0 && r < table.getRowCount()) {
@@ -890,11 +960,13 @@ public class HSuperTableController {
      * Libère tous les listeners enregistrés. À appeler quand HSuperTable est
      * retiré de l'interface pour éviter les fuites mémoire.
      */
-    public void dispose() {
+        public void dispose() {
         table.removeMouseListener(mouseListener);
         table.removeMouseMotionListener(motionListener);
         table.removeKeyListener(keyListener);
         table.removeFocusListener(focusListener);
+        table.getTableHeader().removeMouseListener(headerListener);
+        table.getTableHeader().removeMouseMotionListener(headerListener);
     }
 
     /**
@@ -913,65 +985,80 @@ public class HSuperTableController {
      */
     private void detectResize(Point point) {
 
-    // ── Détection resize de ligne ─────────────────────────────────────────
-    for (int row = 0; row < table.getRowCount(); row++) {
+        // ── Détection resize de ligne ─────────────────────────────────────────
+        for (int row = 0; row < table.getRowCount(); row++) {
 
-        // Utiliser la première colonne non absorbée pour getCellRect
-        Rectangle cellRect = table.getCellRect(row, 0, true);
+            // Utiliser la première colonne non absorbée pour getCellRect
+            Rectangle cellRect = table.getCellRect(row, 0, true);
 
-        int bordureBasse = cellRect.y + cellRect.height;
-        int bordureHaute = cellRect.y;
+            int bordureBasse = cellRect.y + cellRect.height;
+            int bordureHaute = cellRect.y;
 
-        if (Math.abs(point.y - bordureBasse) <= RESIZE_TOLERANCE) {
-            table.setResizeRowIndex(row);
-            table.setResizeColIndex(-1);
-            table.setCursor(Cursor.getPredefinedCursor(
-                    Cursor.S_RESIZE_CURSOR));
-            return;
+            if (Math.abs(point.y - bordureBasse) <= RESIZE_TOLERANCE) {
+                table.setResizeRowIndex(row);
+                table.setResizeColIndex(-1);
+                table.setCursor(Cursor.getPredefinedCursor(
+                        Cursor.S_RESIZE_CURSOR));
+                return;
+            }
+
+            if (Math.abs(point.y - bordureHaute) <= RESIZE_TOLERANCE
+                    && row > 0) {
+                table.setResizeRowIndex(row - 1);
+                table.setResizeColIndex(-1);
+                table.setCursor(Cursor.getPredefinedCursor(
+                        Cursor.S_RESIZE_CURSOR));
+                return;
+            }
         }
 
-        if (Math.abs(point.y - bordureHaute) <= RESIZE_TOLERANCE
-                && row > 0) {
-            table.setResizeRowIndex(row - 1);
-            table.setResizeColIndex(-1);
-            table.setCursor(Cursor.getPredefinedCursor(
-                    Cursor.S_RESIZE_CURSOR));
-            return;
+        // ── Détection resize de colonne ───────────────────────────────────────
+        for (int col = 0; col < table.getColumnCount(); col++) {
+
+            // Sauter les colonnes absorbées pour la détection
+            // On utilise getCellRect(0, col) — la ligne 0 est toujours valide
+            Rectangle cellRect = table.getCellRect(0, col, true);
+
+            int bordureDroite = cellRect.x + cellRect.width;
+
+            if (Math.abs(point.x - bordureDroite) <= RESIZE_TOLERANCE) {
+                table.setResizeColIndex(col);
+                table.setResizeRowIndex(-1);
+                table.setCursor(Cursor.getPredefinedCursor(
+                        Cursor.E_RESIZE_CURSOR));
+                return;
+            }
+        }
+
+        // ── Aucune bordure détectée ───────────────────────────────────────────
+        table.setResizeRowIndex(-1);
+        table.setResizeColIndex(-1);
+
+        switch (table.getInteractionMode()) {
+            case HSuperTable.MODE_DRAW ->
+                table.setCursor(Cursor.getPredefinedCursor(
+                        Cursor.CROSSHAIR_CURSOR));
+            case HSuperTable.MODE_ERASE ->
+                table.setCursor(Cursor.getPredefinedCursor(
+                        Cursor.HAND_CURSOR));
+            default ->
+                table.setCursor(Cursor.getDefaultCursor());
         }
     }
-
-    // ── Détection resize de colonne ───────────────────────────────────────
-    for (int col = 0; col < table.getColumnCount(); col++) {
-
-        // Sauter les colonnes absorbées pour la détection
-        // On utilise getCellRect(0, col) — la ligne 0 est toujours valide
-        Rectangle cellRect = table.getCellRect(0, col, true);
-
-        int bordureDroite = cellRect.x + cellRect.width;
-
-        if (Math.abs(point.x - bordureDroite) <= RESIZE_TOLERANCE) {
-            table.setResizeColIndex(col);
-            table.setResizeRowIndex(-1);
-            table.setCursor(Cursor.getPredefinedCursor(
-                    Cursor.E_RESIZE_CURSOR));
-            return;
+    
+        /**
+     * Vrai si le point est proche de la bordure droite d'une colonne
+     * d'en-tête — zone réservée au resize natif, pas à la sélection.
+     */
+    private boolean isNearColumnHeaderBorder(Point point) {
+        JTableHeader header = table.getTableHeader();
+        for (int col = 0; col < table.getColumnCount(); col++) {
+            Rectangle r = header.getHeaderRect(col);
+            if (Math.abs(point.x - (r.x + r.width)) <= RESIZE_TOLERANCE) {
+                return true;
+            }
         }
+        return false;
     }
-
-    // ── Aucune bordure détectée ───────────────────────────────────────────
-    table.setResizeRowIndex(-1);
-    table.setResizeColIndex(-1);
-
-    switch (table.getInteractionMode()) {
-        case HSuperTable.MODE_DRAW ->
-            table.setCursor(Cursor.getPredefinedCursor(
-                    Cursor.CROSSHAIR_CURSOR));
-        case HSuperTable.MODE_ERASE ->
-            table.setCursor(Cursor.getPredefinedCursor(
-                    Cursor.HAND_CURSOR));
-        default ->
-            table.setCursor(Cursor.getDefaultCursor());
-    }
-}
 
 }
