@@ -1,5 +1,6 @@
-package hsupertable;
+package hsupertable.formula;
 
+import hsupertable.model.HDefaultTableModel;
 import java.util.*;
 
 /**
@@ -42,7 +43,7 @@ public class HTableFormula {
         NEQ, // <>
         EOF // fin de l'expression
     }
-
+   
     /**
      * Unité lexicale produite par le Lexer.
      */
@@ -867,7 +868,7 @@ public class HTableFormula {
         /**
          * Modèle de données du tableau.
          */
-        private final HSuperDefaultTableModel model;
+        private final HDefaultTableModel model;
 
         /**
          * Ligne de la cellule contenant la formule (0-indexée).
@@ -879,7 +880,7 @@ public class HTableFormula {
          */
         private final int formulaCol;
 
-        Evaluator(HSuperDefaultTableModel model, int formulaRow, int formulaCol) {
+        Evaluator(HDefaultTableModel model, int formulaRow, int formulaCol) {
             this.model = model;
             this.formulaRow = formulaRow;
             this.formulaCol = formulaCol;
@@ -1311,7 +1312,7 @@ public class HTableFormula {
      * "#REF!")
      */
     public static Object evaluate(String formula,
-            HSuperDefaultTableModel model,
+            HDefaultTableModel model,
             int formulaRow, int formulaCol) {
 
         if (formula == null || formula.isEmpty()) {
@@ -1354,7 +1355,7 @@ public class HTableFormula {
      * @return résultat ou erreur
      */
     public static Object evaluate(String formula,
-            HSuperDefaultTableModel model) {
+            HDefaultTableModel model) {
         return evaluate(formula, model, -1, -1);
     }
 
