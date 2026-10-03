@@ -1,13 +1,12 @@
 package hsupertable;
 
 import hsupertable.formula.HTableFormula;
-import hsupertable.controller.HTableController;
 import hsupertable.style.HTableStyle;
 import hsupertable.view.HBasicTableUI;
 import hsupertable.model.HCellModel;
 import hsupertable.model.HDefaultTableModel;
 import hsupertable.menu.*;
-import hsupertable.menu.ContextMenuControllerHandler;
+import hsupertable.menu.MenuHandler;
 import hsupertable.geometry.HTableGeometry.InternalCellHit;
 import hsupertable.model.HCellSelectionModel;
 import hsupertable.style.HTableStyle.HeaderStyle;
@@ -87,8 +86,8 @@ public class HTable extends JTable {
     /**
      * Contrôleur des événements souris/clavier.
      */
-    private HTableController controller;
-    private ContextMenuControllerHandler menuController;
+
+    private MenuHandler menuController;
 
     // =========================================================================
     // ÉTATS VISUELS 
@@ -168,6 +167,13 @@ public class HTable extends JTable {
     private boolean isResizingRow = false;
     private boolean isResizingCol = false;
 
+    /**
+     * Largeur de la zone cliquable de l'icône de tri, Constante utilisée par le
+     * rendu (HBasicTableUI dessine l'icône dans cette zone) et la détection de
+     * clic (HeaderHandler teste si le clic tombe dedans)
+     */
+    public static final int SORT_ICON_ZONE_WIDTH = 20;
+
     // Index de la colonne voisine droite lors du resize de colonne
     private int resizeColNeighborIndex = -1;
 
@@ -183,8 +189,7 @@ public class HTable extends JTable {
         super(model);
         this.hModel = model;
         this.cellSelectionModel = new HCellSelectionModel(getSelectionModel(), getColumnModel().getSelectionModel());
-        this.controller = new HTableController(this);
-        this.menuController = new ContextMenuControllerHandler(this);
+        this.menuController = new MenuHandler(this);
         setLayout(null);
         internalEditor.setVisible(false);
         add(internalEditor);
@@ -525,12 +530,12 @@ public class HTable extends JTable {
     // ── Bordures ─────────────────────────────────────────────────────────────
     /**
      * Définit une bordure sur un ou plusieurs côtés d'une cellule.Exemple :
-     *<pre>
-   // Bordure rouge épaisse en bas et à droite de la cellule (1,2)
-   table.setCellBorderSide(1, 2,
-       HTable.SIDE_BOTTOM | HTable.SIDE_RIGHT,
-       Color.RED, 2f, HTable.BORDER_SOLID);
- </pre>
+     * <pre>
+     * // Bordure rouge épaisse en bas et à droite de la cellule (1,2)
+     * table.setCellBorderSide(1, 2,
+     * HTable.SIDE_BOTTOM | HTable.SIDE_RIGHT,
+     * Color.RED, 2f, HTable.BORDER_SOLID);
+     * </pre>
      *
      * @param row ligne de la cellule
      * @param col colonne de la cellule
@@ -971,7 +976,7 @@ public class HTable extends JTable {
      * Sélectionne tout le tableau.
      */
     public void selectAll() {
-        getController().selectAll();
+        ((HBasicTableUI) getUI()).getSelectionHandler().selectAll();
     }
 
     public int[] getSelectedRowsArray() {
@@ -1397,8 +1402,8 @@ public class HTable extends JTable {
 
     /**
      * Coupe le tableau en deux à partir de la ligne donnée.Les lignes [0,
- atRow-1] restent dans ce tableau. Les lignes [atRow, fin] sont retournées
- dans un nouveau HSuperTable indépendant.
+     * atRow-1] restent dans ce tableau. Les lignes [atRow, fin] sont retournées
+     * dans un nouveau HSuperTable indépendant.
      *
      * @param atRow index de la première ligne du second tableau
      * @return un nouveau HTable contenant les lignes détachées
@@ -1505,12 +1510,12 @@ public class HTable extends JTable {
     }
 
     /**
-     * Ajustement automatique selon le mode choisi.AUTOFIT_CONTENT : chaque colonne s'adapte au contenu le plus large
- (en-tête inclus) + une marge de 20px.
+     * Ajustement automatique selon le mode choisi.AUTOFIT_CONTENT : chaque
+     * colonne s'adapte au contenu le plus large (en-tête inclus) + une marge de
+     * 20px.
      *
-     * AUTOFIT_WINDOW : toutes les
- colonnes se partagent équitablement la largeur du composant parent
- visible.
+     * AUTOFIT_WINDOW : toutes les colonnes se partagent équitablement la
+     * largeur du composant parent visible.
      *
      * @param mode HTable.AUTOFIT_CONTENT ou HTable.AUTOFIT_WINDOW
      */
@@ -1610,7 +1615,7 @@ public class HTable extends JTable {
      * @param row ligne
      * @param col colonne
      * @param direction HTable.TEXT_HORIZONTAL, TEXT_VERTICAL_UP ou
- TEXT_VERTICAL_DOWN
+     * TEXT_VERTICAL_DOWN
      */
     public void setCellTextDirection(int row, int col, int direction) {
         hModel.setCellTextDirection(row, col, direction);
@@ -1678,7 +1683,7 @@ public class HTable extends JTable {
         if (col < 0 || col >= getColumnCount()) {
             return;
         }
-        TableRowSorter<HDefaultTableModel> sorter = new TableRowSorter<>(hModel);
+        TableRowSorter<HDefaultTableModel> sorter = newNonClickableSorter();
         setRowSorter(sorter);
         List<RowSorter.SortKey> keys = new ArrayList<>();
         keys.add(new RowSorter.SortKey(col, order));
@@ -1697,7 +1702,7 @@ public class HTable extends JTable {
         if (cols == null || orders == null || cols.length != orders.length) {
             return;
         }
-        TableRowSorter<HDefaultTableModel> sorter = new TableRowSorter<>(hModel);
+        TableRowSorter<HDefaultTableModel> sorter = newNonClickableSorter();
         setRowSorter(sorter);
         List<RowSorter.SortKey> keys = new ArrayList<>();
         for (int i = 0; i < cols.length; i++) {
@@ -2171,10 +2176,6 @@ public class HTable extends JTable {
         return hModel;
     }
 
-    public HTableController getController() {
-        return controller;
-    }
-
     // =========================================================================
     // DIMENSIONS
     // =========================================================================
@@ -2509,4 +2510,51 @@ public class HTable extends JTable {
     public boolean hasInternalFocus() {
         return focusedInternalCell != null && focusedInternalCell.parent != null;
     }
+
+    /**
+     * Toujours ignorée : HTable ne doit jamais avoir de TableRowSorter
+     * auto-créé par JTable lui-même. Un sorter par défaut n'aurait pas notre
+     * isSortable() = false, et réintroduirait le tri au clic n'importe où sur
+     * l'en-tête — exactement ce que sortByColumn()/sortByColumns() neutralisent
+     * en construisant toujours leur propre sorter. Le tri ne doit passer que
+     * par ces deux méthodes, jamais par l'auto-création de JTable
+     * (getAutoCreateRowSorter() reste donc toujours false, sans override
+     * nécessaire : le champ interne de JTable n'est jamais touché).
+     */
+    @Override
+    public void setAutoCreateRowSorter(boolean autoCreateRowSorter) {
+        // volontairement vide
+    }
+
+    /**
+     * TableRowSorter dont aucune colonne n'est "sortable" au sens de
+     * toggleSortOrder() — c'est ce que vérifie en premier le clic natif du
+     * JTableHeader avant d'agir. Ça neutralise le tri-au-clic-n'importe-où de
+     * Swing sans toucher à setSortKeys(), notre propre chemin de tri, qui ne
+     * passe pas par ce garde-fou.
+     */
+    private TableRowSorter<HDefaultTableModel> newNonClickableSorter() {
+        return new TableRowSorter<>(hModel) {
+            @Override
+            public boolean isSortable(int column) {
+                return false;
+            }
+        };
+    }
+
+    //Etat de tri d'une colonne
+    public SortOrder getViewColumnSortOrder(int viewCol) {
+        RowSorter<? extends TableModel> sorter = getRowSorter();
+        if (sorter == null) {
+            return SortOrder.UNSORTED;
+        }
+        int modelCol = toModelColumn(viewCol);
+        for (RowSorter.SortKey key : sorter.getSortKeys()) {
+            if (key.getColumn() == modelCol) {
+                return key.getSortOrder();
+            }
+        }
+        return SortOrder.UNSORTED;
+    }
+
 }
