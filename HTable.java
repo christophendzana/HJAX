@@ -1,35 +1,46 @@
 package hsupertable;
 
 import hsupertable.formula.HTableFormula;
-import hsupertable.style.HTableStyle;
-import hsupertable.view.HBasicTableUI;
-import hsupertable.model.HCellModel;
-import hsupertable.model.HDefaultTableModel;
+import hsupertable.geometry.TableGeometry;
+import hsupertable.geometry.TableGeometry.InternalCellHit;
+import hsupertable.geometry.TableStructureIntegrity;
 import hsupertable.menu.*;
-import hsupertable.menu.MenuHandler;
-import hsupertable.geometry.HTableGeometry.InternalCellHit;
-import hsupertable.model.HCellSelectionModel;
+import hsupertable.model.structure.CellNode;
+import hsupertable.model.CellStyle;
+import hsupertable.model.selection.CellSelectionModel;
+import hsupertable.model.structure.CellStructureEvent;
+import hsupertable.model.DefaultCellStructureModel;
+import hsupertable.model.HDefaultTableModel;
+import hsupertable.model.MergeRegion;
+import hsupertable.model.SubCellPath;
+import hsupertable.style.HTableStyle;
 import hsupertable.style.HTableStyle.HeaderStyle;
+import hsupertable.view.HBasicTableUI;
 import javax.swing.*;
+import javax.swing.JTable;
+import javax.swing.table.DefaultTableModel;
+import javax.swing.table.JTableHeader;
 import javax.swing.table.TableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.*;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
+import java.text.Collator;
 import java.util.*;
 import java.util.List;
-import javax.swing.table.JTableHeader;
-
-import hsupertable.geometry.HTableStructureIntegrity;
+import java.util.function.Consumer;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.RowSorterEvent;
 import javax.swing.event.TableColumnModelEvent;
 import javax.swing.event.TableColumnModelListener;
+import javax.swing.event.TableModelEvent;
+import hsupertable.model.structure.CellStructureListener;
+import hsupertable.model.structure.CellStructureModel;
+import java.util.function.BiConsumer;
 
 /**
- * HSuperTable — Tableau Swing avancé inspiré des outils tableau de Microsoft
- * Word.
+ * HTable — Tableau Swing avancé inspiré des outils tableau de Microsoft Word.
  *
  * Point d'entrée unique de toutes les fonctionnalités. L'utilisateur n'a besoin
  * que de cette classe pour tout faire.
@@ -54,11 +65,12 @@ public class HTable extends JTable {
     public static final int BORDER_DOUBLE = 3;
 
     // -- Côtés de bordure (utilisables en combinaison avec l'opérateur | ) --
-    public static final int SIDE_TOP = 0b0001;
-    public static final int SIDE_BOTTOM = 0b0010;
-    public static final int SIDE_LEFT = 0b0100;
-    public static final int SIDE_RIGHT = 0b1000;
-    public static final int SIDE_ALL = 0b1111;
+    // Source unique : CellStyle (c'est lui qui interprète ces bits).
+    public static final int SIDE_TOP = CellStyle.SIDE_TOP;
+    public static final int SIDE_BOTTOM = CellStyle.SIDE_BOTTOM;
+    public static final int SIDE_LEFT = CellStyle.SIDE_LEFT;
+    public static final int SIDE_RIGHT = CellStyle.SIDE_RIGHT;
+    public static final int SIDE_ALL = SIDE_TOP | SIDE_BOTTOM | SIDE_LEFT | SIDE_RIGHT;
     public static final int SIDE_OUTER = 0b1111;   // alias sémantique de ALL
     public static final int SIDE_INNER = 0b10000;  // bit réservé, traité dans les méthodes
 
@@ -77,16 +89,40 @@ public class HTable extends JTable {
     // COMPOSANTS INTERNES
     // =========================================================================
     /**
-     * Modèle de données — contient aussi toutes les métadonnées (spans,
-     * cellModels).
+     * Structure de la table : fusions, subdivisions et styles par cellule, en
+     * coordonnées MODÈLE. Les VALEURS des cellules restent dans le TableModel
+     * (n'importe quelle implémentation) : HTable est le seul à connaître les
+     * deux et à les garder cohérents.
      */
-    private HDefaultTableModel hModel;
+    private CellStructureModel structureModel;
 
-    private HCellSelectionModel cellSelectionModel;
+    private CellSelectionModel cellSelectionModel;
+
+    /**
+     * Si vrai (défaut), un changement de structure signalé par le TableModel
+     * (fireTableStructureChanged, nouveau modèle...) efface la structure : des
+     * fusions et styles posés sur d'anciennes colonnes n'ont plus de sens.
+     */
+    private boolean autoCreateStructureFromModel = true;
+
+    /**
+     * Vrai pendant que HTable modifie elle-même le TableModel : les événements
+     * produits alors ne doivent pas être interprétés comme des changements
+     * externes.
+     */
+    private boolean adjustingStructure = false;
+
+    private final CellStructureListener structureListener = this::structureChanged;
+
+    /**
+     * Types de colonne déclarés explicitement (indice MODÈLE), prioritaires sur
+     * l'inférence. Voir setColumnClass().
+     */
+    private final Map<Integer, Class<?>> declaredColumnClasses = new HashMap<>();
+
     /**
      * Contrôleur des événements souris/clavier.
      */
-
     private MenuHandler menuController;
 
     // =========================================================================
@@ -180,15 +216,31 @@ public class HTable extends JTable {
     // Largeur originale de la colonne voisine droite au moment du press
     private int resizeNeighborOriginalSize = -1;
 
+    private boolean sortingEnabled = true;
+
     // CONSTRUCTEURS
     public HTable() {
         this(new HDefaultTableModel());
     }
 
-    public HTable(HDefaultTableModel model) {
+    /**
+     * Table au-dessus d'un TableModel quelconque, utilisé tel quel : HTable ne
+     * lui demande rien de plus que l'interface standard (les fusions et
+     * subdivisions vivent dans le modèle de structure, pas dans les données).
+     */
+    public HTable(TableModel model) {
+        this(model, new DefaultCellStructureModel());
+    }
+
+    /**
+     * Point d'injection du modèle de structure : permet de fournir une autre
+     * implémentation (persistante, observée, de test...).
+     */
+    public HTable(TableModel model, CellStructureModel structureModel) {
         super(model);
-        this.hModel = model;
-        this.cellSelectionModel = new HCellSelectionModel(getSelectionModel(), getColumnModel().getSelectionModel());
+        this.structureModel = Objects.requireNonNull(structureModel, "structureModel");
+        this.structureModel.addCellStructureListener(structureListener);
+        this.cellSelectionModel = new CellSelectionModel(getSelectionModel(), getColumnModel().getSelectionModel());
         this.menuController = new MenuHandler(this);
         setLayout(null);
         internalEditor.setVisible(false);
@@ -235,37 +287,6 @@ public class HTable extends JTable {
     }
 
     /**
-     * Constructeur de compatibilité : accepte n'importe quel TableModel.Si ce
-     * n'est pas un HDefaultTableModel, les données sont converties.
-     *
-     * @param model
-     */
-    public HTable(TableModel model) {
-        this(model instanceof HDefaultTableModel
-                ? (HDefaultTableModel) model
-                : convertToHDefaultTableModel(model));
-    }
-
-    /**
-     * Conversion d'un TableModel standard vers HDefaultTableModel.
-     */
-    private static HDefaultTableModel convertToHDefaultTableModel(TableModel src) {
-        int rows = src.getRowCount();
-        int cols = src.getColumnCount();
-        Object[] colNames = new Object[cols];
-        for (int c = 0; c < cols; c++) {
-            colNames[c] = src.getColumnName(c);
-        }
-        Object[][] data = new Object[rows][cols];
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                data[r][c] = src.getValueAt(r, c);
-            }
-        }
-        return new HDefaultTableModel(data, colNames);
-    }
-
-    /**
      * Configuration initiale commune à tous les constructeurs.
      */
     private void initDefaults() {
@@ -285,7 +306,7 @@ public class HTable extends JTable {
             @Override
             public void columnMoved(TableColumnModelEvent e) {
                 if (e.getFromIndex() != e.getToIndex()) {
-                    HTableStructureIntegrity.enforceColumnAdjacency(HTable.this);
+                    TableStructureIntegrity.enforceColumnAdjacency(HTable.this);
                     refreshUI();
                 }
             }
@@ -324,7 +345,7 @@ public class HTable extends JTable {
         }
     }
 
-    public HCellSelectionModel getCellSelectionModel() {
+    public CellSelectionModel getCellSelectionModel() {
         return cellSelectionModel;
     }
 
@@ -447,6 +468,10 @@ public class HTable extends JTable {
     }
 
     // ── Trame de fond ────────────────────────────────────────────────────────
+    // Les indices (row, col) de toute cette API sont des indices VUE, comme
+    // partout dans JTable : ils sont convertis en indices MODÈLE avant d'écrire
+    // dans la structure, pour que le style suive sa cellule lors d'un tri ou
+    // d'un déplacement de colonne.
     /**
      * Définit la couleur de fond d'une cellule précise. Priorité maximale —
      * écrase tout le reste (style, bandes, hover, etc.).
@@ -456,12 +481,13 @@ public class HTable extends JTable {
      * @param color couleur souhaitée, ou null pour retirer la couleur custom
      */
     public void setCellBackground(int row, int col, Color color) {
-        hModel.setCellBackground(row, col, color);
+        withStyle(row, col, s -> s.setBackground(color));
         refreshUI();
     }
 
     public Color getCellBackground(int row, int col) {
-        return hModel.getCellBackground(row, col);
+        CellStyle s = getCellStyle(row, col);
+        return s == null ? null : s.getBackground();
     }
 
     /**
@@ -486,7 +512,7 @@ public class HTable extends JTable {
      */
     public void setColumnBackground(int col, Color color) {
         for (int r = 0; r < getRowCount(); r++) {
-            hModel.setCellBackground(r, col, color);
+            withStyle(r, col, s -> s.setBackground(color));
         }
         refreshUI();
     }
@@ -495,15 +521,13 @@ public class HTable extends JTable {
      * Applique une couleur de fond à la sélection courante.
      */
     public void setSelectionCellBackground(Color color) {
-        for (int row : getRowsSelected()) {
-            hModel.setCellBackground(row, getFocusedColumn(), color);
-        }
+        forEachSelectedCell((r, c) -> withStyle(r, c, s -> s.setBackground(color)));
         refreshUI();
     }
 
     // ── Couleur du texte ─────────────────────────────────────────────────────
     public void setCellForeground(int row, int col, Color color) {
-        hModel.setCellForeground(row, col, color);
+        withStyle(row, col, s -> s.setForeground(color));
         refreshUI();
     }
 
@@ -522,7 +546,7 @@ public class HTable extends JTable {
 
     public void setColumnForeground(int col, Color color) {
         for (int r = 0; r < getRowCount(); r++) {
-            hModel.setCellForeground(r, col, color);
+            withStyle(r, col, s -> s.setForeground(color));
         }
         refreshUI();
     }
@@ -546,7 +570,7 @@ public class HTable extends JTable {
      */
     public void setCellBorderSide(int row, int col, int sides,
             Color color, float thickness, int style) {
-        hModel.setCellBorderSide(row, col, sides, color, thickness, style);
+        withStyle(row, col, s -> s.setBorderSides(sides, color, thickness, style));
         refreshUI();
     }
 
@@ -561,8 +585,7 @@ public class HTable extends JTable {
      */
     public void setCellBorderAll(int row, int col,
             Color color, float thickness, int style) {
-        hModel.setCellBorderSide(row, col, SIDE_ALL, color, thickness, style);
-        refreshUI();
+        setCellBorderSide(row, col, SIDE_ALL, color, thickness, style);
     }
 
     /**
@@ -575,7 +598,7 @@ public class HTable extends JTable {
     public void setBorderAll(Color color, float thickness, int style) {
         for (int r = 0; r < getRowCount(); r++) {
             for (int c = 0; c < getColumnCount(); c++) {
-                hModel.setCellBorderSide(r, c, SIDE_ALL, color, thickness, style);
+                withStyle(r, c, s -> s.setBorderSides(SIDE_ALL, color, thickness, style));
             }
         }
         refreshUI();
@@ -593,13 +616,16 @@ public class HTable extends JTable {
     public void setBorderOuter(Color color, float thickness, int style) {
         int lastRow = getRowCount() - 1;
         int lastCol = getColumnCount() - 1;
+        if (lastRow < 0 || lastCol < 0) {
+            return;
+        }
         for (int c = 0; c <= lastCol; c++) {
-            hModel.setCellBorderSide(0, c, SIDE_TOP, color, thickness, style);
-            hModel.setCellBorderSide(lastRow, c, SIDE_BOTTOM, color, thickness, style);
+            withStyle(0, c, s -> s.setBorderSides(SIDE_TOP, color, thickness, style));
+            withStyle(lastRow, c, s -> s.setBorderSides(SIDE_BOTTOM, color, thickness, style));
         }
         for (int r = 0; r <= lastRow; r++) {
-            hModel.setCellBorderSide(r, 0, SIDE_LEFT, color, thickness, style);
-            hModel.setCellBorderSide(r, lastCol, SIDE_RIGHT, color, thickness, style);
+            withStyle(r, 0, s -> s.setBorderSides(SIDE_LEFT, color, thickness, style));
+            withStyle(r, lastCol, s -> s.setBorderSides(SIDE_RIGHT, color, thickness, style));
         }
         refreshUI();
     }
@@ -615,10 +641,10 @@ public class HTable extends JTable {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 if (c < cols - 1) {
-                    hModel.setCellBorderSide(r, c, SIDE_RIGHT, color, thickness, style);
+                    withStyle(r, c, s -> s.setBorderSides(SIDE_RIGHT, color, thickness, style));
                 }
                 if (r < rows - 1) {
-                    hModel.setCellBorderSide(r, c, SIDE_BOTTOM, color, thickness, style);
+                    withStyle(r, c, s -> s.setBorderSides(SIDE_BOTTOM, color, thickness, style));
                 }
             }
         }
@@ -629,9 +655,7 @@ public class HTable extends JTable {
      * Applique une bordure sur toute la sélection courante.
      */
     public void setSelectionBorder(int sides, Color color, float thickness, int style) {
-        for (int row : getRowsSelected()) {
-            hModel.setCellBorderSide(row, getFocusedColumn(), sides, color, thickness, style);
-        }
+        forEachSelectedCell((r, c) -> withStyle(r, c, s -> s.setBorderSides(sides, color, thickness, style)));
         refreshUI();
     }
 
@@ -639,7 +663,7 @@ public class HTable extends JTable {
      * Supprime toutes les bordures custom d'une cellule.
      */
     public void removeCellBorder(int row, int col) {
-        hModel.clearCellBorders(row, col);
+        withStyle(row, col, CellStyle::clearAllBorders);
         refreshUI();
     }
 
@@ -648,7 +672,7 @@ public class HTable extends JTable {
      */
     public void removeCellBorderSide(int row, int col, int sides) {
         // On supprime en passant thickness=0 et color=null
-        hModel.setCellBorderSide(row, col, sides, null, 0f, BORDER_SOLID);
+        withStyle(row, col, s -> s.setBorderSides(sides, null, 0f, BORDER_SOLID));
         refreshUI();
     }
 
@@ -658,7 +682,7 @@ public class HTable extends JTable {
     public void removeAllBorders() {
         for (int r = 0; r < getRowCount(); r++) {
             for (int c = 0; c < getColumnCount(); c++) {
-                hModel.clearCellBorders(r, c);
+                withStyle(r, c, CellStyle::clearAllBorders);
             }
         }
         refreshUI();
@@ -700,14 +724,17 @@ public class HTable extends JTable {
     }
 
     /**
-     * Applique une couleur de fond à toute la zone sélectionnée.Ne fait rien si
-     * aucune sélection n'est active.
-     *
-     * @param color
+     * Applique une modification de style à la cible courante : la sous-cellule
+     * focusée s'il y en a une, sinon toutes les cellules de la zone
+     * sélectionnée. Factorise ce que faisaient séparément chaque méthode
+     * apply...ToSelection (même routage, seule la modification change).
      */
-    public void applyBackgroundToSelection(Color color) {
+    private void applyToSelection(Consumer<CellStyle> change) {
         if (hasInternalFocus()) {
-            focusedInternalCell.cell.style.setBackground(color);
+            CellStyle s = styleOf(focusedInternalCell);
+            if (s != null) {
+                change.accept(s);
+            }
             repaint();
             return;
         }
@@ -717,31 +744,27 @@ public class HTable extends JTable {
         CellRange sel = getSelection();
         for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
             for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellBackground(r, c, color);
+                withStyle(r, c, change);
             }
         }
         refreshUI();
     }
 
     /**
+     * Applique une couleur de fond à toute la zone sélectionnée.Ne fait rien si
+     * aucune sélection n'est active.
+     *
+     * @param color
+     */
+    public void applyBackgroundToSelection(Color color) {
+        applyToSelection(s -> s.setBackground(color));
+    }
+
+    /**
      * Applique une couleur de texte à la sélection.
      */
     public void applyForegroundToSelection(Color color) {
-        if (hasInternalFocus()) {
-            focusedInternalCell.cell.style.setForeground(color);
-            repaint();
-            return;
-        }
-        if (!hasSelection()) {
-            return;
-        }
-        CellRange sel = getSelection();
-        for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-            for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellForeground(r, c, color);
-            }
-        }
-        refreshUI();
+        applyToSelection(s -> s.setForeground(color));
     }
 
     /**
@@ -754,125 +777,54 @@ public class HTable extends JTable {
      */
     public void applyBorderToSelection(int sides, Color color,
             float thickness, int style) {
-        if (hasInternalFocus()) {
-            HCellModel m = focusedInternalCell.cell.style;
-            if ((sides & SIDE_TOP) != 0) {
-                m.setBorderTopColor(color);
-                m.setBorderTopThickness(thickness);
-                m.setBorderTopStyle(style);
-            }
-            if ((sides & SIDE_BOTTOM) != 0) {
-                m.setBorderBottomColor(color);
-                m.setBorderBottomThickness(thickness);
-                m.setBorderBottomStyle(style);
-            }
-            if ((sides & SIDE_LEFT) != 0) {
-                m.setBorderLeftColor(color);
-                m.setBorderLeftThickness(thickness);
-                m.setBorderLeftStyle(style);
-            }
-            if ((sides & SIDE_RIGHT) != 0) {
-                m.setBorderRightColor(color);
-                m.setBorderRightThickness(thickness);
-                m.setBorderRightStyle(style);
-            }
-            repaint();
-            return;
-        }
-        if (!hasSelection()) {
-            return;
-        }
-        CellRange sel = getSelection();
-        for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-            for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellBorderSide(r, c, sides, color, thickness, style);
-            }
-        }
-        refreshUI();
+        applyToSelection(s -> s.setBorderSides(sides, color, thickness, style));
     }
 
     /**
      * Applique un alignement à la sélection.
      */
     public void applyAlignmentToSelection(int hAlign, int vAlign) {
-        if (hasInternalFocus()) {
-            focusedInternalCell.cell.style.setAlignment(hAlign, vAlign);
-            repaint();
-            return;
-        }
-        if (!hasSelection()) {
-            return;
-        }
-        CellRange sel = getSelection();
-        for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-            for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellAlignment(r, c, hAlign, vAlign);
-            }
-        }
-        refreshUI();
+        applyToSelection(s -> s.setAlignment(hAlign, vAlign));
     }
 
     /**
      * Applique une direction de texte à la sélection.
      */
     public void applyTextDirectionToSelection(int direction) {
-        if (hasInternalFocus()) {
-            focusedInternalCell.cell.style.setTextDirection(direction);
-            repaint();
-            return;
-        }
-        if (!hasSelection()) {
-            return;
-        }
-        CellRange sel = getSelection();
-        for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-            for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellTextDirection(r, c, direction);
-            }
-        }
-        refreshUI();
+        applyToSelection(s -> s.setTextDirection(direction));
     }
 
     /**
      * Applique des marges internes à la sélection.
      */
     public void applyMarginsToSelection(Insets margins) {
-        if (hasInternalFocus()) {
-            focusedInternalCell.cell.style.setMargins(margins);
-            repaint();
-            return;
-        }
-        if (!hasSelection()) {
-            return;
-        }
-        CellRange sel = getSelection();
-        for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-            for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellMargins(r, c, margins);
-            }
-        }
-        refreshUI();
+        applyToSelection(s -> s.setMargins(margins));
     }
 
     /**
      * Remet le formatage par défaut sur toute la sélection.
      */
     public void resetFormattingOnSelection() {
-        if (hasInternalFocus()) {
-            focusedInternalCell.cell.style.reset();
-            repaint();
-            return;
-        }
-        if (!hasSelection()) {
-            return;
-        }
+        applyToSelection(CellStyle::reset);
+    }
+
+    /**
+     * Vrai si la sélection courante peut être fusionnée : au moins deux
+     * cellules, contiguës dans les données (tri, colonnes déplacées), et sans
+     * chevauchement partiel d'une fusion existante.
+     */
+    public boolean canMergeSelection() {
         CellRange sel = getSelection();
-        for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-            for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.resetCellFormatting(r, c);
-            }
+        if (sel == null || sel.isSingleCell()) {
+            return false;
         }
-        refreshUI();
+        if (!TableStructureIntegrity.isMergeableViewRange(
+                this, sel.rowStart, sel.rowEnd, sel.colStart, sel.colEnd)) {
+            return false;
+        }
+        return structureModel.canMerge(
+                toModelRow(sel.rowStart), toModelColumn(sel.colStart),
+                toModelRow(sel.rowEnd), toModelColumn(sel.colEnd));
     }
 
     /**
@@ -881,20 +833,7 @@ public class HTable extends JTable {
      */
     public void mergeSelection() {
         CellRange sel = getSelection();
-        if (sel == null || sel.isSingleCell()) {
-            return;
-        }
-        if (!HTableStructureIntegrity.isMergeableViewRange(
-                this, sel.rowStart, sel.rowEnd, sel.colStart, sel.colEnd)) {
-            return;
-        }
-        int mr1 = toModelRow(sel.rowStart);
-        int mr2 = toModelRow(sel.rowEnd);
-        int mc1 = toModelColumn(sel.colStart);
-        int mc2 = toModelColumn(sel.colEnd);
-        if (!hModel.getMergeModel().canMergeSelection(
-                Math.min(mr1, mr2), Math.min(mc1, mc2),
-                Math.max(mr1, mr2), Math.max(mc1, mc2), hModel.getMergeModel())) {
+        if (sel == null || !canMergeSelection()) {
             return;
         }
         mergeCells(sel.rowStart, sel.colStart, sel.rowEnd, sel.colEnd);
@@ -909,18 +848,34 @@ public class HTable extends JTable {
         }
         CellRange sel = getSelection();
         for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
+            final Color background = (r % 2 == 0)
+                    ? style.getCellBackground()
+                    : style.getCellAlternateBackground();
             for (int c = sel.colStart; c <= sel.colEnd; c++) {
-                hModel.setCellBackground(r, c, (r % 2 == 0)
-                        ? style.getCellBackground()
-                        : style.getCellAlternateBackground());
-                hModel.setCellForeground(r, c, style.getCellForeground());
+                withStyle(r, c, s -> {
+                    s.setBackground(background);
+                    s.setForeground(style.getCellForeground());
+                });
             }
         }
         refreshUI();
     }
 
+    /**
+     * Déclare explicitement le type d'une colonne, prioritaire sur l'inférence
+     * automatique. Nécessaire pour qu'un renderer/editor personnalisé
+     * enregistré via setDefaultRenderer/setDefaultEditor reste résolu même si
+     * la colonne est vide (aucune valeur non nulle à inférer).
+     *
+     * @param columnIndex indice de colonne MODÈLE
+     * @param columnClass le type, ou null pour revenir à l'inférence
+     */
     public void setColumnClass(int columnIndex, Class<?> columnClass) {
-        hModel.setColumnClass(columnIndex, columnClass);
+        if (columnClass == null) {
+            declaredColumnClasses.remove(columnIndex);
+        } else {
+            declaredColumnClasses.put(columnIndex, columnClass);
+        }
     }
 
     // =========================================================================
@@ -990,11 +945,7 @@ public class HTable extends JTable {
      * Retourne les index des colonnes visibles (toutes, dans l'ordre).
      */
     public int[] getSelectedColumns() {
-        int[] cols = new int[getColumnCount()];
-        for (int c = 0; c < cols.length; c++) {
-            cols[c] = c;
-        }
-        return cols;
+        return cellSelectionModel.getSelectedColumns();
     }
 
     // ── Quadrillage ──────────────────────────────────────────────────────────
@@ -1029,13 +980,27 @@ public class HTable extends JTable {
         return interactionMode;
     }
 
+    // ── Subdivision interne ──────────────────────────────────────────────────
+    /**
+     * Coupe en deux la sous-cellule focusée, ou la cellule (row, col) (indices
+     * VUE) si aucune sous-cellule n'est focusée.
+     */
     public void splitCellLocally(int row, int col, int splitType, float dividerRatio) {
         if (hasInternalFocus()) {
-            hModel.splitCellDirectly(focusedInternalCell.cell, splitType, dividerRatio);
+            InternalCellHit hit = focusedInternalCell;
+            subdivideNode(hit.row, hit.col, hit.path, splitType, dividerRatio);
             refreshUI();
             return;
         }
-        hModel.splitCellLocally(toModelRow(row), toModelColumn(col), splitType, dividerRatio);;
+        int modelRow = toModelRow(row);
+        int modelCol = toModelColumn(col);
+        requireModelCell(modelRow, modelCol);
+        // Une cellule déjà subdivisée ne se re-subdivise pas depuis la cellule
+        // entière : il faut viser l'une de ses sous-cellules.
+        if (!structureModel.getCellNode(modelRow, modelCol).isLeaf()) {
+            return;
+        }
+        subdivideNode(modelRow, modelCol, SubCellPath.ROOT, splitType, dividerRatio);
         refreshUI();
     }
 
@@ -1046,8 +1011,8 @@ public class HTable extends JTable {
      * Si une sous-cellule interne est focusée, la subdivision s'applique sur
      * elle. Sinon elle s'applique sur la cellule aux coordonnées données.
      *
-     * @param row ligne de la cellule cible
-     * @param col colonne de la cellule cible
+     * @param row ligne de la cellule cible (indice VUE)
+     * @param col colonne de la cellule cible (indice VUE)
      * @param nbRows nombre de lignes dans la grille
      * @param nbCols nombre de colonnes dans la grille
      */
@@ -1056,28 +1021,68 @@ public class HTable extends JTable {
             return;
         }
         if (hasInternalFocus()) {
-            hModel.splitCellGridDirectly(
-                    focusedInternalCell.cell, nbRows, nbCols);
+            InternalCellHit hit = focusedInternalCell;
+            subdivideNodeAsGrid(hit.row, hit.col, hit.path, nbRows, nbCols);
             refreshUI();
             return;
         }
-        hModel.splitCellGrid(toModelRow(row), toModelColumn(col), nbRows, nbCols);
+        int modelRow = toModelRow(row);
+        int modelCol = toModelColumn(col);
+        requireModelCell(modelRow, modelCol);
+        subdivideNodeAsGrid(modelRow, modelCol, SubCellPath.ROOT, nbRows, nbCols);
         refreshUI();
     }
 
+    private void subdivideNode(int modelRow, int modelCol, SubCellPath path,
+            int splitType, float dividerRatio) {
+        CellNode target = nodeOf(modelRow, modelCol, path);
+        if (target == null) {
+            return;
+        }
+        // Le contenu actuel passe dans la première moitié. Pour la cellule
+        // entière, il vit dans le TableModel ; pour une sous-cellule, dans le
+        // noeud lui-même.
+        Object firstValue = null;
+        if (target.isLeaf()) {
+            firstValue = path.isRoot() ? getModel().getValueAt(modelRow, modelCol) : target.getValue();
+        }
+        structureModel.subdivide(modelRow, modelCol, path, splitType, dividerRatio, firstValue);
+        syncSubdividedValue(modelRow, modelCol);
+    }
+
+    private void subdivideNodeAsGrid(int modelRow, int modelCol, SubCellPath path,
+            int nbRows, int nbCols) {
+        CellNode target = nodeOf(modelRow, modelCol, path);
+        if (target == null) {
+            return;
+        }
+        Object value;
+        if (!target.isLeaf()) {
+            value = target.collectText();
+        } else {
+            value = path.isRoot() ? getModel().getValueAt(modelRow, modelCol) : target.getValue();
+        }
+        structureModel.subdivideGrid(modelRow, modelCol, path, nbRows, nbCols, value);
+        syncSubdividedValue(modelRow, modelCol);
+    }
+
+    /**
+     * Supprime la subdivision de la cellule (row, col) (indices VUE) : elle
+     * redevient une cellule simple dont le texte est la concaténation des
+     * sous-cellules.
+     */
     public void removeInternalGrid(int row, int col) {
-        hModel.removeInternalGrid(toModelRow(row), toModelColumn(col));;
+        int modelRow = toModelRow(row);
+        int modelCol = toModelColumn(col);
+        requireModelCell(modelRow, modelCol);
+        removeSubdivision(modelRow, modelCol, SubCellPath.ROOT);
         refreshUI();
     }
 
     public void removeInternalGridFromFocused() {
         if (hasInternalFocus()) {
-
-            hModel.removeInternalGridFromCell(
-                    focusedInternalCell.cell,
-                    getFocusedRow(),
-                    getFocusedColumn()
-            );
+            InternalCellHit hit = focusedInternalCell;
+            removeSubdivision(hit.row, hit.col, hit.path);
             setFocusedInternalCell(null);
             setSelectedInternalCell(null);
             refreshUI();
@@ -1088,9 +1093,45 @@ public class HTable extends JTable {
         int row = getFocusedRow();
         int col = getFocusedColumn();
         if (row >= 0 && col >= 0) {
-            hModel.removeInternalGrid(toModelRow(row), toModelColumn(col));
-            refreshUI();
+            removeInternalGrid(row, col);
         }
+    }
+
+    /**
+     * Replie la subdivision du noeud désigné (coordonnées MODÈLE). Sans effet
+     * si le noeud n'est pas subdivisé. Point d'entrée unique de ce repli pour
+     * les gestionnaires (gomme, menu) comme pour HTableStructureIntegrity.
+     */
+    public void removeSubdivision(int modelRow, int modelCol, SubCellPath path) {
+        CellNode node = nodeOf(modelRow, modelCol, path);
+        if (node == null || node.isLeaf()) {
+            return;
+        }
+        Object folded = structureModel.removeSubdivision(modelRow, modelCol, path);
+        if (path.isRoot()) {
+            // Le texte de la cellule entière appartient au TableModel
+            writeTextIfDifferent(modelRow, modelCol, folded);
+            refreshMergeOriginalText(modelRow, modelCol, folded);
+        } else {
+            syncSubdividedValue(modelRow, modelCol);
+        }
+    }
+
+    /**
+     * Si (row, col) est l'origine d'une fusion, la valeur « avant fusion » de
+     * l'origine devient le texte replié : un défusionnement ultérieur doit
+     * rendre le texte que l'utilisateur voit, pas celui d'avant la subdivision.
+     */
+    private void refreshMergeOriginalText(int modelRow, int modelCol, Object text) {
+        MergeRegion region = structureModel.getMergeAt(modelRow, modelCol);
+        if (region == null || region.originRow != modelRow || region.originCol != modelCol) {
+            return;
+        }
+        Object[][] values = region.getOriginalValues();
+        values[0][0] = text;
+        structureModel.unmerge(region.originRow, region.originCol);
+        structureModel.merge(region.originRow, region.originCol,
+                region.lastRow(), region.lastCol(), values);
     }
 
     public void setFocusedInternalCell(InternalCellHit hit) {
@@ -1127,19 +1168,25 @@ public class HTable extends JTable {
         return editingInternalCell;
     }
 
+    /**
+     * Ouvre l'éditeur flottant sur une feuille (sous-cellule, ou cellule non
+     * subdivisée).
+     */
     public void startInternalEdit(InternalCellHit hit) {
-        System.out.println("start internal");
-        if (hit == null || hit.cell == null) {
+        if (hit == null) {
+            return;
+        }
+        CellNode node = nodeOf(hit);
+        Rectangle r = TableGeometry.boundsOf(this, hit);
+        if (node == null || r == null || !node.isLeaf()) {
             return;
         }
 
         editingInternalCell = hit;
 
-        Rectangle r = hit.bounds;
-
         internalEditor.setBounds(r.x + 1, r.y + 1, r.width - 2, r.height - 2);
 
-        Object value = hit.cell.value;
+        Object value = getInternalCellValue(hit);
 
         internalEditor.setText(value != null ? value.toString() : "");
 
@@ -1150,25 +1197,105 @@ public class HTable extends JTable {
         internalEditor.selectAll();
     }
 
-    //on passe la valeur du textFiled à la cellule 
+    /**
+     * Valide l'éditeur flottant : le texte saisi passe à la sous-cellule (ou à
+     * la cellule du TableModel si elle n'est pas subdivisée).
+     */
     public void stopInternalEdit() {
+        // On libère l'état AVANT de masquer l'éditeur : masquer déclenche un
+        // focusLost, qui rappelle cette méthode.
+        InternalCellHit hit = editingInternalCell;
+        editingInternalCell = null;
 
-        if (editingInternalCell != null) {
-
-            editingInternalCell.cell.value
-                    = internalEditor.getText();
-            System.out.println("Texte " + internalEditor.getText());
+        if (hit != null) {
+            setInternalCellValue(hit, internalEditor.getText());
         }
 
         internalEditor.setVisible(false);
-
-        editingInternalCell = null;
 
         repaint();
 
     }
 
+    /**
+     * Valeur de la feuille désignée par hit : celle du TableModel pour une
+     * cellule non subdivisée, celle du noeud pour une sous-cellule. null si hit
+     * ne désigne plus une feuille.
+     */
+    public Object getInternalCellValue(InternalCellHit hit) {
+        CellNode node = nodeOf(hit);
+        if (node == null || !node.isLeaf()) {
+            return null;
+        }
+        return hit.isSubCell() ? node.getValue() : getModel().getValueAt(hit.row, hit.col);
+    }
+
+    /**
+     * Écrit la valeur de la feuille désignée par hit (TableModel pour une
+     * cellule non subdivisée, noeud pour une sous-cellule) et garde le
+     * TableModel cohérent. Sans effet si hit ne désigne plus une feuille.
+     */
+    public void setInternalCellValue(InternalCellHit hit, Object value) {
+        CellNode node = nodeOf(hit);
+        if (node == null || !node.isLeaf()) {
+            return;
+        }
+        if (hit.isSubCell()) {
+            structureModel.setSubCellValue(hit.row, hit.col, hit.path, value);
+            syncSubdividedValue(hit.row, hit.col);
+        } else {
+            getModel().setValueAt(value, hit.row, hit.col);
+        }
+        repaint();
+    }
+
+    /**
+     * Noeud désigné par (modelRow, modelCol, path), ou null si le chemin ne
+     * correspond plus à la structure.
+     */
+    private CellNode nodeOf(int modelRow, int modelCol, SubCellPath path) {
+        return path.resolve(structureModel.getCellNode(modelRow, modelCol));
+    }
+
+    private CellNode nodeOf(InternalCellHit hit) {
+        return hit == null ? null : nodeOf(hit.row, hit.col, hit.path);
+    }
+
+    /**
+     * Garde le TableModel cohérent avec une cellule subdivisée : il contient la
+     * concaténation des textes de ses sous-cellules (c'est ce que voient le
+     * tri, la copie, les formules). N'écrit que si le texte diffère, pour ne
+     * pas écraser inutilement une valeur typée (Integer, Date...).
+     */
+    private void syncSubdividedValue(int modelRow, int modelCol) {
+        CellNode root = structureModel.getCellNode(modelRow, modelCol);
+        if (root.isLeaf()) {
+            return;
+        }
+        writeTextIfDifferent(modelRow, modelCol, root.collectText());
+    }
+
+    private void writeTextIfDifferent(int modelRow, int modelCol, Object text) {
+        Object current = getModel().getValueAt(modelRow, modelCol);
+        String currentText = current == null ? null : current.toString().trim();
+        if (currentText != null && currentText.isEmpty()) {
+            currentText = null;
+        }
+        String newText = text == null ? null : text.toString().trim();
+        if (newText != null && newText.isEmpty()) {
+            newText = null;
+        }
+        if (!Objects.equals(currentText, newText)) {
+            getModel().setValueAt(text, modelRow, modelCol);
+        }
+    }
+
     // ── Lignes et colonnes ───────────────────────────────────────────────────
+    // Les indices de cette API sont des indices VUE. HTable les convertit en
+    // indices MODÈLE, appelle le point d'extension protégé correspondant
+    // (insertRowInModel, removeColumnFromModel...) puis laisse la structure
+    // suivre : les lignes via tableChanged (qui voit aussi les modifications
+    // faites directement sur le TableModel), les colonnes ici.
     /**
      * Insère une ligne vide au-dessus de la ligne donnée.
      */
@@ -1176,7 +1303,7 @@ public class HTable extends JTable {
         if (row < 0 || row > getRowCount()) {
             return;
         }
-        hModel.insertEmptyRow(row);
+        insertRowInModel(viewToModelRowInsertIndex(row));
         refreshUI();
     }
 
@@ -1200,8 +1327,10 @@ public class HTable extends JTable {
         }
         String name = (nameColumn == null) ? "Colonne " + (col + 1) : nameColumn + " " + (col + 1);
         int oldColCount = getColumnCount();
-        int widthSource = (col < oldColCount) ? col : oldColCount - 1;
-        insertColumnWithLayout(col, name, widthSource);
+        int widthSource = (col < oldColCount)
+                ? toModelColumn(col)
+                : (oldColCount > 0 ? toModelColumn(oldColCount - 1) : -1);
+        insertColumnWithLayout(viewToModelColumnInsertIndex(col), name, widthSource);
     }
 
     public void insertColumnRight(int col) {
@@ -1219,22 +1348,23 @@ public class HTable extends JTable {
         String name = (nameColumn == null)
                 ? "Colonne " + (insertAt + 1)
                 : nameColumn + " " + (insertAt + 1);
-        insertColumnWithLayout(insertAt, name, col);
+        insertColumnWithLayout(viewToModelColumnInsertIndex(insertAt), name, toModelColumn(col));
     }
 
     /**
-     * Insère une colonne à insertAt, en préservant les largeurs des colonnes
-     * existantes et les hauteurs de lignes. widthSourceCol désigne, dans
-     * l'ANCIENNE numérotation (avant insertion), la colonne dont la largeur
+     * Insère une colonne à l'indice MODÈLE insertAt, en préservant les largeurs
+     * des colonnes existantes et les hauteurs de lignes. widthSourceCol
+     * désigne, dans l'ANCIENNE numérotation MODÈLE, la colonne dont la largeur
      * doit être reprise pour la nouvelle colonne. -1 ou hors bornes → largeur
      * de la dernière colonne existante, ou 100 si le tableau n'a aucune
      * colonne.
      */
     private void insertColumnWithLayout(int insertAt, String columnName, int widthSourceCol) {
-        int oldColCount = getColumnCount();
+        int oldColCount = getModel().getColumnCount();
         int[] savedWidths = new int[oldColCount];
-        for (int c = 0; c < oldColCount; c++) {
-            savedWidths[c] = getColumnModel().getColumn(c).getWidth();
+        for (int m = 0; m < oldColCount; m++) {
+            int v = convertColumnIndexToView(m);
+            savedWidths[m] = v >= 0 ? getColumnModel().getColumn(v).getWidth() : 100;
         }
 
         int rowCount = getRowCount();
@@ -1243,7 +1373,14 @@ public class HTable extends JTable {
             savedHeights[r] = getRowHeight(r);
         }
 
-        hModel.insertColumn(insertAt, columnName);
+        adjustingStructure = true;
+        try {
+            insertColumnInModel(insertAt, columnName);
+            structureModel.columnsInserted(insertAt, insertAt);
+            shiftDeclaredColumnClasses(insertAt, 1);
+        } finally {
+            adjustingStructure = false;
+        }
 
         int newColCount = getColumnCount();
         int defaultNewWidth;
@@ -1280,26 +1417,27 @@ public class HTable extends JTable {
         if (row < 0 || row >= getRowCount()) {
             return;
         }
-        hModel.removeRow(row);
+        removeRowFromModel(toModelRow(row));
         refreshUI();
     }
 
     /**
-     * Supprime plusieurs lignes en une fois. On supprime de la fin vers le
+     * Supprime plusieurs lignes en une fois. Les indices VUE sont convertis en
+     * indices MODÈLE AVANT toute suppression, puis supprimés de la fin vers le
      * début pour éviter le décalage d'index.
      *
      * @param rows tableau des index à supprimer (non trié, c'est géré ici)
      */
     public void deleteRows(int[] rows) {
-        List<Integer> sorted = new ArrayList<>();
+        Set<Integer> modelRows = new TreeSet<>(Collections.reverseOrder());
         for (int r : rows) {
-            sorted.add(r);
-        }
-        sorted.sort(Collections.reverseOrder());  // suppression de bas en haut
-        for (int r : sorted) {
-            if (r >= 0 && r < getRowCount()) {
-                hModel.removeRow(r);
+            int modelRow = toModelRow(r);
+            if (modelRow >= 0) {
+                modelRows.add(modelRow);
             }
+        }
+        for (int modelRow : modelRows) {
+            removeRowFromModel(modelRow);
         }
         refreshUI();
     }
@@ -1319,7 +1457,7 @@ public class HTable extends JTable {
         if (col < 0 || col >= getColumnCount()) {
             return;
         }
-        hModel.removeColumn(col);
+        removeModelColumn(toModelColumn(col));
         refreshUI();
     }
 
@@ -1328,33 +1466,150 @@ public class HTable extends JTable {
      * de droite à gauche.
      */
     public void deleteColumns(int[] cols) {
-        List<Integer> sorted = new ArrayList<>();
+        Set<Integer> modelCols = new TreeSet<>(Collections.reverseOrder());
         for (int c : cols) {
-            sorted.add(c);
-        }
-        sorted.sort(Collections.reverseOrder());
-        for (int c : sorted) {
-            if (c >= 0 && c < getColumnCount()) {
-                hModel.removeColumn(c);
+            int modelCol = toModelColumn(c);
+            if (modelCol >= 0) {
+                modelCols.add(modelCol);
             }
+        }
+        for (int modelCol : modelCols) {
+            removeModelColumn(modelCol);
         }
         refreshUI();
     }
 
+    private void removeModelColumn(int modelCol) {
+        adjustingStructure = true;
+        try {
+            removeColumnFromModel(modelCol);
+            List<MergeRegion> dissolved = structureModel.columnsRemoved(modelCol, modelCol);
+            restoreSurvivingValues(dissolved, false, modelCol, modelCol);
+            declaredColumnClasses.remove(modelCol);
+            shiftDeclaredColumnClasses(modelCol + 1, -1);
+        } finally {
+            adjustingStructure = false;
+        }
+    }
+
     /**
-     * Vide le tableau (supprime toutes les lignes, conserve les colonnes).
+     * Vide le tableau (supprime toutes les lignes, conserve les colonnes) ainsi
+     * que toute la structure (fusions, subdivisions, styles).
      */
     public void clearTable() {
-        hModel.clear();
+        for (int r = getModel().getRowCount() - 1; r >= 0; r--) {
+            removeRowFromModel(r);
+        }
+        structureModel.clear();
         refreshUI();
+    }
+
+    // ── Points d'extension : modification structurelle du TableModel ─────────
+    // Le TableModel de Swing n'a pas d'API standard pour ajouter/supprimer une
+    // ligne ou une colonne. Ces méthodes savent le faire pour DefaultTableModel
+    // (et ses sous-classes). Pour un autre modèle, les surcharger.
+    /**
+     * Insère une ligne vide à l'indice MODÈLE donné.
+     */
+    protected void insertRowInModel(int modelIndex) {
+        if (getModel() instanceof DefaultTableModel dm) {
+            dm.insertRow(modelIndex, new Object[dm.getColumnCount()]);
+            return;
+        }
+        throw new UnsupportedOperationException("Le TableModel " + getModel().getClass().getName()
+                + " n'est pas un DefaultTableModel : surchargez insertRowInModel().");
+    }
+
+    /**
+     * Supprime la ligne d'indice MODÈLE donné.
+     */
+    protected void removeRowFromModel(int modelIndex) {
+        if (getModel() instanceof DefaultTableModel dm) {
+            dm.removeRow(modelIndex);
+            return;
+        }
+        throw new UnsupportedOperationException("Le TableModel " + getModel().getClass().getName()
+                + " n'est pas un DefaultTableModel : surchargez removeRowFromModel().");
+    }
+
+    /**
+     * Insère une colonne vide à l'indice MODÈLE donné. Doit signaler le
+     * changement par un événement de structure (comme DefaultTableModel).
+     */
+    @SuppressWarnings("unchecked")
+    protected void insertColumnInModel(int modelIndex, String name) {
+        if (getModel() instanceof DefaultTableModel dm) {
+            Vector<Object> identifiers = new Vector<>();
+            for (int c = 0; c < dm.getColumnCount(); c++) {
+                identifiers.add(dm.getColumnName(c));
+            }
+            identifiers.add(modelIndex, name);
+            for (Object row : dm.getDataVector()) {
+                ((Vector<Object>) row).add(modelIndex, null);
+            }
+            dm.setColumnIdentifiers(identifiers);
+            return;
+        }
+        throw new UnsupportedOperationException("Le TableModel " + getModel().getClass().getName()
+                + " n'est pas un DefaultTableModel : surchargez insertColumnInModel().");
+    }
+
+    /**
+     * Supprime la colonne d'indice MODÈLE donné. Doit signaler le changement
+     * par un événement de structure (comme DefaultTableModel).
+     */
+    @SuppressWarnings("unchecked")
+    protected void removeColumnFromModel(int modelIndex) {
+        if (getModel() instanceof DefaultTableModel dm) {
+            Vector<Object> identifiers = new Vector<>();
+            for (int c = 0; c < dm.getColumnCount(); c++) {
+                if (c != modelIndex) {
+                    identifiers.add(dm.getColumnName(c));
+                }
+            }
+            for (Object row : dm.getDataVector()) {
+                ((Vector<Object>) row).remove(modelIndex);
+            }
+            dm.setColumnIdentifiers(identifiers);
+            return;
+        }
+        throw new UnsupportedOperationException("Le TableModel " + getModel().getClass().getName()
+                + " n'est pas un DefaultTableModel : surchargez removeColumnFromModel().");
+    }
+
+    private int viewToModelRowInsertIndex(int viewRow) {
+        return viewRow >= getRowCount() ? getModel().getRowCount() : toModelRow(viewRow);
+    }
+
+    private int viewToModelColumnInsertIndex(int viewCol) {
+        return viewCol >= getColumnCount() ? getModel().getColumnCount() : toModelColumn(viewCol);
+    }
+
+    /**
+     * Les types de colonne déclarés sont indexés par colonne MODÈLE : ils
+     * suivent leur colonne quand on en insère ou supprime une avant eux.
+     */
+    private void shiftDeclaredColumnClasses(int fromModelColumn, int delta) {
+        Map<Integer, Class<?>> shifted = new HashMap<>();
+        for (Map.Entry<Integer, Class<?>> e : declaredColumnClasses.entrySet()) {
+            int key = e.getKey();
+            if (key >= fromModelColumn) {
+                key += delta;
+            }
+            shifted.put(key, e.getValue());
+        }
+        declaredColumnClasses.clear();
+        declaredColumnClasses.putAll(shifted);
     }
 
     // ── Fusion ───────────────────────────────────────────────────────────────
     /**
-     * Fusionne les cellules dans la zone (r1,c1) → (r2,c2). La cellule (r1,c1)
-     * devient la cellule principale et concatenne son contenu à celui des
-     * autres cellules. Les autres cellules de la zone sont vidées et marquées
-     * comme absorbées.
+     * Fusionne les cellules dans la zone (r1,c1) → (r2,c2) (indices VUE). La
+     * cellule en haut à gauche devient la cellule principale et concatène son
+     * contenu à celui des autres cellules. Les autres cellules de la zone sont
+     * vidées et marquées comme absorbées. Sans effet si la zone n'est pas
+     * contiguë dans les données (tri, colonnes déplacées) ou chevauche
+     * partiellement une fusion existante.
      *
      * @param r1 ligne du coin supérieur gauche
      * @param c1 colonne du coin supérieur gauche
@@ -1362,17 +1617,167 @@ public class HTable extends JTable {
      * @param c2 colonne du coin inférieur droit
      */
     public void mergeCells(int r1, int c1, int r2, int c2) {
-        hModel.mergeCells(toModelRow(r1), toModelColumn(c1), toModelRow(r2), toModelColumn(c2));
+        int rowStart = Math.min(r1, r2), rowEnd = Math.max(r1, r2);
+        int colStart = Math.min(c1, c2), colEnd = Math.max(c1, c2);
+        if (rowStart < 0 || colStart < 0 || rowEnd >= getRowCount() || colEnd >= getColumnCount()) {
+            return;
+        }
+        if (!TableStructureIntegrity.isMergeableViewRange(this, rowStart, rowEnd, colStart, colEnd)) {
+            return;
+        }
+        if (mergeModelRange(toModelRow(r1), toModelColumn(c1), toModelRow(r2), toModelColumn(c2))) {
+            refreshUI();
+        }
+    }
+
+    /**
+     * Fusion en coordonnées MODÈLE. Les valeurs « avant fusion » sont confiées
+     * à la structure (qui les rend au défusionnement) ; le TableModel reçoit le
+     * texte concaténé dans la cellule principale, null ailleurs.
+     */
+    private boolean mergeModelRange(int mr1, int mc1, int mr2, int mc2) {
+        int rowStart = Math.min(mr1, mr2), rowEnd = Math.max(mr1, mr2);
+        int colStart = Math.min(mc1, mc2), colEnd = Math.max(mc1, mc2);
+        TableModel m = getModel();
+        if (rowStart < 0 || colStart < 0 || rowEnd >= m.getRowCount() || colEnd >= m.getColumnCount()) {
+            return false;
+        }
+        if (rowStart == rowEnd && colStart == colEnd) {
+            return false;
+        }
+        if (!structureModel.canMerge(rowStart, colStart, rowEnd, colEnd)) {
+            return false;
+        }
+
+        adjustingStructure = true;
+        try {
+            // Les fusions entièrement contenues dans la zone vont être
+            // dissoutes : on leur fait d'abord rendre leurs valeurs d'origine.
+            for (MergeRegion inner : structureModel.getMergeRegions()) {
+                if (inner.isInside(rowStart, colStart, rowEnd, colEnd)) {
+                    restoreRegionValues(inner);
+                }
+            }
+
+            int rSpan = rowEnd - rowStart + 1;
+            int cSpan = colEnd - colStart + 1;
+            Object[][] original = new Object[rSpan][cSpan];
+            StringBuilder merged = new StringBuilder();
+            for (int r = rowStart; r <= rowEnd; r++) {
+                for (int c = colStart; c <= colEnd; c++) {
+                    Object val = m.getValueAt(r, c);
+                    original[r - rowStart][c - colStart] = val;
+                    if (val != null && !val.toString().trim().isEmpty()) {
+                        if (merged.length() > 0) {
+                            merged.append(" ");
+                        }
+                        merged.append(val.toString().trim());
+                    }
+                }
+            }
+
+            structureModel.merge(rowStart, colStart, rowEnd, colEnd, original);
+
+            m.setValueAt(merged.length() > 0 ? merged.toString() : null, rowStart, colStart);
+            for (int r = rowStart; r <= rowEnd; r++) {
+                for (int c = colStart; c <= colEnd; c++) {
+                    if (r != rowStart || c != colStart) {
+                        m.setValueAt(null, r, c);
+                    }
+                }
+            }
+        } finally {
+            adjustingStructure = false;
+        }
+        return true;
+    }
+
+    /**
+     * Défusionne la cellule à la position donnée (indices VUE). Si la cellule
+     * est absorbée, remonte à la cellule principale et la libère.
+     */
+    public void unmergeCell(int row, int col) {
+        int modelRow = toModelRow(row);
+        int modelCol = toModelColumn(col);
+        if (modelRow < 0 || modelCol < 0) {
+            return;
+        }
+        MergeRegion region = structureModel.getMergeAt(modelRow, modelCol);
+        if (region != null) {
+            unmergeRegion(region);
+        }
         refreshUI();
     }
 
     /**
-     * Défusionne la cellule à la position donnée. Si la cellule est absorbée,
-     * remonte à la cellule principale et la libère.
+     * Défait une fusion ET restitue au TableModel les valeurs qu'avaient les
+     * cellules avant la fusion. Seul pont entre le modèle de structure et le
+     * modèle de données pour cette opération : à utiliser plutôt que
+     * getStructureModel().unmerge(...), qui laisserait les cellules libérées
+     * vides.
      */
-    public void unmergeCell(int row, int col) {
-        hModel.unmergeCell(toModelRow(row), toModelColumn(col));
-        refreshUI();
+    public void unmergeRegion(MergeRegion region) {
+        MergeRegion removed = structureModel.unmerge(region.originRow, region.originCol);
+        if (removed == null) {
+            return;
+        }
+        adjustingStructure = true;
+        try {
+            restoreRegionValues(removed);
+        } finally {
+            adjustingStructure = false;
+        }
+    }
+
+    private void restoreRegionValues(MergeRegion region) {
+        Object[][] values = region.getOriginalValues();
+        TableModel m = getModel();
+        for (int dr = 0; dr < region.rowSpan; dr++) {
+            for (int dc = 0; dc < region.colSpan; dc++) {
+                int r = region.originRow + dr;
+                int c = region.originCol + dc;
+                if (r < m.getRowCount() && c < m.getColumnCount()) {
+                    m.setValueAt(values[dr][dc], r, c);
+                }
+            }
+        }
+    }
+
+    /**
+     * Après la suppression des lignes (ou colonnes) first..last, rend leurs
+     * valeurs aux cellules survivantes des fusions dissoutes par cette
+     * suppression, à leur nouvelle position.
+     */
+    private void restoreSurvivingValues(List<MergeRegion> dissolved, boolean rows, int first, int last) {
+        int removed = last - first + 1;
+        TableModel m = getModel();
+        for (MergeRegion region : dissolved) {
+            Object[][] values = region.getOriginalValues();
+            for (int dr = 0; dr < region.rowSpan; dr++) {
+                for (int dc = 0; dc < region.colSpan; dc++) {
+                    int r = region.originRow + dr;
+                    int c = region.originCol + dc;
+                    if (rows) {
+                        if (r >= first && r <= last) {
+                            continue;
+                        }
+                        r = shiftIndex(r, last, removed);
+                    } else {
+                        if (c >= first && c <= last) {
+                            continue;
+                        }
+                        c = shiftIndex(c, last, removed);
+                    }
+                    if (r < m.getRowCount() && c < m.getColumnCount()) {
+                        m.setValueAt(values[dr][dc], r, c);
+                    }
+                }
+            }
+        }
+    }
+
+    private static int shiftIndex(int index, int lastRemoved, int removedCount) {
+        return index > lastRemoved ? index - removedCount : index;
     }
 
     /**
@@ -1381,29 +1786,53 @@ public class HTable extends JTable {
      * blocs de 2×2.
      *
      *
-     * @param row ligne de la cellule à fractionner
-     * @param col colonne de la cellule à fractionner
+     * @param row ligne de la cellule à fractionner (indice VUE)
+     * @param col colonne de la cellule à fractionner (indice VUE)
      * @param targetRows nombre de lignes dans le fractionnement
      * @param targetCols nombre de colonnes dans le fractionnement
-     * @return
+     * @return false si la cellule n'est pas fusionnée ou si la fusion n'est pas
+     * divisible exactement
      */
     public boolean splitCell(int row, int col, int targetRows, int targetCols) {
-        boolean success = hModel.splitCell(toModelRow(row), toModelColumn(col), targetRows, targetCols);
-        if (!success) {
-            // Le span n'est pas divisible exactement — on informe l'appelant
-            // L'utilisateur peut brancher un HOptionPane sur ce retour
-            System.out.println("splitCell : division impossible sans perte "
-                    + "— vérifiez que le span est divisible par ("
-                    + targetRows + ", " + targetCols + ")");
-        }
+        boolean success = splitModelCell(toModelRow(row), toModelColumn(col), targetRows, targetCols);
         refreshUI();
         return success;
+    }
+
+    private boolean splitModelCell(int modelRow, int modelCol, int targetRows, int targetCols) {
+        if (modelRow < 0 || modelCol < 0 || targetRows < 1 || targetCols < 1) {
+            return false;
+        }
+        MergeRegion region = structureModel.getMergeAt(modelRow, modelCol);
+        if (region == null) {
+            return false;
+        }
+        if (region.rowSpan % targetRows != 0 || region.colSpan % targetCols != 0) {
+            return false;
+        }
+
+        int r = region.originRow, c = region.originCol;
+        int blockR = region.rowSpan / targetRows;
+        int blockC = region.colSpan / targetCols;
+
+        unmergeRegion(region);
+
+        if (blockR > 1 || blockC > 1) {
+            for (int dr = 0; dr < targetRows; dr++) {
+                for (int dc = 0; dc < targetCols; dc++) {
+                    int startR = r + dr * blockR;
+                    int startC = c + dc * blockC;
+                    mergeModelRange(startR, startC, startR + blockR - 1, startC + blockC - 1);
+                }
+            }
+        }
+        return true;
     }
 
     /**
      * Coupe le tableau en deux à partir de la ligne donnée.Les lignes [0,
      * atRow-1] restent dans ce tableau. Les lignes [atRow, fin] sont retournées
-     * dans un nouveau HSuperTable indépendant.
+     * dans un nouveau HTable indépendant.
      *
      * @param atRow index de la première ligne du second tableau
      * @return un nouveau HTable contenant les lignes détachées
@@ -1424,13 +1853,13 @@ public class HTable extends JTable {
         Object[][] newData = new Object[newRowCount][cols];
         for (int r = 0; r < newRowCount; r++) {
             for (int c = 0; c < cols; c++) {
-                newData[r][c] = hModel.getValueAt(atRow + r, c);
+                newData[r][c] = getModel().getValueAt(atRow + r, c);
             }
         }
 
         // Supprimer ces lignes du tableau courant (de bas en haut)
-        for (int r = getRowCount() - 1; r >= atRow; r--) {
-            hModel.removeRow(r);
+        for (int r = getModel().getRowCount() - 1; r >= atRow; r--) {
+            removeRowFromModel(r);
         }
 
         HTable newTable = new HTable(newData, colNames);
@@ -1560,7 +1989,7 @@ public class HTable extends JTable {
      * @param vAlign SwingConstants.TOP / CENTER / BOTTOM
      */
     public void setCellAlignment(int row, int col, int hAlign, int vAlign) {
-        hModel.setCellAlignment(row, col, hAlign, vAlign);
+        withStyle(row, col, s -> s.setAlignment(hAlign, vAlign));
         refreshUI();
     }
 
@@ -1569,7 +1998,7 @@ public class HTable extends JTable {
      */
     public void setRowAlignment(int row, int hAlign, int vAlign) {
         for (int c = 0; c < getColumnCount(); c++) {
-            hModel.setCellAlignment(row, c, hAlign, vAlign);
+            withStyle(row, c, s -> s.setAlignment(hAlign, vAlign));
         }
         refreshUI();
     }
@@ -1579,7 +2008,7 @@ public class HTable extends JTable {
      */
     public void setColumnAlignment(int col, int hAlign, int vAlign) {
         for (int r = 0; r < getRowCount(); r++) {
-            hModel.setCellAlignment(r, col, hAlign, vAlign);
+            withStyle(r, col, s -> s.setAlignment(hAlign, vAlign));
         }
         refreshUI();
     }
@@ -1588,11 +2017,7 @@ public class HTable extends JTable {
      * Aligne toutes les cellules de la sélection courante.
      */
     public void setSelectionAlignment(int hAlign, int vAlign) {
-        for (int row : getRowsSelected()) {
-            for (int c = 0; c < getColumnCount(); c++) {
-                hModel.setCellAlignment(row, c, hAlign, vAlign);
-            }
-        }
+        forEachSelectedCell((r, c) -> withStyle(r, c, s -> s.setAlignment(hAlign, vAlign)));
         refreshUI();
     }
 
@@ -1602,7 +2027,7 @@ public class HTable extends JTable {
     public void setTableAlignment(int hAlign, int vAlign) {
         for (int r = 0; r < getRowCount(); r++) {
             for (int c = 0; c < getColumnCount(); c++) {
-                hModel.setCellAlignment(r, c, hAlign, vAlign);
+                withStyle(r, c, s -> s.setAlignment(hAlign, vAlign));
             }
         }
         refreshUI();
@@ -1618,7 +2043,7 @@ public class HTable extends JTable {
      * TEXT_VERTICAL_DOWN
      */
     public void setCellTextDirection(int row, int col, int direction) {
-        hModel.setCellTextDirection(row, col, direction);
+        withStyle(row, col, s -> s.setTextDirection(direction));
         refreshUI();
     }
 
@@ -1627,7 +2052,7 @@ public class HTable extends JTable {
      */
     public void setColumnTextDirection(int col, int direction) {
         for (int r = 0; r < getRowCount(); r++) {
-            hModel.setCellTextDirection(r, col, direction);
+            withStyle(r, col, s -> s.setTextDirection(direction));
         }
         refreshUI();
     }
@@ -1637,7 +2062,7 @@ public class HTable extends JTable {
      */
     public void setRowTextDirection(int row, int direction) {
         for (int c = 0; c < getColumnCount(); c++) {
-            hModel.setCellTextDirection(row, c, direction);
+            withStyle(row, c, s -> s.setTextDirection(direction));
         }
         refreshUI();
     }
@@ -1652,7 +2077,7 @@ public class HTable extends JTable {
      * @param margins Insets(top, left, bottom, right) en pixels
      */
     public void setCellMargins(int row, int col, Insets margins) {
-        hModel.setCellMargins(row, col, margins);
+        withStyle(row, col, s -> s.setMargins(margins));
         refreshUI();
     }
 
@@ -1683,7 +2108,7 @@ public class HTable extends JTable {
         if (col < 0 || col >= getColumnCount()) {
             return;
         }
-        TableRowSorter<HDefaultTableModel> sorter = newNonClickableSorter();
+        TableRowSorter<TableModel> sorter = newNonClickableSorter(getModel());
         setRowSorter(sorter);
         List<RowSorter.SortKey> keys = new ArrayList<>();
         keys.add(new RowSorter.SortKey(col, order));
@@ -1702,7 +2127,7 @@ public class HTable extends JTable {
         if (cols == null || orders == null || cols.length != orders.length) {
             return;
         }
-        TableRowSorter<HDefaultTableModel> sorter = newNonClickableSorter();
+        TableRowSorter<TableModel> sorter = newNonClickableSorter(getModel());
         setRowSorter(sorter);
         List<RowSorter.SortKey> keys = new ArrayList<>();
         for (int i = 0; i < cols.length; i++) {
@@ -1765,7 +2190,7 @@ public class HTable extends JTable {
                 if (c > 0) {
                     sb.append(delimiter);
                 }
-                Object val = hModel.getValueAt(r, c);
+                Object val = getValueAt(r, c);
                 sb.append(val != null ? val.toString() : "");
             }
             sb.append("\n");
@@ -1774,10 +2199,13 @@ public class HTable extends JTable {
     }
 
     // ── Formules ─────────────────────────────────────────────────────────────
+    // Les formules portent sur les DONNÉES : (row, col) y sont des indices
+    // MODÈLE, comme la notation A1 qu'elles utilisent. Un tri de l'affichage ne
+    // change donc ni leur cible ni leur résultat.
     /**
      * Insère une formule dans une cellule. La formule est évaluée immédiatement
      * et le résultat est affiché. La formule brute est stockée dans le
-     * HTableCellModel pour permettre la recalculation ultérieure.
+     * CellStyle de la cellule pour permettre la recalculation ultérieure.
      *
      * Formules supportées :
      * <pre>
@@ -1792,18 +2220,17 @@ public class HTable extends JTable {
      * La notation de colonne est alphabétique (A=0, B=1, ...) et les lignes
      * sont 1-indexées (comme dans Excel/Word).
      *
-     * @param row ligne de la cellule cible (0-indexée)
-     * @param col colonne de la cellule cible (0-indexée)
+     * @param row ligne de la cellule cible (0-indexée, MODÈLE)
+     * @param col colonne de la cellule cible (0-indexée, MODÈLE)
      * @param formula la formule, doit commencer par "="
      */
     public void setCellFormula(int row, int col, String formula) {
-        if (formula == null || !formula.startsWith("=")) {
+        if (formula == null || !formula.startsWith("=") || !isModelCell(row, col)) {
             return;
         }
-        hModel.getCellModel(row, col).setFormula(formula);
-        // Nouvelle signature avec coordonnées
-        Object result = HTableFormula.evaluate(formula, hModel, row, col);
-        hModel.setValueAt(result, row, col);
+        structureModel.getCellStyle(row, col, SubCellPath.ROOT).setFormula(formula);
+        Object result = HTableFormula.evaluate(formula, getModel(), row, col);
+        getModel().setValueAt(result, row, col);
         refreshUI();
     }
 
@@ -1811,18 +2238,20 @@ public class HTable extends JTable {
      * Évalue la formule stockée dans une cellule et retourne le résultat. Ne
      * modifie pas le tableau — utile pour prévisualiser un calcul.
      *
-     * @param row ligne de la cellule
-     * @param col colonne de la cellule
+     * @param row ligne de la cellule (MODÈLE)
+     * @param col colonne de la cellule (MODÈLE)
      * @return le résultat numérique, ou un message d'erreur si la formule est
      * invalide ou si les données ne sont pas numériques
      */
     public Object evaluateFormula(int row, int col) {
-        String formula = hModel.getCellModel(row, col).getFormula();
-        if (formula == null || formula.isEmpty()) {
-            return hModel.getValueAt(row, col);
+        if (!isModelCell(row, col)) {
+            return null;
         }
-        // Nouvelle signature avec coordonnées
-        return HTableFormula.evaluate(formula, hModel, row, col);
+        String formula = structureModel.getCellStyle(row, col, SubCellPath.ROOT).getFormula();
+        if (formula == null || formula.isEmpty()) {
+            return getModel().getValueAt(row, col);
+        }
+        return HTableFormula.evaluate(formula, getModel(), row, col);
     }
 
     /**
@@ -1831,13 +2260,13 @@ public class HTable extends JTable {
      * des formules dépendantes.
      */
     public void recalculateAllFormulas() {
-        for (int r = 0; r < getRowCount(); r++) {
-            for (int c = 0; c < getColumnCount(); c++) {
-                String formula = hModel.getCellModel(r, c).getFormula();
+        TableModel m = getModel();
+        for (int r = 0; r < m.getRowCount(); r++) {
+            for (int c = 0; c < m.getColumnCount(); c++) {
+                String formula = structureModel.getCellStyle(r, c, SubCellPath.ROOT).getFormula();
                 if (formula != null && !formula.isEmpty()) {
-                    // Nouvelle signature avec coordonnées
-                    Object result = HTableFormula.evaluate(formula, hModel, r, c);
-                    hModel.setValueAt(result, r, c);
+                    Object result = HTableFormula.evaluate(formula, m, r, c);
+                    m.setValueAt(result, r, c);
                 }
             }
         }
@@ -1850,7 +2279,7 @@ public class HTable extends JTable {
      * marges, direction) sans toucher à son contenu.
      */
     public void resetCellFormatting(int row, int col) {
-        hModel.resetCellFormatting(row, col);
+        withStyle(row, col, CellStyle::reset);
         refreshUI();
     }
 
@@ -1912,9 +2341,13 @@ public class HTable extends JTable {
 
     @Override
     public boolean isCellEditable(int row, int col) {
-        // Les cellules absorbées ne sont pas éditables directement par JTable        
-        if (hModel.isAbsorbed(toModelRow(row), toModelColumn(col))) {
-            return false;
+        // Les cellules absorbées ne sont pas éditables directement par JTable
+        if (structureModel != null) {
+            int modelRow = toModelRow(row);
+            int modelCol = toModelColumn(col);
+            if (modelRow >= 0 && modelCol >= 0 && structureModel.isAbsorbed(modelRow, modelCol)) {
+                return false;
+            }
         }
         return super.isCellEditable(row, col);
     }
@@ -1936,7 +2369,7 @@ public class HTable extends JTable {
         if (sorter != null) {
             sorter.addRowSorterListener(e -> {
                 if (e.getType() == RowSorterEvent.Type.SORT_ORDER_CHANGED) {
-                    HTableStructureIntegrity.invalidateAllMergesOnSort(this);
+                    TableStructureIntegrity.invalidateAllMergesOnSort(this);
                     refreshUI();
                 }
             });
@@ -2170,10 +2603,163 @@ public class HTable extends JTable {
     }
 
     // =========================================================================
-    // ACCESSEURS INTERNES
+    // MODÈLE DE STRUCTURE
     // =========================================================================
-    public HDefaultTableModel getHModel() {
-        return hModel;
+    /**
+     * Fusions, subdivisions et styles, en coordonnées MODÈLE. Lecture libre ;
+     * pour défusionner, préférer unmergeRegion()/unmergeCell() qui restituent
+     * aussi les valeurs au TableModel.
+     */
+    public CellStructureModel getStructureModel() {
+        return structureModel;
+    }
+
+    /**
+     * Remplace le modèle de structure (propriété liée « structureModel »). Les
+     * sous-cellules focusées/éditées sont abandonnées.
+     */
+    public void setStructureModel(CellStructureModel newModel) {
+        Objects.requireNonNull(newModel, "structureModel");
+        CellStructureModel old = structureModel;
+        if (old == newModel) {
+            return;
+        }
+        if (old != null) {
+            old.removeCellStructureListener(structureListener);
+        }
+        structureModel = newModel;
+        structureModel.addCellStructureListener(structureListener);
+        clearInternalCellStates();
+        firePropertyChange("structureModel", old, newModel);
+        refreshUI();
+    }
+
+    /**
+     * Vrai (défaut) : un changement de STRUCTURE du TableModel (nouvelles
+     * colonnes, setDataVector...) ou un « toutes les données ont changé »
+     * efface fusions, subdivisions et styles. Mettre à faux si l'on gère
+     * soi-même le modèle de structure.
+     */
+    public boolean isAutoCreateStructureFromModel() {
+        return autoCreateStructureFromModel;
+    }
+
+    public void setAutoCreateStructureFromModel(boolean autoCreate) {
+        boolean old = this.autoCreateStructureFromModel;
+        this.autoCreateStructureFromModel = autoCreate;
+        firePropertyChange("autoCreateStructureFromModel", old, autoCreate);
+    }
+
+    /**
+     * Style de la cellule entière (indices VUE), ou null si hors bornes.
+     * Instance vivante du modèle de structure : la modifier modifie le style
+     * stocké (préférer les setters de HTable, qui rafraîchissent l'affichage).
+     */
+    public CellStyle getCellStyle(int viewRow, int viewCol) {
+        int modelRow = toModelRow(viewRow);
+        int modelCol = toModelColumn(viewCol);
+        if (modelRow < 0 || modelCol < 0) {
+            return null;
+        }
+        return structureModel.getCellStyle(modelRow, modelCol, SubCellPath.ROOT);
+    }
+
+    /**
+     * Applique une modification au style de la cellule (indices VUE) ; sans
+     * effet si hors bornes.
+     */
+    private void withStyle(int viewRow, int viewCol, Consumer<CellStyle> change) {
+        CellStyle style = getCellStyle(viewRow, viewCol);
+        if (style != null) {
+            change.accept(style);
+        }
+    }
+
+    /**
+     * Parcourt les cellules réellement sélectionnées (indices VUE) : les lignes
+     * sélectionnées × les colonnes sélectionnées, comme le modèle de sélection.
+     * Ne fait rien s'il n'y a pas de sélection.
+     */
+    private void forEachSelectedCell(BiConsumer<Integer, Integer> action) {
+        if (!hasSelection()) {
+            return;
+        }
+        for (int row : cellSelectionModel.getSelectedRows()) {
+            for (int col : cellSelectionModel.getSelectedColumns()) {
+                action.accept(row, col);
+            }
+        }
+    }
+
+    /**
+     * Style du noeud désigné par hit, ou null si hit ne correspond plus à la
+     * structure.
+     */
+    private CellStyle styleOf(InternalCellHit hit) {
+        try {
+            return structureModel.getCellStyle(hit.row, hit.col, hit.path);
+        } catch (IllegalArgumentException stale) {
+            return null;
+        }
+    }
+
+    private boolean isModelCell(int modelRow, int modelCol) {
+        return modelRow >= 0 && modelRow < getModel().getRowCount()
+                && modelCol >= 0 && modelCol < getModel().getColumnCount();
+    }
+
+    private void requireModelCell(int modelRow, int modelCol) {
+        if (!isModelCell(modelRow, modelCol)) {
+            throw new IndexOutOfBoundsException(
+                    "Coordonnées invalides : (" + modelRow + ", " + modelCol + ")");
+        }
+    }
+
+    /**
+     * Abandonne les sous-cellules survolée/focusée/sélectionnée/en cours
+     * d'édition : leurs adresses ne signifient plus rien après un décalage ou
+     * une réinitialisation de la structure.
+     */
+    private void clearInternalCellStates() {
+        focusedInternalCell = null;
+        hoveredInternalCell = null;
+        selectedInternalCell = null;
+        editingInternalCell = null;
+        if (internalEditor != null && internalEditor.isVisible()) {
+            internalEditor.setVisible(false);
+        }
+    }
+
+    /**
+     * Abandonne uniquement celles qui ne désignent plus aucun noeud.
+     */
+    private void pruneStaleInternalCells() {
+        if (isStale(focusedInternalCell)) {
+            focusedInternalCell = null;
+        }
+        if (isStale(hoveredInternalCell)) {
+            hoveredInternalCell = null;
+        }
+        if (isStale(selectedInternalCell)) {
+            selectedInternalCell = null;
+        }
+        if (isStale(editingInternalCell)) {
+            editingInternalCell = null;
+            if (internalEditor != null) {
+                internalEditor.setVisible(false);
+            }
+        }
+    }
+
+    private boolean isStale(InternalCellHit hit) {
+        if (hit == null) {
+            return false;
+        }
+        try {
+            return TableGeometry.boundsOf(this, hit) == null;
+        } catch (RuntimeException outOfRange) {
+            return true;
+        }
     }
 
     // =========================================================================
@@ -2419,7 +3005,7 @@ public class HTable extends JTable {
      * de la fusion.
      *
      * @param point point souris
-     * @return int[]{row, col} de la cellule principale
+     * @return int[]{row, col} (indices VUE) de la cellule principale
      */
     public int[] resolvePoint(Point point) {
         int row = rowAtPoint(point);
@@ -2429,12 +3015,10 @@ public class HTable extends JTable {
         }
         int modelRow = toModelRow(row);
         int modelCol = toModelColumn(col);
-        if (hModel.isAbsorbed(modelRow, modelCol)) {
-            Point origin = hModel.findMergeOrigin(modelRow, modelCol);
-            if (origin != null) {
-                // Position VUE de la cellule principale
-                return new int[]{convertRowIndexToView(origin.x), convertColumnIndexToView(origin.y)};
-            }
+        MergeRegion region = structureModel.getMergeAt(modelRow, modelCol);
+        if (region != null && !(region.originRow == modelRow && region.originCol == modelCol)) {
+            // Position VUE de la cellule principale
+            return new int[]{convertRowIndexToView(region.originRow), convertColumnIndexToView(region.originCol)};
         }
         return new int[]{row, col};
     }
@@ -2508,22 +3092,143 @@ public class HTable extends JTable {
      * cible.
      */
     public boolean hasInternalFocus() {
-        return focusedInternalCell != null && focusedInternalCell.parent != null;
+        return focusedInternalCell != null && focusedInternalCell.isSubCell();
     }
 
     /**
-     * Toujours ignorée : HTable ne doit jamais avoir de TableRowSorter
-     * auto-créé par JTable lui-même. Un sorter par défaut n'aurait pas notre
-     * isSortable() = false, et réintroduirait le tri au clic n'importe où sur
-     * l'en-tête — exactement ce que sortByColumn()/sortByColumns() neutralisent
-     * en construisant toujours leur propre sorter. Le tri ne doit passer que
-     * par ces deux méthodes, jamais par l'auto-création de JTable
-     * (getAutoCreateRowSorter() reste donc toujours false, sans override
-     * nécessaire : le champ interne de JTable n'est jamais touché).
+     * JTable appelle updateUI() à chaque changement de Look and Feel : sans
+     * cette surcharge, le delegate HBasicTableUI serait remplacé par celui du
+     * L&F. (Pendant la construction de JTable, nos champs ne sont pas encore
+     * initialisés : le constructeur de HTable installe lui-même HBasicTableUI.)
+     */
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (structureModel != null) {
+            setUI(new HBasicTableUI());
+        }
+    }
+
+    /**
+     * Necessaire pour utiliser notre newNonClickableSorter(model) qui bloque le
+     * tri natif
+     *
+     * @param autoCreateRowSorter
      */
     @Override
     public void setAutoCreateRowSorter(boolean autoCreateRowSorter) {
-        // volontairement vide
+        setSortingEnabled(autoCreateRowSorter);
+    }
+
+    @Override
+    public boolean getAutoCreateRowSorter() {
+        return isSortingEnabled();
+    }
+
+    @Override
+    public void setModel(TableModel dataModel) {
+        TableModel previous = getModel();
+        super.setModel(dataModel);
+        if (structureModel == null) {
+            return; // appel depuis le constructeur de JTable
+        }
+        if (dataModel != previous) {
+            // Fusions, subdivisions et styles décrivaient l'ancien modèle
+            declaredColumnClasses.clear();
+            structureModel.clear();
+        }
+        if (getAutoCreateRowSorter()) {
+            setRowSorter(newNonClickableSorter(dataModel));
+        }
+    }
+
+    /**
+     * Garde la structure alignée sur le TableModel, quelle que soit l'origine
+     * de la modification : lignes insérées/supprimées → la structure se décale
+     * ; structure du modèle changée → elle est réinitialisée (voir
+     * setAutoCreateStructureFromModel). Les modifications que HTable fait
+     * elle-même (adjustingStructure) sont déjà répercutées.
+     */
+    @Override
+    public void tableChanged(TableModelEvent e) {
+        super.tableChanged(e);
+        if (structureModel == null || adjustingStructure) {
+            return;
+        }
+        if (e == null || e.getFirstRow() == TableModelEvent.HEADER_ROW) {
+            if (autoCreateStructureFromModel) {
+                structureModel.clear();
+            }
+            return;
+        }
+        switch (e.getType()) {
+            case TableModelEvent.INSERT ->
+                structureModel.rowsInserted(e.getFirstRow(), e.getLastRow());
+            case TableModelEvent.DELETE -> {
+                adjustingStructure = true;
+                try {
+                    List<MergeRegion> dissolved = structureModel.rowsRemoved(e.getFirstRow(), e.getLastRow());
+                    restoreSurvivingValues(dissolved, true, e.getFirstRow(), e.getLastRow());
+                } finally {
+                    adjustingStructure = false;
+                }
+            }
+            default -> {
+                // fireTableDataChanged() : « tout a changé, y compris le nombre de lignes »
+                if (e.getFirstRow() == 0 && e.getLastRow() == Integer.MAX_VALUE
+                        && autoCreateStructureFromModel) {
+                    structureModel.clear();
+                }
+            }
+        }
+    }
+
+    /**
+     * Réaction aux changements de la structure (quelle qu'en soit l'origine :
+     * HTable, code externe, modèle de structure de test...).
+     */
+    private void structureChanged(CellStructureEvent e) {
+        switch (e.getType()) {
+            case RESET, SHIFTED, MERGED, UNMERGED ->
+                clearInternalCellStates();
+            default ->
+                pruneStaleInternalCells();
+        }
+        refreshUI();
+    }
+
+    // ── Type des colonnes ────────────────────────────────────────────────────
+    /**
+     * Type de la colonne VUE : déclaré (setColumnClass), sinon celui du modèle,
+     * sinon inféré de la première valeur non nulle — pour que renderers,
+     * éditeurs et tri numérique fonctionnent même sur un modèle qui ne
+     * renseigne pas getColumnClass (DefaultTableModel renvoie toujours Object).
+     */
+    @Override
+    public Class<?> getColumnClass(int column) {
+        if (structureModel == null) {
+            return super.getColumnClass(column); // construction de JTable
+        }
+        return modelColumnClass(convertColumnIndexToModel(column));
+    }
+
+    private Class<?> modelColumnClass(int modelColumn) {
+        Class<?> declared = declaredColumnClasses.get(modelColumn);
+        if (declared != null) {
+            return declared;
+        }
+        Class<?> fromModel = getModel().getColumnClass(modelColumn);
+        if (fromModel != null && fromModel != Object.class) {
+            return fromModel;
+        }
+        TableModel m = getModel();
+        for (int row = 0; row < m.getRowCount(); row++) {
+            Object value = m.getValueAt(row, modelColumn);
+            if (value != null) {
+                return value.getClass();
+            }
+        }
+        return Object.class;
     }
 
     /**
@@ -2532,14 +3237,61 @@ public class HTable extends JTable {
      * JTableHeader avant d'agir. Ça neutralise le tri-au-clic-n'importe-où de
      * Swing sans toucher à setSortKeys(), notre propre chemin de tri, qui ne
      * passe pas par ce garde-fou.
+     *
+     * Le comparateur s'appuie sur modelColumnClass() (déclaré/inféré) plutôt
+     * que sur getColumnClass() du modèle, pour que le tri numérique reste
+     * numérique avec un DefaultTableModel.
      */
-    private TableRowSorter<HDefaultTableModel> newNonClickableSorter() {
-        return new TableRowSorter<>(hModel) {
+    private TableRowSorter<TableModel> newNonClickableSorter(TableModel model) {
+        return new TableRowSorter<>(model) {
             @Override
             public boolean isSortable(int column) {
                 return false;
             }
+
+            @Override
+            public Comparator<?> getComparator(int column) {
+                Class<?> type = modelColumnClass(column);
+                if (type == String.class || !Comparable.class.isAssignableFrom(type)) {
+                    return Collator.getInstance();
+                }
+                return (Comparator<Object>) (a, b) -> {
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Comparable<Object> comparable = (Comparable<Object>) a;
+                        return comparable.compareTo(b);
+                    } catch (ClassCastException mixedTypes) {
+                        return a.toString().compareTo(b.toString());
+                    }
+                };
+            }
+
+            @Override
+            protected boolean useToString(int column) {
+                Class<?> type = modelColumnClass(column);
+                return !(type == String.class || Comparable.class.isAssignableFrom(type));
+            }
         };
+    }
+
+    /**
+     * Active ou désactive NOTRE fonctionnalité de tri (icône d'en-tête +
+     * cycleSort) — à ne pas confondre avec setAutoCreateRowSorter() ci-dessus,
+     * qui concerne le raccourci natif de JTable, bloqué en permanence pour une
+     * tout autre raison. Celle-ci, au contraire, est un vrai interrupteur : un
+     * développeur qui ne veut aucun tri sur son tableau l'utilise. Désactiver
+     * efface aussi un tri déjà en cours.
+     */
+    public void setSortingEnabled(boolean sortingEnabled) {
+        this.sortingEnabled = sortingEnabled;
+        if (!sortingEnabled) {
+            clearSort();
+        }
+        repaint();
+    }
+
+    public boolean isSortingEnabled() {
+        return sortingEnabled;
     }
 
     //Etat de tri d'une colonne
@@ -2556,5 +3308,4 @@ public class HTable extends JTable {
         }
         return SortOrder.UNSORTED;
     }
-
 }

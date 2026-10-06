@@ -2,10 +2,11 @@ package hsupertable.menu;
 
 import hcomponents.HMenu;
 import hsupertable.HTable;
-import hsupertable.model.HDefaultTableModel;
+import hsupertable.model.SubCellPath;
+import hsupertable.model.structure.CellNode;
 import hcomponents.HMenuItem;
 import hcomponents.HPopupMenu;
-import hsupertable.model.InternalGrid;
+import javax.swing.table.TableModel;
 
 import javax.swing.*;
 import java.awt.*;
@@ -148,29 +149,40 @@ public class MenuHandler {
         }
     }
 
+    /**
+     * @param row ligne de la cellule (indice VUE, comme TableContext.row)
+     * @param col colonne de la cellule (indice VUE)
+     */
     public void showFormulaDialog(int row, int col) {
-        String suggestion = suggestFormula(row, col);
-        String existing = table.getHModel().getCellModel(row, col).getFormula();
+        // Les formules portent sur les données : on travaille en indices MODÈLE
+        int modelRow = table.toModelRow(row);
+        int modelCol = table.toModelColumn(col);
+        if (modelRow < 0 || modelCol < 0) {
+            return;
+        }
+        String suggestion = suggestFormula(modelRow, modelCol);
+        String existing = table.getStructureModel()
+                .getCellStyle(modelRow, modelCol, SubCellPath.ROOT).getFormula();
         String initial = (existing != null && !existing.isEmpty()) ? existing : suggestion;
 
         Window parent = SwingUtilities.getWindowAncestor(table);
-        HFormulaDialog dialog = new HFormulaDialog(parent, initial);
+        FormulaDialog dialog = new FormulaDialog(parent, initial);
         dialog.setVisible(true);
 
         if (dialog.isConfirmed()) {
             String formula = dialog.getFormula();
             if (formula != null && formula.startsWith("=")) {
-                table.setCellFormula(row, col, formula);
+                table.setCellFormula(modelRow, modelCol, formula);
             }
         }
     }
 
     private String suggestFormula(int row, int col) {
-        HDefaultTableModel hModel = table.getHModel();
+        TableModel model = table.getModel();
 
         boolean hasAbove = false;
         for (int r = 0; r < row; r++) {
-            Object val = hModel.getValueAt(r, col);
+            Object val = model.getValueAt(r, col);
             if (val != null) {
                 try {
                     Double.parseDouble(val.toString());
@@ -183,7 +195,7 @@ public class MenuHandler {
 
         boolean hasLeft = false;
         for (int c = 0; c < col; c++) {
-            Object val = hModel.getValueAt(row, c);
+            Object val = model.getValueAt(row, c);
             if (val != null) {
                 try {
                     Double.parseDouble(val.toString());
@@ -196,14 +208,9 @@ public class MenuHandler {
     }
 
     public boolean isEnabled(TableContext ctx) {
-    if (!ctx.hasMultipleSelection) return false;
-    HTable.CellRange sel = ctx.table.getSelection();
-    if (sel == null) return false;
-    return table.getHModel().getMergeModel().canMergeSelection(
-            sel.rowStart, sel.colStart, sel.rowEnd, sel.colEnd,
-            ctx.table.getHModel().getMergeModel());
-}
-    
+        return ctx.hasMultipleSelection && ctx.table.canMergeSelection();
+    }
+
     // ── ACTIONS PAR DÉFAUT — CELLULES ───────────────────────────────────────
     private void initializeDefaultContextActions() {
          // ── FUSIONNER ─────────────────────────────────────────────────────────
@@ -279,7 +286,7 @@ public class MenuHandler {
             public void perform(TableContext ctx) {
                 ctx.table.splitCellLocally(
                         ctx.row, ctx.column,
-                        InternalGrid.SPLIT_VERTICAL,
+                        CellNode.SPLIT_VERTICAL,
                         0.5f
                 );
             }
@@ -301,7 +308,7 @@ public class MenuHandler {
             public void perform(TableContext ctx) {
                 ctx.table.splitCellLocally(
                         ctx.row, ctx.column,
-                        InternalGrid.SPLIT_HORIZONTAL,
+                        CellNode.SPLIT_HORIZONTAL,
                         0.5f
                 );
             }

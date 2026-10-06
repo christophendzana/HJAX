@@ -1,7 +1,9 @@
 package hsupertable.formula;
 
-import hsupertable.model.HDefaultTableModel;
+import javax.swing.table.TableModel;
 import java.util.*;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * HTableFormula — Moteur de formules pour notre HSuperTable.
@@ -43,7 +45,7 @@ public class HTableFormula {
         NEQ, // <>
         EOF // fin de l'expression
     }
-   
+
     /**
      * Unité lexicale produite par le Lexer.
      */
@@ -495,8 +497,12 @@ public class HTableFormula {
          */
         List<Double> collectValues(Evaluator eval) {
             List<Double> values = new ArrayList<>();
-            for (int r = rowStart; r <= rowEnd; r++) {
-                for (int c = colStart; c <= colEnd; c++) {
+            int firstRow = Math.max(rowStart, 0);
+            int lastRow = Math.min(rowEnd, eval.rowCount() - 1);
+            int firstCol = Math.max(colStart, 0);
+            int lastCol = Math.min(colEnd, eval.columnCount() - 1);
+            for (int r = firstRow; r <= lastRow; r++) {
+                for (int c = firstCol; c <= lastCol; c++) {
                     Double v = eval.getNumericCellValue(r, c);
                     if (v != null) {
                         values.add(v);
@@ -868,7 +874,7 @@ public class HTableFormula {
         /**
          * Modèle de données du tableau.
          */
-        private final HDefaultTableModel model;
+        private final TableModel model;
 
         /**
          * Ligne de la cellule contenant la formule (0-indexée).
@@ -880,10 +886,18 @@ public class HTableFormula {
          */
         private final int formulaCol;
 
-        Evaluator(HDefaultTableModel model, int formulaRow, int formulaCol) {
+        Evaluator(TableModel model, int formulaRow, int formulaCol) {
             this.model = model;
             this.formulaRow = formulaRow;
             this.formulaCol = formulaCol;
+        }
+
+        int rowCount() {
+            return model.getRowCount();
+        }
+
+        int columnCount() {
+            return model.getColumnCount();
         }
 
         /**
@@ -1100,17 +1114,19 @@ public class HTableFormula {
             }
             double value = toDouble(evaluate(args.get(0)), "ROUND");
             double decimals = toDouble(evaluate(args.get(1)), "ROUND");
-            int dec = (int) decimals;
+            int dec = (int) Math.max(-400, Math.min(400, decimals));
 
-            if (dec > 0) {
-                double factor = Math.pow(10, dec);
-                return Math.round(value * factor) / factor;
-            } else if (dec == 0) {
-                return (double) Math.round(value);
-            } else {
-                double factor = Math.pow(10, -dec);
-                return Math.floor(value / factor) * factor;
+            // Comme un tableur : la moitié s'arrondit en s'éloignant de zéro
+            // (2,5 → 3 ; -2,5 → -3 ; ROUND(-123;-1) → -120).
+            if (!Double.isFinite(value)) {
+                return value;
             }
+            if (dec > 17) {
+                return value; // un double ne porte pas autant de décimales
+            }
+            return new BigDecimal(Double.toString(value))
+                    .setScale(dec, RoundingMode.HALF_UP)
+                    .doubleValue();
         }
 
         private Object funcSign(List<Node> args) throws FormulaException {
@@ -1312,7 +1328,7 @@ public class HTableFormula {
      * "#REF!")
      */
     public static Object evaluate(String formula,
-            HDefaultTableModel model,
+            TableModel model,
             int formulaRow, int formulaCol) {
 
         if (formula == null || formula.isEmpty()) {
@@ -1355,7 +1371,7 @@ public class HTableFormula {
      * @return résultat ou erreur
      */
     public static Object evaluate(String formula,
-            HDefaultTableModel model) {
+            TableModel model) {
         return evaluate(formula, model, -1, -1);
     }
 

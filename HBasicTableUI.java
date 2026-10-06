@@ -1,16 +1,16 @@
 package hsupertable.view;
 
 import hsupertable.HTable;
-import hsupertable.model.HCellModel;
-import hsupertable.model.HDefaultTableModel;
-import hsupertable.model.Cell;
+import hsupertable.model.structure.CellNode;
+import hsupertable.model.CellStyle;
+import hsupertable.model.MergeRegion;
+import hsupertable.model.SubCellPath;
 import hsupertable.style.HTableStyle;
 import hsupertable.style.HTableStyle.HeaderStyle;
-import hsupertable.geometry.HTableGeometry;
-import hsupertable.geometry.HTableGeometry.InternalCellHit;
+import hsupertable.geometry.TableGeometry;
+import hsupertable.geometry.TableGeometry.InternalCellHit;
 import hsupertable.menu.HeaderContext;
 import hsupertable.menu.TableContext;
-import hsupertable.model.InternalGrid;
 
 import javax.swing.*;
 import javax.swing.plaf.basic.BasicTableUI;
@@ -32,6 +32,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
+import javax.swing.plaf.ActionMapUIResource;
+import javax.swing.plaf.InputMapUIResource;
+import hsupertable.model.structure.CellStructureModel;
 
 /**
  * HBasicTableUI — Moteur de rendu visuel de HTable.
@@ -198,9 +201,8 @@ public class HBasicTableUI extends BasicTableUI {
             setBackground(HTableColorResolver.resolveCellBackground(t, style, row, column));
 
             // ── Couleur de texte custom ──────────────────────────────────────
-            HCellModel cellModel = t.getHModel().getCellModel(
-                    t.toModelRow(row), t.toModelColumn(column));
-            if (cellModel.hasForeground()) {
+            CellStyle cellModel = t.getCellStyle(row, column);
+            if (cellModel != null && cellModel.hasForeground()) {
                 setForeground(cellModel.getForeground());
             }
 
@@ -211,7 +213,7 @@ public class HBasicTableUI extends BasicTableUI {
             }
 
             // Les marges et l'alignement sont appliqués dans paintCell()
-            // via les infos du HCellModel — pas ici, pour que la zone de
+            // via les infos du CellStyle — pas ici, pour que la zone de
             // peinture soit correcte même en cas de fusion.
             setBorder(BorderFactory.createEmptyBorder());
 
@@ -322,7 +324,7 @@ public class HBasicTableUI extends BasicTableUI {
         }
         JTableHeader header = table.getTableHeader();
         if (header != null && headerHandler != null) {
-            headerHandler.dispose(header);           
+            headerHandler.dispose(header);
         }
 
         selectionHandler = null;
@@ -386,8 +388,11 @@ public class HBasicTableUI extends BasicTableUI {
 
     @Override
     protected void installKeyboardActions() {
-        InputMap inputMap = new InputMap();
-        ActionMap actionMap = new ActionMap();
+
+        super.installKeyboardActions();
+
+        InputMap inputMap = new InputMapUIResource();
+        ActionMap actionMap = new ActionMapUIResource();
 
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.CTRL_DOWN_MASK), "selectAll");
         actionMap.put("selectAll", new AbstractAction() {
@@ -419,14 +424,15 @@ public class HBasicTableUI extends BasicTableUI {
         bindNavigation(inputMap, actionMap, KeyEvent.VK_DOWN, 1, 0, "selectNextRow");
         bindNavigation(inputMap, actionMap, KeyEvent.VK_UP, -1, 0, "selectPreviousRow");
 
-        table.setInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, inputMap);
-        table.setActionMap(actionMap);
+        inputMap.setParent(SwingUtilities.getUIInputMap(table, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT));
+        actionMap.setParent(SwingUtilities.getUIActionMap(table));
+        SwingUtilities.replaceUIInputMap(table, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, inputMap);
+        SwingUtilities.replaceUIActionMap(table, actionMap);
     }
 
     @Override
     protected void uninstallKeyboardActions() {
-        table.setInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, null);
-        table.setActionMap(null);
+        super.uninstallKeyboardActions();
     }
 
     /**
@@ -538,21 +544,18 @@ public class HBasicTableUI extends BasicTableUI {
      */
     private void paintCell(Graphics2D g2, HTable t, int row, int col) {
 
-        HDefaultTableModel model = t.getHModel();
+        CellStructureModel structure = t.getStructureModel();
         int modelRow = t.toModelRow(row);
         int modelCol = t.toModelColumn(col);
-        Cell cell = model.getCell(modelRow, modelCol);
-        if (cell.isAbsorbed()) {
+        if (modelRow < 0 || modelCol < 0 || structure.isAbsorbed(modelRow, modelCol)) {
             return;
         }
 
-        Rectangle cellRect = t.getCellRect(row, col, false);
-        if (cell.spanRow > 1 || cell.spanCol > 1) {
-            cellRect = HTableGeometry.computeMergedRect(t, modelRow, modelCol, cell.spanRow, cell.spanCol);
-        }
+        // Rectangle de la fusion si la cellule en est l'origine, sinon le sien
+        Rectangle cellRect = TableGeometry.getCellBounds(t, row, col);
 
         // false = cellule racine, pas une sous-cellule
-        paintCellStructure(g2, t, cell, cellRect, row, col, false);
+        paintCellStructure(g2, t, structure.getCellNode(modelRow, modelCol), cellRect, row, col, false);
     }
 
     // =========================================================================
@@ -564,15 +567,14 @@ public class HBasicTableUI extends BasicTableUI {
      */
     private void paintCellStructure(
             Graphics2D g2, HTable t,
-            Cell cell,
+            CellNode node,
             Rectangle rect, int row, int col,
             boolean isSubCell
     ) {
-        if (cell.internalGrid == null) {
-            Object value = cell.value;
-            if (!isSubCell && value == null) {
-                value = t.getValueAt(row, col);
-            }
+        if (node.isLeaf()) {
+            // La valeur d'une cellule entière vit dans le TableModel ; celle d'une
+            // sous-cellule, dans le noeud.
+            Object value = isSubCell ? node.getValue() : t.getValueAt(row, col);
 
             if (value != null && hasCustomRendererFor(t, t.getColumnClass(col))) {
                 paintViaTypedRenderer(g2, t, value, rect, row, col);
@@ -581,12 +583,11 @@ public class HBasicTableUI extends BasicTableUI {
 
             // Chemin actuel — texte riche, inchangé
             HTableStyle style = t.getTableStyle();
-            HCellModel cModel = t.getHModel().getCellModel(
-                    t.toModelRow(row), t.toModelColumn(col));
+            CellStyle nodeStyle = node.getStyle();
 
             Color bg;
-            if (cell.style != null && cell.style.hasBackground()) {
-                bg = cell.style.getBackground();
+            if (nodeStyle.hasBackground()) {
+                bg = nodeStyle.getBackground();
             } else {
                 bg = HTableColorResolver.resolveCellBackground(t, style, row, col);
             }
@@ -603,23 +604,21 @@ public class HBasicTableUI extends BasicTableUI {
             }
 
             if (value != null) {
-                HCellModel effectiveModel = (cell.style != null) ? cell.style : cModel;
-                HTableTextPainter.paintCellText(g2, t, effectiveModel, style, rect, value.toString(), row, col);
+                HTableTextPainter.paintCellText(g2, t, nodeStyle, style, rect, value.toString(), row, col);
             }
             return;
         }
 
-        InternalGrid grid = cell.internalGrid;
-        Rectangle[] parts = HTableGeometry.computeInternalRects(rect, grid);
-        Cell first = grid.getFirstCell();
-        Cell second = grid.getSecondCell();
+        Rectangle[] parts = TableGeometry.computeInternalRects(rect, node);
+        CellNode first = node.getFirst();
+        CellNode second = node.getSecond();
 
         paintCellStructure(g2, t, first, parts[0], row, col, true);
         paintCellStructure(g2, t, second, parts[1], row, col, true);
 
         g2.setColor(new Color(180, 180, 180));
         g2.setStroke(new BasicStroke(1f));
-        if (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL) {
+        if (node.getSplitType() == CellNode.SPLIT_VERTICAL) {
             int x = parts[0].x + parts[0].width;
             g2.drawLine(x, rect.y, x, rect.y + rect.height);
         } else {
@@ -658,7 +657,10 @@ public class HBasicTableUI extends BasicTableUI {
             return;
         }
 
-        Rectangle r = hit.bounds;
+        Rectangle r = TableGeometry.boundsOf(t, hit);
+        if (r == null) {
+            return;
+        }
 
         g2.setColor(new Color(37, 99, 235, 40));
 
@@ -673,7 +675,10 @@ public class HBasicTableUI extends BasicTableUI {
             return;
         }
 
-        Rectangle r = hit.bounds;
+        Rectangle r = TableGeometry.boundsOf(t, hit);
+        if (r == null) {
+            return;
+        }
 
         g2.setColor(new Color(37, 99, 235, 70));
 
@@ -688,7 +693,10 @@ public class HBasicTableUI extends BasicTableUI {
             return;
         }
 
-        Rectangle r = hit.bounds;
+        Rectangle r = TableGeometry.boundsOf(t, hit);
+        if (r == null) {
+            return;
+        }
 
         g2.setColor(new Color(37, 99, 235));
 
@@ -711,7 +719,7 @@ public class HBasicTableUI extends BasicTableUI {
             int firstRow, int lastRow,
             int firstCol, int lastCol) {
 
-        HDefaultTableModel model = t.getHModel();
+        CellStructureModel structure = t.getStructureModel();
         Color gridColor = t.getGridColor();
         if (gridColor == null) {
             gridColor = new Color(220, 220, 220);
@@ -726,14 +734,10 @@ public class HBasicTableUI extends BasicTableUI {
                 // On ne dessine rien pour les cellules absorbées
                 int modelRow = t.toModelRow(row);
                 int modelCol = t.toModelColumn(col);
-                if (model.isAbsorbed(modelRow, modelCol)) {
+                if (structure.isAbsorbed(modelRow, modelCol)) {
                     continue;
                 }
-                // APRÈS
-                Cell cell = model.getCell(modelRow, modelCol);
-                Rectangle r = (cell.spanRow > 1 || cell.spanCol > 1)
-                        ? HTableGeometry.computeMergedRect(t, modelRow, modelCol, cell.spanRow, cell.spanCol)
-                        : t.getCellRect(row, col, false);
+                Rectangle r = TableGeometry.getCellBounds(t, row, col);
 
                 // Ligne du bas — seulement si on n'est pas dans une fusion
                 // qui continue vers le bas
@@ -780,14 +784,7 @@ public class HBasicTableUI extends BasicTableUI {
             return;
         }
 
-        // APRÈS
-        HDefaultTableModel model = t.getHModel();
-        int modelFr = t.toModelRow(fr);
-        int modelFc = t.toModelColumn(fc);
-        Cell cell = model.getCell(modelFr, modelFc);
-        Rectangle rect = (cell.spanRow > 1 || cell.spanCol > 1)
-                ? HTableGeometry.computeMergedRect(t, modelFr, modelFc, cell.spanRow, cell.spanCol)
-                : t.getCellRect(fr, fc, false);
+        Rectangle rect = TableGeometry.getCellBounds(t, fr, fc);
 
         HTableStyle style = t.getTableStyle();
         Color focusColor = (style != null) ? style.getFocusBorderColor()
@@ -833,13 +830,7 @@ public class HBasicTableUI extends BasicTableUI {
         }
 
         // ── Rectangle de référence — fusionné si nécessaire ───────────────────
-        // APRÈS
-        int modelRow = t.toModelRow(row);
-        int modelCol = t.toModelColumn(col);
-        Cell cell = t.getHModel().getCell(modelRow, modelCol);
-        Rectangle cellRect = (cell.spanRow > 1 || cell.spanCol > 1)
-                ? HTableGeometry.computeMergedRect(t, modelRow, modelCol, cell.spanRow, cell.spanCol)
-                : t.getCellRect(row, col, false);
+        Rectangle cellRect = TableGeometry.getCellBounds(t, row, col);
 
         g2.setColor(new Color(37, 99, 235, 180));
         g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_BUTT,
@@ -942,14 +933,14 @@ public class HBasicTableUI extends BasicTableUI {
         }
 
         /**
-         * Dessine les bordures définies dans un HCellModel sur le périmètre du
+         * Dessine les bordures définies dans un CellStyle sur le périmètre du
          * rectangle donné.
          *
          * @param g2
          * @param m
          * @param rect
          */
-        public static void paintBorders(Graphics2D g2, HCellModel m, Rectangle rect) {
+        public static void paintBorders(Graphics2D g2, CellStyle m, Rectangle rect) {
             if (m == null || !m.hasAnyBorder()) {
                 return;
             }
@@ -978,7 +969,7 @@ public class HBasicTableUI extends BasicTableUI {
 
         /**
          * Bordures custom d'une cellule normale ou fusionnée (row, col), via
-         * son HCellModel.
+         * son CellStyle.
          *
          * @param g2
          * @param t
@@ -986,25 +977,21 @@ public class HBasicTableUI extends BasicTableUI {
          * @param col
          */
         public static void paintCellBorders(Graphics2D g2, HTable t, int row, int col) {
-            HDefaultTableModel model = t.getHModel();
-            if (model.isAbsorbed(row, col)) {
-                return;
-            }
             int modelRow = t.toModelRow(row);
             int modelCol = t.toModelColumn(col);
-            if (model.isAbsorbed(modelRow, modelCol)) {
+            if (modelRow < 0 || modelCol < 0 || t.getStructureModel().isAbsorbed(modelRow, modelCol)) {
                 return;
             }
-            HCellModel cModel = model.getCellModel(modelRow, modelCol);
-            if (!cModel.hasAnyBorder()) {
+            CellStyle cModel = t.getCellStyle(row, col);
+            if (cModel == null || !cModel.hasAnyBorder()) {
                 return;
             }
-            Rectangle rect = HTableGeometry.getCellBounds(t, row, col);
+            Rectangle rect = TableGeometry.getCellBounds(t, row, col);
             paintBorders(g2, cModel, rect);
         }
 
         /**
-         * Bordures custom des deux sous-cellules d'une InternalGrid déjà
+         * Bordures custom des deux sous-cellules d'un noeud subdivisé déjà
          * décomposée en rectangles.
          *
          * @param g2
@@ -1013,13 +1000,13 @@ public class HBasicTableUI extends BasicTableUI {
          * @param second
          * @param secondRect
          */
-        public static void paintInternalBorders(Graphics2D g2, Cell first, Rectangle firstRect,
-                Cell second, Rectangle secondRect) {
+        public static void paintInternalBorders(Graphics2D g2, CellNode first, Rectangle firstRect,
+                CellNode second, Rectangle secondRect) {
             if (first != null) {
-                paintBorders(g2, first.style, firstRect);
+                paintBorders(g2, first.getStyle(), firstRect);
             }
             if (second != null) {
-                paintBorders(g2, second.style, secondRect);
+                paintBorders(g2, second.getStyle(), secondRect);
             }
         }
     }
@@ -1038,10 +1025,9 @@ public class HBasicTableUI extends BasicTableUI {
 
         public static Color resolveCellBackground(HTable t, HTableStyle style,
                 int row, int col) {
-            HDefaultTableModel model = t.getHModel();
-            HCellModel cModel = model.getCellModel(t.toModelRow(row), t.toModelColumn(col));
+            CellStyle cModel = t.getCellStyle(row, col);
 
-            if (cModel.hasBackground()) {
+            if (cModel != null && cModel.hasBackground()) {
                 return cModel.getBackground();
             }
 
@@ -1115,7 +1101,7 @@ public class HBasicTableUI extends BasicTableUI {
         private HTableTextPainter() {
         }
 
-        public static void paintCellText(Graphics2D g2, HTable t, HCellModel cModel,
+        public static void paintCellText(Graphics2D g2, HTable t, CellStyle cModel,
                 HTableStyle style, Rectangle rect, String text,
                 int row, int col) {
 
@@ -1419,19 +1405,13 @@ public class HBasicTableUI extends BasicTableUI {
             selectionHandler.ensureAnchorFor(row, col);
             table.setFocusedCell(row, col);
 
-            HDefaultTableModel model = table.getHModel();
-            Cell cell = model.getCell(table.toModelRow(row), table.toModelColumn(col));
-            if (cell.isAbsorbed() && cell.mergeOrigin != null) {
-                cell = model.getCell(cell.mergeOrigin.x, cell.mergeOrigin.y);
-            }
-
-            HTableGeometry.InternalCellHit internalHit = HTableGeometry.getInternalCellAt(table, mousePos);
-            if (internalHit != null && internalHit.parent != null) {
+            TableGeometry.InternalCellHit internalHit = TableGeometry.getInternalCellAt(table, mousePos);
+            if (internalHit != null && internalHit.isSubCell()) {
                 table.setFocusedInternalCell(internalHit);
                 table.setSelectedInternalCell(internalHit);
             }
 
-            TableContext ctx = new TableContext(table, row, col, cell, internalHit, mousePos);
+            TableContext ctx = new TableContext(table, row, col, internalHit, mousePos);
             table.showContextMenu(ctx, mousePos.x, mousePos.y);
         }
 
@@ -1529,7 +1509,7 @@ public class HBasicTableUI extends BasicTableUI {
                     if (row != table.getHoveredRow()) {
                         table.setHoveredRow(row);
                     }
-                    HTableGeometry.InternalCellHit hit = HTableGeometry.getInternalCellAt(table, e.getPoint());
+                    TableGeometry.InternalCellHit hit = TableGeometry.getInternalCellAt(table, e.getPoint());
                     table.setHoveredInternalCell(hit);
                 }
             }
@@ -1550,7 +1530,7 @@ public class HBasicTableUI extends BasicTableUI {
     }
 
     /**
-     * Tout ce qui concerne les sous-cellules internes (InternalGrid) : mode
+     * Tout ce qui concerne les sous-cellules internes (subdivisions) : mode
      * crayon, mode gomme, suivi du hit-testing au clic, navigation clavier
      * entre sous-cellules. Extrait de HSuperTableController.
      */
@@ -1565,7 +1545,7 @@ public class HBasicTableUI extends BasicTableUI {
         private boolean isDrawing = false;
 
         private Component activeSubCellEditorComponent;
-        private HTableGeometry.InternalCellHit activeSubCellEditorHit;
+        private TableGeometry.InternalCellHit activeSubCellEditorHit;
 
         public InternalCellHandler(HTable table) {
             this.table = table;
@@ -1599,29 +1579,12 @@ public class HBasicTableUI extends BasicTableUI {
                 return false;
             }
             Point point = e.getPoint();
-            HTableGeometry.InternalCellHit hit = HTableGeometry.getInternalCellAt(table, point);
-            if (hit == null || hit.cell == null) {
+            TableGeometry.InternalCellHit hit = TableGeometry.getInternalCellAt(table, point);
+            // La gomme replie la subdivision qui contient la sous-cellule visée
+            if (hit == null || !hit.isSubCell()) {
                 return false;
             }
-
-            int[] resolved = table.resolvePoint(point);
-            int row = resolved[0];
-            int col = resolved[1];
-            if (row < 0 || col < 0) {
-                return false;
-            }
-
-            if (hit.cell.hasInternalGrid()) {
-                if (hit.parent == null) {
-                    table.getHModel().removeInternalGrid(table.toModelRow(row), table.toModelColumn(col));
-                } else {
-                    table.getHModel().removeInternalGridFromCell(hit.cell);
-                }
-            } else if (hit.parent != null && hit.parent.hasInternalGrid()) {
-                table.getHModel().removeInternalGridFromCell(hit.parent);
-            } else {
-                return false;
-            }
+            table.removeSubdivision(hit.row, hit.col, hit.path.parent());
 
             table.setFocusedInternalCell(null);
             table.setSelectedInternalCell(null);
@@ -1646,7 +1609,7 @@ public class HBasicTableUI extends BasicTableUI {
             if (row >= 0 && col >= 0) {
                 table.setFocusedCell(row, col);
 
-                HTableGeometry.InternalCellHit hit = HTableGeometry.getInternalCellAt(table, e.getPoint());
+                TableGeometry.InternalCellHit hit = TableGeometry.getInternalCellAt(table, e.getPoint());
                 table.setFocusedInternalCell(hit);
                 table.setSelectedInternalCell(hit);
             }
@@ -1681,21 +1644,22 @@ public class HBasicTableUI extends BasicTableUI {
             int dy = Math.abs(drawEndY - drawStartY);
 
             Rectangle refRect;
-            if (table.hasInternalFocus()) {
-                refRect = table.getFocusedInternalCell().bounds;
-            } else {
-                refRect = HTableGeometry.getCellBounds(table, row, col);
+            refRect = table.hasInternalFocus()
+                    ? TableGeometry.boundsOf(table, table.getFocusedInternalCell())
+                    : null;
+            if (refRect == null) {
+                refRect = TableGeometry.getCellBounds(table, row, col);
             }
 
             int splitType;
             float ratio;
 
             if (dx >= dy) {
-                splitType = InternalGrid.SPLIT_VERTICAL;
+                splitType = CellNode.SPLIT_VERTICAL;
                 int relativeX = drawEndX - refRect.x;
                 ratio = (float) relativeX / refRect.width;
             } else {
-                splitType = InternalGrid.SPLIT_HORIZONTAL;
+                splitType = CellNode.SPLIT_HORIZONTAL;
                 int relativeY = drawEndY - refRect.y;
                 ratio = (float) relativeY / refRect.height;
             }
@@ -1711,9 +1675,9 @@ public class HBasicTableUI extends BasicTableUI {
 
         // ── Suivi du hit-testing interne (mode normal) ─────────────────────────
         public void updateInternalFocusOnPress(Point point) {
-            HTableGeometry.InternalCellHit hit = HTableGeometry.getInternalCellAt(table, point);
+            TableGeometry.InternalCellHit hit = TableGeometry.getInternalCellAt(table, point);
 
-            if (hit != null && hit.parent != null) {
+            if (hit != null && hit.isSubCell()) {
                 table.setFocusedInternalCell(hit);
                 table.setSelectedInternalCell(hit);
             } else {
@@ -1731,8 +1695,8 @@ public class HBasicTableUI extends BasicTableUI {
             if (e.getClickCount() != 2) {
                 return false;
             }
-            HTableGeometry.InternalCellHit hit = HTableGeometry.getInternalCellAt(table, e.getPoint());
-            if (hit != null && hit.parent != null) {
+            TableGeometry.InternalCellHit hit = TableGeometry.getInternalCellAt(table, e.getPoint());
+            if (hit != null && hit.isSubCell()) {
                 e.consume();
                 table.startInternalEdit(hit);
                 return true;
@@ -1746,7 +1710,7 @@ public class HBasicTableUI extends BasicTableUI {
          * toujours la colonne (row, col) du hit-testing, jamais la profondeur
          * de la sous-cellule.
          */
-        private void startEditForHit(HTableGeometry.InternalCellHit hit) {
+        private void startEditForHit(TableGeometry.InternalCellHit hit) {
             int row = table.getFocusedRow();
             int col = table.getFocusedColumn();
             Class<?> valueClass = table.getColumnClass(col);
@@ -1761,8 +1725,12 @@ public class HBasicTableUI extends BasicTableUI {
                 return;
             }
 
-            Component comp = editor.getTableCellEditorComponent(table, hit.cell.value, false, row, col);
-            comp.setBounds(hit.bounds);
+            Rectangle hitBounds = TableGeometry.boundsOf(table, hit);
+            if (hitBounds == null) {
+                return;
+            }
+            Component comp = editor.getTableCellEditorComponent(table, table.getInternalCellValue(hit), false, row, col);
+            comp.setBounds(hitBounds);
 
             // Câblage manuel pour les sous cellules qui n'est nativement pas gérer par editCellAt,
             // donc aucune correspondance Échap/Entrée n'existe pour lui nativement.
@@ -1796,7 +1764,7 @@ public class HBasicTableUI extends BasicTableUI {
             if (activeSubCellEditorHit == null) {
                 return;
             }
-            activeSubCellEditorHit.cell.value = editor.getCellEditorValue();
+            table.setInternalCellValue(activeSubCellEditorHit, editor.getCellEditorValue());
             endSubCellEdit();
         }
 
@@ -1821,36 +1789,30 @@ public class HBasicTableUI extends BasicTableUI {
          * avec la navigation normale entre cellules).
          */
         public boolean tryNavigateInternal(int dr, int dc) {
-            HTableGeometry.InternalCellHit focused = table.getFocusedInternalCell();
-            if (focused == null || focused.parent == null) {
+            TableGeometry.InternalCellHit focused = table.getFocusedInternalCell();
+            if (focused == null || !focused.isSubCell()) {
                 return false;
             }
 
-            InternalGrid grid = focused.parent.internalGrid;
-            if (grid != null) {
-                boolean goToSecond = (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL && dc > 0)
-                        || (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr > 0);
-                boolean goToFirst = (grid.getSplitType() == InternalGrid.SPLIT_VERTICAL && dc < 0)
-                        || (grid.getSplitType() == InternalGrid.SPLIT_HORIZONTAL && dr < 0);
+            SubCellPath parentPath = focused.path.parent();
+            CellNode parent = parentPath.resolve(
+                    table.getStructureModel().getCellNode(focused.row, focused.col));
+            if (parent != null && !parent.isLeaf()) {
+                boolean vertical = parent.getSplitType() == CellNode.SPLIT_VERTICAL;
+                boolean goToSecond = (vertical && dc > 0) || (!vertical && dr > 0);
+                boolean goToFirst = (vertical && dc < 0) || (!vertical && dr < 0);
+                boolean focusedIsSecond = focused.path.lastStepIsSecond();
 
-                Cell target = null;
-                Rectangle targetRect = null;
-
-                int row = table.getFocusedRow();
-                int col = table.getFocusedColumn();
-                Rectangle cellRect = table.getCellRect(row, col, false);
-                Rectangle[] parts = HTableGeometry.computeInternalRects(cellRect, grid);
-
-                if (goToSecond && focused.cell == grid.getFirstCell()) {
-                    target = grid.getSecondCell();
-                    targetRect = parts[1];
-                } else if (goToFirst && focused.cell == grid.getSecondCell()) {
-                    target = grid.getFirstCell();
-                    targetRect = parts[0];
+                SubCellPath target = null;
+                if (goToSecond && !focusedIsSecond) {
+                    target = parentPath.child(true);
+                } else if (goToFirst && focusedIsSecond) {
+                    target = parentPath.child(false);
                 }
 
                 if (target != null) {
-                    HTableGeometry.InternalCellHit newHit = new HTableGeometry.InternalCellHit(target, targetRect, focused.parent);
+                    TableGeometry.InternalCellHit newHit
+                            = new TableGeometry.InternalCellHit(focused.row, focused.col, target);
                     table.setFocusedInternalCell(newHit);
                     table.setSelectedInternalCell(newHit);
                     return true;
@@ -1888,7 +1850,6 @@ public class HBasicTableUI extends BasicTableUI {
          * @param point
          */
         public void detectResize(Point point) {
-            HDefaultTableModel model = table.getHModel();
             int hoveredCol = table.columnAtPoint(point);
             int hoveredRow = table.rowAtPoint(point);
 
@@ -1899,7 +1860,7 @@ public class HBasicTableUI extends BasicTableUI {
             // des bordures redimensionnables.
             int row = 0;
             while (row < table.getRowCount()) {
-                int blockEnd = resolveRowBlockEnd(model, row, hoveredCol);
+                int blockEnd = resolveRowBlockEnd(row, hoveredCol);
                 Rectangle bottomRect = table.getCellRect(blockEnd, 0, true);
                 int bordureBasse = bottomRect.y + bottomRect.height;
 
@@ -1915,7 +1876,7 @@ public class HBasicTableUI extends BasicTableUI {
             // ── Détection resize de colonne ──────────────────────────────────────
             int col = 0;
             while (col < table.getColumnCount()) {
-                int blockEnd = resolveColBlockEnd(model, hoveredRow, col);
+                int blockEnd = resolveColBlockEnd(hoveredRow, col);
                 Rectangle rect = table.getCellRect(0, blockEnd, true);
                 int bordureDroite = rect.x + rect.width;
 
@@ -1941,39 +1902,51 @@ public class HBasicTableUI extends BasicTableUI {
         }
 
         /**
-         * Dernière ligne du bloc (fusion ou ligne simple) couvrant (row,
-         * hoveredCol).
+         * Dernière ligne VUE du bloc (fusion ou ligne simple) couvrant
+         * (viewRow, hoveredViewCol).
          */
-        private int resolveRowBlockEnd(HDefaultTableModel model, int row, int hoveredCol) {
-            if (hoveredCol < 0) {
-                return row;
+        private int resolveRowBlockEnd(int viewRow, int hoveredViewCol) {
+            if (hoveredViewCol < 0) {
+                return viewRow;
             }
-            Point origin = model.isAbsorbed(row, hoveredCol)
-                    ? model.findMergeOrigin(row, hoveredCol)
-                    : new Point(row, hoveredCol);
-            if (origin == null) {
-                return row;
+            int modelRow = table.toModelRow(viewRow);
+            int modelCol = table.toModelColumn(hoveredViewCol);
+            if (modelRow < 0 || modelCol < 0) {
+                return viewRow;
             }
-            int[] span = model.getSpan(origin.x, origin.y);
-            return Math.max(row, origin.x + Math.max(1, span[0]) - 1);
+            MergeRegion region = table.getStructureModel().getMergeAt(modelRow, modelCol);
+            if (region == null) {
+                return viewRow;
+            }
+            int end = viewRow;
+            for (int r = region.originRow; r <= region.lastRow(); r++) {
+                end = Math.max(end, table.convertRowIndexToView(r));
+            }
+            return end;
         }
 
         /**
-         * Dernière colonne du bloc (fusion ou colonne simple) couvrant
-         * (hoveredRow, col).
+         * Dernière colonne VUE du bloc (fusion ou colonne simple) couvrant
+         * (hoveredViewRow, viewCol).
          */
-        private int resolveColBlockEnd(HDefaultTableModel model, int hoveredRow, int col) {
-            if (hoveredRow < 0) {
-                return col;
+        private int resolveColBlockEnd(int hoveredViewRow, int viewCol) {
+            if (hoveredViewRow < 0) {
+                return viewCol;
             }
-            Point origin = model.isAbsorbed(hoveredRow, col)
-                    ? model.findMergeOrigin(hoveredRow, col)
-                    : new Point(hoveredRow, col);
-            if (origin == null) {
-                return col;
+            int modelRow = table.toModelRow(hoveredViewRow);
+            int modelCol = table.toModelColumn(viewCol);
+            if (modelRow < 0 || modelCol < 0) {
+                return viewCol;
             }
-            int[] span = model.getSpan(origin.x, origin.y);
-            return Math.max(col, origin.y + Math.max(1, span[1]) - 1);
+            MergeRegion region = table.getStructureModel().getMergeAt(modelRow, modelCol);
+            if (region == null) {
+                return viewCol;
+            }
+            int end = viewCol;
+            for (int c = region.originCol; c <= region.lastCol(); c++) {
+                end = Math.max(end, table.convertColumnIndexToView(c));
+            }
+            return end;
         }
 
         /**
@@ -2139,16 +2112,11 @@ public class HBasicTableUI extends BasicTableUI {
                 return;
             }
             HTable.CellRange sel = table.getSelection();
-            java.util.List<Integer> rows = new ArrayList<>();
-            for (int r = sel.rowStart; r <= sel.rowEnd; r++) {
-                rows.add(r);
+            int[] rows = new int[sel.rowEnd - sel.rowStart + 1];
+            for (int i = 0; i < rows.length; i++) {
+                rows[i] = sel.rowStart + i;
             }
-            Collections.sort(rows, Collections.reverseOrder());
-            for (int r : rows) {
-                if (r >= 0 && r < table.getRowCount()) {
-                    table.getHModel().removeRow(r);
-                }
-            }
+            table.deleteRows(rows);
             table.setSelection(null);
         }
 
@@ -2226,11 +2194,17 @@ public class HBasicTableUI extends BasicTableUI {
     }
 
     private boolean isInSortIconZone(Point point, int col) {
+        if (!table.isSortingEnabled()) {
+            return false; // pas d'icône dessinée, donc pas de zone cliquable non plus
+        }
         Rectangle r = table.getTableHeader().getHeaderRect(col);
         return point.x >= r.x + r.width - HTable.SORT_ICON_ZONE_WIDTH && point.x <= r.x + r.width;
     }
 
     private void cycleSort(int viewCol) {
+        if (!table.isSortingEnabled()) {
+            return;
+        }
         SortOrder current = table.getViewColumnSortOrder(viewCol);
         int modelCol = table.toModelColumn(viewCol);
         switch (current) {
@@ -2242,8 +2216,6 @@ public class HBasicTableUI extends BasicTableUI {
                 table.clearSort();
         }
     }
-
-    
 
     /**
      * Icône neutre affichée sur toute colonne triable mais non triée — deux
