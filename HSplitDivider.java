@@ -6,15 +6,11 @@ import java.awt.Graphics;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.function.Consumer;
+import java.util.function.IntUnaryOperator;
 import javax.swing.JPanel;
 
 /**
- * Aucun changement structurel ici — cette classe était déjà bien conçue
- * (responsabilité unique, découplage propre via Consumer&lt;Integer&gt;, voir
- * l'analyse initiale). Seul correctif : setCouleurHover()/setCouleurDrag() ne
- * déclenchaient pas de repaint(), contrairement à setCouleur(), ce qui pouvait
- * laisser une couleur de survol/drag obsolète affichée si elle était changée
- * pendant que la souris était déjà dessus.
+ *
  */
 public class HSplitDivider extends JPanel {
 
@@ -46,7 +42,8 @@ public class HSplitDivider extends JPanel {
 
     private int dragStartY;
 
-    private Consumer<Integer> onDragCallback;
+    // Reçoit le déplacement demandé (px) et renvoie celui réellement appliqué
+    private IntUnaryOperator onDragCallback;
 
     public HSplitDivider(WrapDirection orientation) {
         this(orientation, DEFAULT_THICKNESS, DEFAULT_COLOR,
@@ -54,7 +51,7 @@ public class HSplitDivider extends JPanel {
     }
 
     public HSplitDivider(WrapDirection orientation, int epaisseur,
-            Color color, Color hoverColor, Color dragColor) {
+                         Color color, Color hoverColor, Color dragColor) {
         this.orientation = orientation;
         this.epaisseur = epaisseur;
         this.color = color;
@@ -118,14 +115,17 @@ public class HSplitDivider extends JPanel {
                     int delta;
                     if (orientation == WrapDirection.HORIZONTAL) {
                         delta = e.getYOnScreen() - dragStartY;
-                        dragStartY = e.getYOnScreen();
                     } else {
                         delta = e.getXOnScreen() - dragStartX;
-                        dragStartX = e.getXOnScreen();
                     }
 
                     if (delta != 0) {
-                        onDragCallback.accept(delta);
+                        int applied = onDragCallback.applyAsInt(delta);
+                        if (orientation == WrapDirection.HORIZONTAL) {
+                            dragStartY += applied;
+                        } else {
+                            dragStartX += applied;
+                        }
                     }
                 }
             }
@@ -150,7 +150,7 @@ public class HSplitDivider extends JPanel {
         g.fillRect(0, 0, getWidth(), getHeight());
     }
 
-    public void setOnDragCallback(Consumer<Integer> callback) {
+    public void setOnDragCallback(IntUnaryOperator callback) {
         this.onDragCallback = callback;
     }
 

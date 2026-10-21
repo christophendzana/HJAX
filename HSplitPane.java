@@ -1,72 +1,25 @@
 package hsplitpane;
 
 import java.awt.Component;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.Objects;
 import javax.swing.JPanel;
 import javax.swing.UIManager;
 
 /**
  * Conteneur multi-zones.
- *
  * HSplitPane divise son espace en cinq zones positionnelles : NORTH, SOUTH,
  * WEST, CENTER et EAST.
- *
- * ============================================================================
- * ARCHITECTURE — UI delegate, sur le modèle de JSplitPane
- * ============================================================================
- * Ce composant ne construit plus lui-même son squelette (zones, dividers,
- * layout). Comme JSplitPane délègue à un SplitPaneUI/BasicSplitPaneUI, cette
- * classe délègue à un HSplitPaneUI/BasicHSplitPaneUI. HSplitPane ne conserve
- * que ce qui est indépendant du rendu : l'API publique (add/remove, fullscreen)
- * et l'état structurel (les champs zoneXxx/xxxDivider), remplis PAR le delegate
- * à l'installation, jamais construits ici directement.
- *
- * Ce que ça permet concrètement : remplacer BasicHSplitPaneUI par une autre
- * implémentation (UIManager.put("HSplitPaneUI", "mon.AutreImpl")) sans changer
- * une seule ligne de HSplitPane ni du code qui l'utilise.
- *
- * ============================================================================
- * add()/remove() sont fermés et redéfinis
- * ============================================================================
- * HSplitPane a une composition interne FIXE (5 zones + 4 dividers, gérés par
- * lui-même) — contrairement à un JPanel générique où l'utilisateur empile ce
- * qu'il veut. Les surcharges add()/remove() héritées de Container restaient
- * sinon utilisables et produisaient un résultat cassé en silence (le composant
- * devient un enfant du HSplitPane sans jamais être positionné par son layout).
- * Elles sont donc bloquées ; add(Component, ZonePosition) est le seul chemin
- * public pour ajouter du contenu. Le UI delegate, qui a besoin d'attacher
- * lui-même les zones/dividers en interne, passe par attachInternalComponent()
- * qui contourne ce blocage via super.add().
  */
 public class HSplitPane extends JPanel {
 
-    // -------------------------------------------------------------------------
-    // Zones — package-private : remplies par le UI delegate (BasicHSplitPaneUI),
-    // jamais construites par HSplitPane lui-même.
-    // -------------------------------------------------------------------------
-    HSplitZone zoneNorth;
-    HSplitZone zoneSouth;
-    HSplitZone zoneWest;
-    HSplitZone zoneCenter;
-    HSplitZone zoneEast;
+    // Zones et séparateurs : créés une seule fois dans le constructeur. Ils portent le
+    // contenu de l'utilisateur, donc ils doivent survivre à un changement de UI delegate.
+    private final Map<ZonePosition, HSplitZone> zones = new EnumMap<>(ZonePosition.class);
 
-    // -------------------------------------------------------------------------
-    // Séparateurs — idem, remplis par le UI delegate.
-    // -------------------------------------------------------------------------
-    HSplitDivider northDivider;
-    HSplitDivider southDivider;
-    HSplitDivider westDivider;
-    HSplitDivider eastDivider;
-
-    // -------------------------------------------------------------------------
-    // Layout racine — idem.
-    // -------------------------------------------------------------------------
-    HSplitPaneRootLayout rootLayout;
-
-    /**
-     * Config lue par le UI delegate à l'installation (tailles initiales des
-     * zones).
-     */
-    private final HSplitPaneConfig config;
+    // Pas d'entrée pour CENTER : il n'a pas de séparateur
+    private final Map<ZonePosition, HSplitDivider> dividers = new EnumMap<>(ZonePosition.class);
 
     // =========================================================================
     // Constructeurs
@@ -76,8 +29,44 @@ public class HSplitPane extends JPanel {
     }
 
     public HSplitPane(HSplitPaneConfig config) {
-        this.config = (config != null) ? config : new HSplitPaneConfig();
+        createStructure(config != null ? config : new HSplitPaneConfig());
         updateUI();
+    }
+
+    /**
+     * Crée les zones et les séparateurs d'après la config et les attache comme
+     * enfants Swing. L'ordre d'ajout fixe l'ordre Z. Appelée une seule fois.
+     */
+    private void createStructure(HSplitPaneConfig config) {
+        zones.put(ZonePosition.NORTH, new HSplitZone(ZonePosition.NORTH, null, config.getNorthSize()));
+        zones.put(ZonePosition.SOUTH, new HSplitZone(ZonePosition.SOUTH, null, config.getSouthSize()));
+        zones.put(ZonePosition.WEST, new HSplitZone(ZonePosition.WEST, null, config.getWestSize()));
+        zones.put(ZonePosition.EAST, new HSplitZone(ZonePosition.EAST, null, config.getEastSize()));
+        if (config.isShowCenter()) {
+            zones.put(ZonePosition.CENTER, new HSplitZone(ZonePosition.CENTER, null, config.getCenterSize()));
+        }
+
+        dividers.put(ZonePosition.NORTH, new HSplitDivider(WrapDirection.HORIZONTAL));
+        dividers.put(ZonePosition.SOUTH, new HSplitDivider(WrapDirection.HORIZONTAL));
+        dividers.put(ZonePosition.WEST, new HSplitDivider(WrapDirection.VERTICAL));
+        dividers.put(ZonePosition.EAST, new HSplitDivider(WrapDirection.VERTICAL));
+
+        // super.add() : add(Component) est fermé pour le code utilisateur (voir plus bas)
+        super.add(zones.get(ZonePosition.NORTH));
+        super.add(dividers.get(ZonePosition.NORTH));
+        super.add(zones.get(ZonePosition.WEST));
+        super.add(dividers.get(ZonePosition.WEST));
+        if (zones.containsKey(ZonePosition.CENTER)) {
+            super.add(zones.get(ZonePosition.CENTER));
+        }
+        super.add(dividers.get(ZonePosition.EAST));
+        super.add(zones.get(ZonePosition.EAST));
+        super.add(dividers.get(ZonePosition.SOUTH));
+        super.add(zones.get(ZonePosition.SOUTH));
+
+        for (HSplitZone zone : zones.values()) {
+            zone.setFullScreenHandler(this::toggleFullScreen);
+        }
     }
 
     // =========================================================================
@@ -93,23 +82,21 @@ public class HSplitPane extends JPanel {
     /**
      * Installe le delegate courant (celui enregistré dans UIManager pour
      * "HSplitPaneUI", ou BasicHSplitPaneUI par défaut si rien n'est
-     * enregistré).
-     *
+     * enregistré). Peut être rappelée à tout moment (changement de L&F) : le
+     * delegate ne touche ni aux zones ni à leur contenu.
      * ATTENTION — JPanel appelle déjà updateUI() lui-même à la fin de SON
-     * propre constructeur (super()), avant que le corps du constructeur de
-     * HSplitPane n'ait pu assigner `config`. Cet appel prématuré doit être
-     * ignoré ; c'est l'appel explicite fait en fin de constructeur de
-     * HSplitPane, une fois `config` assigné, qui déclenche la vraie
-     * installation. (JComponent nu n'a pas ce problème — il n'appelle jamais
-     * updateUI() lui-même, c'est justement ce qui manquait à JPanel ici.)
+     * propre constructeur (super()), avant que nos champs ne soient initialisés
+     * (zones vaut encore null). Cet appel prématuré doit être ignoré ; c'est
+     * l'appel explicite fait en fin de constructeur de HSplitPane, une fois la
+     * structure créée, qui déclenche la vraie installation.
      */
     @Override
     public void updateUI() {
-        if (config == null) {
+        if (zones == null) {
             return;
         }
         if (UIManager.get(getUIClassID()) == null) {
-            UIManager.put(getUIClassID(), "hsplitpane.view.BasicHSplitPaneUI");
+            UIManager.put(getUIClassID(), BasicHSplitPaneUI.class.getName());
         }
         setUI((HSplitPaneUI) UIManager.getUI(this));
     }
@@ -120,23 +107,6 @@ public class HSplitPane extends JPanel {
 
     public HSplitPaneUI getUI() {
         return (HSplitPaneUI) ui;
-    }
-
-    /**
-     * Lu par le UI delegate à l'installation — jamais par du code utilisateur.
-     */
-    public HSplitPaneConfig getConfig() {
-        return config;
-    }
-
-    /**
-     * Point de passage réservé au UI delegate pour attacher les zones/dividers
-     * comme vrais enfants Swing du HSplitPane, en contournant le blocage de
-     * add(Component) ci-dessous (qui, lui, reste fermé pour le code
-     * utilisateur).
-     */
-    void attachInternalComponent(Component comp) {
-        super.add(comp);
     }
 
     // =========================================================================
@@ -209,15 +179,8 @@ public class HSplitPane extends JPanel {
      * @param position la zone cible
      */
     public void add(Component component, ZonePosition position) {
-        if (position == null) {
-            throw new IllegalArgumentException("La position ne peut pas être null.");
-        }
-        HSplitZone zone = getZone(position);
-        if (zone == null) {
-            System.err.println("HSplitPane : la zone " + position
-                    + " n'est pas disponible dans cette instance.");
-            return;
-        }
+        Objects.requireNonNull(component, "Le composant ne peut pas être null.");
+        HSplitZone zone = requireZone(position);
         zone.addContainer(component);
         revalidate();
         repaint();
@@ -230,12 +193,10 @@ public class HSplitPane extends JPanel {
      * @param position la zone dont il faut le retirer
      */
     public void remove(Component component, ZonePosition position) {
-        HSplitZone zone = getZone(position);
-        if (zone != null) {
-            zone.removeContainer(component);
-            revalidate();
-            repaint();
-        }
+        HSplitZone zone = requireZone(position);
+        zone.removeContainer(component);
+        revalidate();
+        repaint();
     }
 
     // =========================================================================
@@ -246,22 +207,21 @@ public class HSplitPane extends JPanel {
     // TOUTES les zones en même temps.
     // =========================================================================
     public void enterFullScreen(ZonePosition position) {
-        HSplitZone dejaEnFullScreen = findFullScreenZone();
-        if (dejaEnFullScreen != null && dejaEnFullScreen.getPosition() != position) {
-            exitFullScreen();
-        }
+        HSplitZone zone = requireZone(position);
 
-        HSplitZone zone = getZone(position);
-        if (zone == null || zone.isEmpty()) {
+        // Rien à faire : zone vide, déjà en plein écran, ou détachée dans sa fenêtre
+        if (zone.isEmpty() || zone.isFullScreen() || zone.isFloating()) {
             return;
         }
 
-        for (ZonePosition pos : ZonePosition.values()) {
-            if (pos == position) {
-                continue;
-            }
-            HSplitZone z = getZone(pos);
-            if (z != null) {
+        // On ne sort d'un autre plein écran qu'une fois la demande jugée valide
+        HSplitZone dejaEnFullScreen = findFullScreenZone();
+        if (dejaEnFullScreen != null) {
+            exitFullScreen();
+        }
+
+        for (HSplitZone z : zones.values()) {
+            if (z != zone) {
                 z.setVisible(false);
             }
         }
@@ -284,12 +244,8 @@ public class HSplitPane extends JPanel {
 
         zonePleinEcran.setFullScreenState(false);
 
-        for (ZonePosition pos : ZonePosition.values()) {
-            if (pos == zonePleinEcran.getPosition()) {
-                continue;
-            }
-            HSplitZone z = getZone(pos);
-            if (z != null) {
+        for (HSplitZone z : zones.values()) {
+            if (z != zonePleinEcran) {
                 z.setVisible(true);
             }
         }
@@ -304,13 +260,21 @@ public class HSplitPane extends JPanel {
     }
 
     private HSplitZone findFullScreenZone() {
-        for (ZonePosition pos : ZonePosition.values()) {
-            HSplitZone z = getZone(pos);
-            if (z != null && z.isFullScreen()) {
+        for (HSplitZone z : zones.values()) {
+            if (z.isFullScreen()) {
                 return z;
             }
         }
         return null;
+    }
+
+    /** Appelée par une zone quand l'utilisateur clique sur son bouton plein écran. */
+    private void toggleFullScreen(HSplitZone zone) {
+        if (zone.isFullScreen()) {
+            exitFullScreen();
+        } else {
+            enterFullScreen(zone.getPosition());
+        }
     }
 
     // =========================================================================
@@ -324,18 +288,25 @@ public class HSplitPane extends JPanel {
      * cette position (ex: CENTER si showCenter=false)
      */
     public HSplitZone getZone(ZonePosition position) {
-        return switch (position) {
-            case NORTH ->
-                zoneNorth;
-            case SOUTH ->
-                zoneSouth;
-            case WEST ->
-                zoneWest;
-            case CENTER ->
-                zoneCenter;
-            case EAST ->
-                zoneEast;
-        };
+        Objects.requireNonNull(position, "La position ne peut pas être null.");
+        return zones.get(position);
+    }
+
+    /**
+     * Comme getZone(), mais échoue explicitement au lieu de renvoyer null :
+     * position null ou zone absente de cette instance (ex: CENTER avec
+     * showCenter=false).
+     */
+    private HSplitZone requireZone(ZonePosition position) {
+        if (position == null) {
+            throw new IllegalArgumentException("La position ne peut pas être null.");
+        }
+        HSplitZone zone = getZone(position);
+        if (zone == null) {
+            throw new IllegalStateException("La zone " + position
+                    + " n'est pas disponible dans cette instance.");
+        }
+        return zone;
     }
 
     /**
@@ -345,18 +316,8 @@ public class HSplitPane extends JPanel {
      * @return le séparateur correspondant, ou null pour CENTER
      */
     public HSplitDivider getDivider(ZonePosition position) {
-        return switch (position) {
-            case NORTH ->
-                northDivider;
-            case SOUTH ->
-                southDivider;
-            case WEST ->
-                westDivider;
-            case EAST ->
-                eastDivider;
-            case CENTER ->
-                null;
-        };
+        Objects.requireNonNull(position, "La position ne peut pas être null.");
+        return dividers.get(position);
     }
 
 }

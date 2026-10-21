@@ -4,6 +4,7 @@ import hcomponents.HScrollPane;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Consumer;
 
 /**
  *
@@ -22,9 +23,9 @@ public class HSplitZone extends JPanel {
 
     private String titre;
 
-    private Integer initialSize;
-
-    private Dimension sizeBeforeCollapse;
+    // Taille voulue (px) de la zone dépliée, sur son axe principal : seule source de vérité.
+    // Null = pas encore déterminée, le layout répartit alors l'espace restant.
+    private Integer expandedSize;
 
     private Dimension currentAnimationSize;
 
@@ -51,7 +52,7 @@ public class HSplitZone extends JPanel {
 
     private HScrollPane scrollPane;
 
-    private HSplitFloatDialog floatDialog;
+    private HSplitPaneDialog floatDialog;
 
     private static final int ANIMATION_DURATION = 160;
 
@@ -71,6 +72,9 @@ public class HSplitZone extends JPanel {
 
     private static final int DEFAULT_SIZE_WEST_EAST = 200;
 
+    /// Posé par HSplitPane : appelé quand l'utilisateur demande le plein écran
+    private Consumer<HSplitZone> fullScreenHandler;
+
     public HSplitZone(ZonePosition position) {
         this(position, null, null);
     }
@@ -82,7 +86,7 @@ public class HSplitZone extends JPanel {
     public HSplitZone(ZonePosition position, String titre, Integer initialSize) {
         this.position = position;
         this.titre = titre;
-        this.initialSize = resolveInitialSize(position, initialSize);
+        this.expandedSize = resolveInitialSize(position, initialSize);
 
         this.currentAnimationSize = null;
 
@@ -224,6 +228,10 @@ public class HSplitZone extends JPanel {
     }
 
     private void toggleCollapse() {
+        // Un clic pendant une animation capturerait une taille intermédiaire
+        if (inAnimation) {
+            return;
+        }
         if (state == ZoneState.COLLAPSED) {
             expand();
         } else {
@@ -232,11 +240,11 @@ public class HSplitZone extends JPanel {
     }
 
     public void collapse() {
-        if (state == ZoneState.COLLAPSED) {
+        // Seule une zone NORMAL peut se réduire (pas depuis FLOATING / FULLSCREEN)
+        if (state != ZoneState.NORMAL) {
             return;
         }
 
-        sizeBeforeCollapse = getSize();
         state = ZoneState.COLLAPSED;
 
         if (header != null) {
@@ -257,15 +265,23 @@ public class HSplitZone extends JPanel {
             header.updateCollapseState(false);
         }
 
-        animateSize(resolveExpandedTargetSize());
+        animateSize(expandedTargetSize());
     }
 
-    private Dimension resolveExpandedTargetSize() {
-        Dimension targetSize = sizeBeforeCollapse;
-        if (targetSize == null || (targetSize.width == 0 && targetSize.height == 0)) {
-            targetSize = new Dimension(200, 150);
-        }
-        return targetSize;
+    /**
+     * Taille cible d'une zone qui se déplie : sa taille voulue sur l'axe principal,
+     * la taille courante sur l'autre (que le layout impose). Si la taille voulue
+     * n'est pas encore déterminée, on garde la taille actuelle : le layout tranchera.
+     */
+    private Dimension expandedTargetSize() {
+        return switch (position) {
+            case NORTH, SOUTH ->
+                    new Dimension(getWidth(), expandedSize != null ? expandedSize : getHeight());
+            case WEST, EAST ->
+                    new Dimension(expandedSize != null ? expandedSize : getWidth(), getHeight());
+            case CENTER ->
+                    getSize();
+        };
     }
 
     private void refreshHeaderPosition() {
@@ -273,8 +289,8 @@ public class HSplitZone extends JPanel {
             return;
         }
 
-        HSplitZoneHeader.HeaderPosition targetPosition =
-                (state == ZoneState.COLLAPSED)
+        HSplitZoneHeader.HeaderPosition targetPosition
+                = (state == ZoneState.COLLAPSED)
                         ? defaultCollapsedPosition
                         : expandedHeaderPosition;
 
@@ -304,14 +320,9 @@ public class HSplitZone extends JPanel {
     }
 
     private void toggleFullScreen() {
-        if (splitPaneRef == null) {
-            return;
-        }
-
-        if (state == ZoneState.FULLSCREEN) {
-            splitPaneRef.exitFullScreen();
-        } else {
-            splitPaneRef.enterFullScreen(position);
+        // Le Pane décide (c'est lui qui coordonne toutes les zones)
+        if (fullScreenHandler != null) {
+            fullScreenHandler.accept(this);
         }
     }
 
@@ -334,6 +345,10 @@ public class HSplitZone extends JPanel {
     }
 
     private void toggleFloat() {
+        // Un clic pendant une animation capturerait une taille intermédiaire
+        if (inAnimation) {
+            return;
+        }
         if (state == ZoneState.FLOATING) {
             reintegrateZone();
         } else {
@@ -344,24 +359,15 @@ public class HSplitZone extends JPanel {
     /**
      * Détache la zone dans une fenêtre flottante.
      *
-     * CHANGEMENT — auparavant, floatZone() dupliquait collapse() dans une
-     * méthode privée collapserPourFloat() presque identique (même animation,
-     * mêmes mises à jour de header), simplement parce que le modèle à 4
-     * booléens indépendants "avait besoin" d'être à la fois collapsed=true et
-     * floating=true. Avec un état exclusif, on n'a plus ce besoin : le mode
-     * FLOATING représente à lui seul "une zone réduite à un emplacement réservé
-     * pendant que son contenu vit dans une fenêtre externe" (voir
-     * HSplitPaneRootLayout, qui traite COLLAPSED et FLOATING de la même façon
-     * pour le calcul de taille). Résultat : une seule animation de réduction,
-     * appelée ici directement, sans méthode dupliquée.
      */
     public void floatZone() {
 
-        if (state == ZoneState.FLOATING) {
+        // Déjà détachée, ou en plein écran (les autres zones sont masquées)
+        if (state == ZoneState.FLOATING || state == ZoneState.FULLSCREEN) {
             return;
         }
 
-        boolean etaitCollapsed = (state == ZoneState.COLLAPSED);
+        boolean wasCollapsed = (state == ZoneState.COLLAPSED);
         state = ZoneState.FLOATING;
 
         if (header != null) {
@@ -373,15 +379,19 @@ public class HSplitZone extends JPanel {
         repaint();
 
         String dialogTitle = titre != null ? titre : "Zone flottante";
-        floatDialog = new HSplitFloatDialog(dialogTitle);
+        floatDialog = new HSplitPaneDialog(dialogTitle);
         floatDialog.setContenu(scrollPane);
         floatDialog.setOnFermetureCallback(this::reintegrateZone);
 
-        if (!etaitCollapsed) {
-            sizeBeforeCollapse = getSize();
+        if (!wasCollapsed) {
             animateSize(getCollapsedSize());
         }
 
+        // La fenêtre est résolue à chaque appel : elle reste valide si la zone change de fenêtre
+        floatDialog.setBoundsLimitProvider(() -> {
+            Window window = SwingUtilities.getWindowAncestor(this);
+            return window != null ? window.getBounds() : null;
+        });
         floatDialog.afficher();
     }
 
@@ -395,13 +405,14 @@ public class HSplitZone extends JPanel {
 
         if (header != null) {
             header.updateFloatingState(false);
+            header.updateCollapseState(false);
         }
 
         add(scrollPane, BorderLayout.CENTER);
         revalidate();
         repaint();
 
-        animateSize(resolveExpandedTargetSize());
+        animateSize(expandedTargetSize());
 
         if (floatDialog != null) {
             floatDialog.setOnFermetureCallback(null);
@@ -491,12 +502,12 @@ public class HSplitZone extends JPanel {
             return new Dimension(currentAnimationSize);
         }
 
-        if (initialSize != null) {
+        if (expandedSize != null) {
             return switch (position) {
                 case NORTH, SOUTH ->
-                    new Dimension(0, initialSize);
+                    new Dimension(0, expandedSize);
                 case WEST, EAST ->
-                    new Dimension(initialSize, 0);
+                    new Dimension(expandedSize, 0);
                 case CENTER ->
                     super.getPreferredSize();
             };
@@ -694,27 +705,38 @@ public class HSplitZone extends JPanel {
         return inAnimation;
     }
 
-    public Integer getInitialSize() {
-        return initialSize;
+    /** Taille voulue (px) de la zone dépliée sur son axe principal ; null tant qu'elle n'est pas déterminée. */
+    public Integer getExpandedSize() {
+        return expandedSize;
     }
 
-    public void setInitialSize(Integer initialSize) {
+    /**
+     * Définit la taille voulue de la zone dépliée (null : le layout répartit
+     * l'espace restant). Prend effet immédiatement.
+     */
+    public void setExpandedSize(Integer expandedSize) {
         if (position == ZonePosition.CENTER) {
             throw new UnsupportedOperationException(
                     "La zone CENTER occupe toujours l'espace restant, sa taille ne peut pas être définie.");
         }
-        this.initialSize = initialSize;
+        if (expandedSize != null && expandedSize < 0) {
+            throw new IllegalArgumentException("La taille ne peut pas être négative.");
+        }
+        this.expandedSize = expandedSize;
+        revalidate();
     }
 
-    public Dimension getSizeBeforeCollapse() {
-        return sizeBeforeCollapse;
+    /** Écriture sans revalidation, pour le layout (qui est déjà en train de se recalculer). */
+    void applyExpandedSize(Integer size) {
+        this.expandedSize = size;
     }
 
     public HSplitZoneHeader getHeader() {
         return header;
     }
 
-    public void setSplitPaneRef(HSplitPane splitPane) {
-        this.splitPaneRef = splitPane;
+    /** Enregistre le destinataire des demandes de plein écran (posé par HSplitPane). */
+    void setFullScreenHandler(Consumer<HSplitZone> handler) {
+        this.fullScreenHandler = handler;
     }
 }
